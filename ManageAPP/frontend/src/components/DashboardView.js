@@ -824,7 +824,15 @@ export const DashboardView = React.memo(({ entries = [], onOpenAddModal, onNavig
                         const barTopY = currentY;
 
                         return (
-                          <G key={`col-${d.date}`} className={`bar-col-${i}`}>
+                          <G
+                            key={`col-${d.date}`}
+                            className={`bar-col-${i}`}
+                            style={{ cursor: 'pointer' }}
+                            onMouseEnter={isWeb ? () => setHoveredTrendIdx(i) : undefined}
+                            onMouseLeave={isWeb ? () => setHoveredTrendIdx(null) : undefined}
+                            onClick={isWeb ? () => setHoveredTrendIdx((prev) => (prev === i ? null : i)) : undefined}
+                            onPress={!isWeb ? () => setHoveredTrendIdx((prev) => (prev === i ? null : i)) : undefined}
+                          >
                             {/* Hover background column indicator */}
                             {isHovered && (
                               <Rect
@@ -918,16 +926,14 @@ export const DashboardView = React.memo(({ entries = [], onOpenAddModal, onNavig
                               {d.date}
                             </SvgText>
 
-                            {/* Invisible Interactive Click/Hover Target for Details */}
+                            {/* Column Tap / Hover Hit Area */}
                             <Rect
                               x={colCenterX - colWidth / 2}
                               y={14}
                               width={colWidth}
                               height={172}
-                              fill="transparent"
-                              onMouseEnter={() => setHoveredTrendIdx(i)}
-                              onMouseLeave={() => setHoveredTrendIdx(null)}
-                              onPress={() => setHoveredTrendIdx(isHovered ? null : i)}
+                              fill="#ffffff"
+                              opacity="0.001"
                             />
                           </G>
                         );
@@ -1131,7 +1137,7 @@ export const DashboardView = React.memo(({ entries = [], onOpenAddModal, onNavig
                                 onMouseEnter={isWeb ? () => setHoveredModeKey(slice.key) : undefined}
                                 onMouseLeave={isWeb ? () => setHoveredModeKey(null) : undefined}
                                 onClick={isWeb ? () => setHoveredModeKey(slice.isHovered ? null : slice.key) : undefined}
-                                onPress={() => setHoveredModeKey(slice.isHovered ? null : slice.key)}
+                                onPress={!isWeb ? () => setHoveredModeKey(slice.isHovered ? null : slice.key) : undefined}
                                 style={{
                                   cursor: 'pointer',
                                   transition: 'all 0.25s ease',
@@ -1302,10 +1308,10 @@ export const DashboardView = React.memo(({ entries = [], onOpenAddModal, onNavig
                           <G
                             key={m.name}
                             style={{ cursor: 'pointer' }}
-                            onMouseEnter={() => setHoveredMaterialIdx(idx)}
-                            onMouseLeave={() => setHoveredMaterialIdx(null)}
-                            onClick={() => setHoveredMaterialIdx(isHovered ? null : idx)}
-                            onPress={() => setHoveredMaterialIdx(isHovered ? null : idx)}
+                            onMouseEnter={isWeb ? () => setHoveredMaterialIdx(idx) : undefined}
+                            onMouseLeave={isWeb ? () => setHoveredMaterialIdx(null) : undefined}
+                            onClick={isWeb ? () => setHoveredMaterialIdx(isHovered ? null : idx) : undefined}
+                            onPress={!isWeb ? () => setHoveredMaterialIdx(isHovered ? null : idx) : undefined}
                           >
                             <Path
                               d={pathD}
@@ -1474,10 +1480,10 @@ export const DashboardView = React.memo(({ entries = [], onOpenAddModal, onNavig
                         <G
                           key={p.name}
                           style={{ cursor: 'pointer' }}
-                          onMouseEnter={() => setHoveredPartyIdx(i)}
-                          onMouseLeave={() => setHoveredPartyIdx(null)}
-                          onClick={() => setHoveredPartyIdx(isHovered ? null : i)}
-                          onPress={() => setHoveredPartyIdx(isHovered ? null : i)}
+                          onMouseEnter={isWeb ? () => setHoveredPartyIdx(i) : undefined}
+                          onMouseLeave={isWeb ? () => setHoveredPartyIdx(null) : undefined}
+                          onClick={isWeb ? () => setHoveredPartyIdx(isHovered ? null : i) : undefined}
+                          onPress={!isWeb ? () => setHoveredPartyIdx(isHovered ? null : i) : undefined}
                         >
                           {/* Hover background column indicator */}
                           {isHovered && (
