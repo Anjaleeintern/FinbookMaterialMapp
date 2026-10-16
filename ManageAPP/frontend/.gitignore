@@ -1,0 +1,21 @@
+# Environment variables & secrets
+.env
+.env.local
+.env.*.local
+
+# dependencies
+node_modules/
+.expo/
+dist/
+web-build/
+
+# debug
+npm-debug.*
+yarn-debug.*
+yarn-error.*
+
+# macOS
+.DS_Store
+
+# Temporary files
+*.log
