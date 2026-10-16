@@ -20,9 +20,12 @@ const formatSavedInLabel = (val) => {
 
 const formatINR = (val) => Number(val || 0).toLocaleString('en-IN');
 
-export const AllEntriesView = ({ entries, loading, onOpenAddModal, onOpenImportModal, onRefresh }) => {
+export const AllEntriesView = React.memo(({ entries, loading, onOpenAddModal, onOpenImportModal, onRefresh }) => {
   const { width } = useWindowDimensions();
   const isMobile = width < 768;
+
+  // Render limit for mobile card view to prevent rendering 100+ cards at once
+  const [cardRenderLimit, setCardRenderLimit] = useState(25);
 
   // On mobile default to 'cards', on desktop default to 'table'
   const [viewMode, setViewMode] = useState(isMobile ? 'cards' : 'table');
@@ -627,7 +630,7 @@ export const AllEntriesView = ({ entries, loading, onOpenAddModal, onOpenImportM
             </View>
           )}
 
-          {filteredEntries.map((entry, idx) => {
+          {filteredEntries.slice(0, cardRenderLimit).map((entry, idx) => {
             const badge = getBadgeColor(entry.saved_in);
             const isSelected = selectedIds.has(entry.id);
             return (
@@ -748,6 +751,29 @@ export const AllEntriesView = ({ entries, loading, onOpenAddModal, onOpenImportM
               </View>
             );
           })}
+          {filteredEntries.length > cardRenderLimit && (
+            <View style={styles.loadMoreCard}>
+              <TouchableOpacity
+                style={styles.loadMoreBtn}
+                onPress={() => setCardRenderLimit((prev) => prev + 30)}
+                activeOpacity={0.8}
+                delayPressIn={0}
+              >
+                <Text style={styles.loadMoreBtnText}>
+                  Load More Entries ({Math.min(cardRenderLimit, filteredEntries.length)} of {filteredEntries.length})
+                </Text>
+                <Ionicons name="chevron-down" size={16} color="#0284c7" style={{ marginLeft: 6 }} />
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.loadAllBtn}
+                onPress={() => setCardRenderLimit(filteredEntries.length)}
+                activeOpacity={0.8}
+                delayPressIn={0}
+              >
+                <Text style={styles.loadAllBtnText}>Show All ({filteredEntries.length})</Text>
+              </TouchableOpacity>
+            </View>
+          )}
           <View style={{ height: 60 }} />
         </ScrollView>
       ) : (
@@ -931,7 +957,7 @@ export const AllEntriesView = ({ entries, loading, onOpenAddModal, onOpenImportM
       )}
     </View>
   );
-};
+});
 
 const styles = StyleSheet.create({
   container: {
@@ -1574,5 +1600,50 @@ const styles = StyleSheet.create({
   },
   sourceBadgeTextManual: {
     color: '#0284c7',
+  },
+  loadMoreCard: {
+    paddingVertical: 14,
+    paddingHorizontal: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 10,
+    backgroundColor: '#ffffff',
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+    marginTop: 8,
+    marginBottom: 20,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 3,
+    elevation: 2,
+  },
+  loadMoreBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#f0f9ff',
+    paddingVertical: 10,
+    paddingHorizontal: 20,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#bae6fd',
+    width: '100%',
+  },
+  loadMoreBtnText: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#0284c7',
+  },
+  loadAllBtn: {
+    paddingVertical: 6,
+    paddingHorizontal: 14,
+  },
+  loadAllBtnText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#64748b',
+    textDecorationLine: 'underline',
   },
 });

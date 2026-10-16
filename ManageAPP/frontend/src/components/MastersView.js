@@ -42,7 +42,7 @@ const formatDate = (isoStr) => {
   }
 };
 
-export const MastersView = ({ masters, onRefresh }) => {
+export const MastersView = React.memo(({ masters, onRefresh }) => {
   const { width } = useWindowDimensions();
   const isMobile = width < 768;
   const isDesktop = width >= 1024;
@@ -1203,7 +1203,7 @@ export const MastersView = ({ masters, onRefresh }) => {
       </Modal>
     </ScrollView>
   );
-};
+});
 
 const styles = StyleSheet.create({
   pageScrollView: {

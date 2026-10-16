@@ -191,7 +191,7 @@ const formatCompactINR = (val) => {
   return `₹${Math.round(num)}`;
 };
 
-export const DashboardView = ({ entries = [], onOpenAddModal, onNavigateMasters }) => {
+export const DashboardView = React.memo(({ entries = [], onOpenAddModal, onNavigateMasters }) => {
   const { user } = useAuth();
   const displayName = user?.name || (user?.email ? user.email.split('@')[0] : 'User');
   const { width } = useWindowDimensions();
@@ -1560,7 +1560,7 @@ export const DashboardView = ({ entries = [], onOpenAddModal, onNavigateMasters 
       <View style={{ height: 40 }} />
     </ScrollView>
   );
-};
+});
 
 const styles = StyleSheet.create({
   pageContainer: {

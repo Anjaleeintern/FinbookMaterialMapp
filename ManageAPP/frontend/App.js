@@ -31,6 +31,7 @@ const MainApp = () => {
   const isMobile = width < 768;
 
   const [activeTab, setActiveTab] = useState('dashboard');
+  const [visitedTabs, setVisitedTabs] = useState(() => new Set(['dashboard']));
   const [sidebarOpen, setSidebarOpen] = useState(!isMobile);
   const [search, setSearch] = useState('');
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -39,6 +40,16 @@ const MainApp = () => {
   const [entries, setEntries] = useState([]);
   const [masters, setMasters] = useState(null);
   const [loading, setLoading] = useState(false);
+
+  // Keep track of visited tabs so once visited, they remain mounted in DOM for 0ms instant tab switching
+  useEffect(() => {
+    setVisitedTabs((prev) => {
+      if (prev.has(activeTab)) return prev;
+      const next = new Set(prev);
+      next.add(activeTab);
+      return next;
+    });
+  }, [activeTab]);
 
   useEffect(() => {
     setSidebarOpen(!isMobile);
@@ -66,6 +77,15 @@ const MainApp = () => {
       loadData();
     }
   }, [user, loadData]);
+
+  // Stable callbacks so child tab views wrapped in React.memo never re-render unnecessarily
+  const handleOpenAddModal = useCallback(() => setIsModalOpen(true), []);
+  const handleCloseAddModal = useCallback(() => setIsModalOpen(false), []);
+  const handleOpenImportModal = useCallback(() => setIsImportModalOpen(true), []);
+  const handleCloseImportModal = useCallback(() => setIsImportModalOpen(false), []);
+  const handleNavigateMasters = useCallback(() => setActiveTab('masters'), []);
+  const handleToggleSidebar = useCallback(() => setSidebarOpen((prev) => !prev), []);
+  const handleCloseSidebar = useCallback(() => setSidebarOpen(false), []);
 
   if (authLoading) {
     return (
@@ -96,7 +116,7 @@ const MainApp = () => {
         search={search}
         setSearch={setSearch}
         onRefresh={loadData}
-        toggleSidebar={() => setSidebarOpen(!sidebarOpen)}
+        toggleSidebar={handleToggleSidebar}
       />
 
       {/* Main Layout */}
@@ -105,40 +125,71 @@ const MainApp = () => {
           activeTab={activeTab}
           setActiveTab={setActiveTab}
           isOpen={sidebarOpen}
-          onClose={() => setSidebarOpen(false)}
+          onClose={handleCloseSidebar}
         />
 
+        {/* Persistent Tab Panes: Once visited, tabs stay in memory with display: 'none' for 0ms instantaneous switching */}
         <View style={styles.contentArea}>
-          {activeTab === 'dashboard' && (
-            <DashboardView
-              entries={entries}
-              onOpenAddModal={() => setIsModalOpen(true)}
-              onNavigateMasters={() => setActiveTab('masters')}
-            />
+          {visitedTabs.has('dashboard') && (
+            <View
+              style={[
+                styles.tabPane,
+                activeTab !== 'dashboard' && styles.tabPaneHidden,
+              ]}
+            >
+              <DashboardView
+                entries={entries}
+                onOpenAddModal={handleOpenAddModal}
+                onNavigateMasters={handleNavigateMasters}
+              />
+            </View>
           )}
 
-          {activeTab === 'entries' && (
-            <AllEntriesView
-              entries={entries}
-              loading={loading}
-              onOpenAddModal={() => setIsModalOpen(true)}
-              onOpenImportModal={() => setIsImportModalOpen(true)}
-              onRefresh={loadData}
-            />
+          {visitedTabs.has('entries') && (
+            <View
+              style={[
+                styles.tabPane,
+                activeTab !== 'entries' && styles.tabPaneHidden,
+              ]}
+            >
+              <AllEntriesView
+                entries={entries}
+                loading={loading}
+                onOpenAddModal={handleOpenAddModal}
+                onOpenImportModal={handleOpenImportModal}
+                onRefresh={loadData}
+              />
+            </View>
           )}
 
-          {activeTab === 'masters' && (
-            <MastersView
-              masters={masters}
-              onRefresh={loadData}
-            />
+          {visitedTabs.has('masters') && (
+            <View
+              style={[
+                styles.tabPane,
+                activeTab !== 'masters' && styles.tabPaneHidden,
+              ]}
+            >
+              <MastersView
+                masters={masters}
+                onRefresh={loadData}
+              />
+            </View>
           )}
 
-          {activeTab === 'about' && <AboutView />}
+          {visitedTabs.has('about') && (
+            <View
+              style={[
+                styles.tabPane,
+                activeTab !== 'about' && styles.tabPaneHidden,
+              ]}
+            >
+              <AboutView />
+            </View>
+          )}
         </View>
       </View>
 
-      {/* Mobile Bottom Navigation Bar with exact Symmetrical Flex Insets */}
+      {/* Mobile Bottom Navigation Bar with exact Symmetrical Flex Insets & Instant 0ms Tap Response */}
       {isMobile && (
         <View style={[styles.bottomBar, { paddingBottom: Math.max(bottomPadding, 6) }]}>
           {/* 1. About */}
@@ -146,6 +197,7 @@ const MainApp = () => {
             style={styles.bottomTab}
             onPress={() => setActiveTab('about')}
             activeOpacity={0.7}
+            delayPressIn={0}
           >
             <Ionicons
               name={activeTab === 'about' ? 'information-circle' : 'information-circle-outline'}
@@ -165,6 +217,7 @@ const MainApp = () => {
             style={styles.bottomTab}
             onPress={() => setActiveTab('dashboard')}
             activeOpacity={0.7}
+            delayPressIn={0}
           >
             <Ionicons
               name={activeTab === 'dashboard' ? 'grid' : 'grid-outline'}
@@ -183,8 +236,9 @@ const MainApp = () => {
           <View style={styles.centerAddSlot}>
             <TouchableOpacity
               style={styles.centerAddBtn}
-              onPress={() => setIsModalOpen(true)}
+              onPress={handleOpenAddModal}
               activeOpacity={0.85}
+              delayPressIn={0}
             >
               <Ionicons name="add" size={26} color="#ffffff" />
             </TouchableOpacity>
@@ -195,6 +249,7 @@ const MainApp = () => {
             style={styles.bottomTab}
             onPress={() => setActiveTab('entries')}
             activeOpacity={0.7}
+            delayPressIn={0}
           >
             <Ionicons
               name={activeTab === 'entries' ? 'flash' : 'flash-outline'}
@@ -214,6 +269,7 @@ const MainApp = () => {
             style={styles.bottomTab}
             onPress={() => setActiveTab('masters')}
             activeOpacity={0.7}
+            delayPressIn={0}
           >
             <Ionicons
               name={activeTab === 'masters' ? 'layers' : 'layers-outline'}
@@ -233,20 +289,16 @@ const MainApp = () => {
       {/* Delivery Entry Form Modal */}
       <DeliveryEntriesFormModal
         visible={isModalOpen}
-        onClose={() => setIsModalOpen(false)}
-        onSuccess={() => {
-          loadData();
-        }}
+        onClose={handleCloseAddModal}
+        onSuccess={loadData}
         masters={masters}
       />
 
       {/* Excel / CSV Bulk Import Modal */}
       <ExcelImportModal
         visible={isImportModalOpen}
-        onClose={() => setIsImportModalOpen(false)}
-        onSuccess={() => {
-          loadData();
-        }}
+        onClose={handleCloseImportModal}
+        onSuccess={loadData}
       />
     </View>
   );
@@ -276,6 +328,15 @@ const styles = StyleSheet.create({
   contentArea: {
     flex: 1,
     backgroundColor: '#f8fafc',
+    position: 'relative',
+  },
+  tabPane: {
+    flex: 1,
+    width: '100%',
+    height: '100%',
+  },
+  tabPaneHidden: {
+    display: 'none',
   },
   centerContainer: {
     flex: 1,

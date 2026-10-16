@@ -662,3 +662,11 @@ video {
     flex-shrink: 0 !important;
   }
 }
+
+/* Optimization: Immediate Tap Response on Mobile screens & No 300ms delay */
+html, body, #root {
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+  -webkit-touch-callout: none;
+}
+

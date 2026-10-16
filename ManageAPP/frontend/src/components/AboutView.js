@@ -2,7 +2,7 @@ import React from 'react';
 import { View, Text, ScrollView, StyleSheet, useWindowDimensions, TouchableOpacity } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 
-export const AboutView = () => {
+export const AboutView = React.memo(() => {
   const { width } = useWindowDimensions();
   const isMobile = width < 768;
 
@@ -197,7 +197,7 @@ export const AboutView = () => {
       </View>
     </ScrollView>
   );
-};
+});
 
 const styles = StyleSheet.create({
   container: {
