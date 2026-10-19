@@ -1,198 +1,368 @@
-import React from 'react';
-import { View, Text, ScrollView, StyleSheet, useWindowDimensions, TouchableOpacity } from 'react-native';
+import React, { useState } from 'react';
+import {
+  View,
+  Text,
+  ScrollView,
+  StyleSheet,
+  useWindowDimensions,
+  TouchableOpacity,
+} from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 
 export const AboutView = React.memo(() => {
   const { width } = useWindowDimensions();
   const isMobile = width < 768;
 
-  const features = [
+  const [activeStep, setActiveStep] = useState(0);
+
+  // The 4 Daily Operational Challenges
+  const challenges = [
     {
-      id: 'dashboard',
-      icon: 'pie-chart',
-      iconBg: '#e0f2fe',
-      iconColor: '#0284c7',
-      title: 'Real-Time Executive Analytics',
-      subtitle: 'Live business intelligence & sales overview',
-      description: 'Instant tracking of total sales turnover, trip counts, taxable values, and GST liability. Features interactive stacked mode trends, party rankings, and multi-period date filters (All, Daily, Weekly, Monthly).',
-      tag: 'Analytics',
-      tagBg: '#f0f9ff',
-      tagColor: '#0369a1',
+      id: 'paper',
+      icon: 'document-text-outline',
+      title: 'Lost Paper Registers',
+      text: 'Handwritten books get damaged, misplaced, or lost. Searching past vehicle records takes hours.',
     },
     {
       id: 'challan',
-      icon: 'receipt',
-      iconBg: '#ecfdf5',
-      iconColor: '#059669',
-      title: 'Sequential Digital Challan System',
-      subtitle: 'Automated gap-free delivery numbering',
-      description: 'Guarantees unique, sequentially continuous challan numbering across all dispatch records. Manual phone entries seamlessly continue the sequence established by imported Excel registers with zero duplication.',
-      tag: 'Dispatch',
-      tagBg: '#ecfdf5',
-      tagColor: '#047857',
+      icon: 'alert-circle-outline',
+      title: 'Duplicate Challan Numbers',
+      text: 'Manual slips cause duplicate numbers, missing serials, and billing disputes with parties.',
     },
     {
-      id: 'tax',
-      icon: 'calculator',
-      iconBg: '#fef3c7',
+      id: 'calc',
+      icon: 'calculator-outline',
+      title: 'Calculation Mistakes',
+      text: 'Manually calculating Gross – Tare = Net, royalty, and GST leads to expensive billing errors.',
+    },
+    {
+      id: 'visibility',
+      icon: 'eye-off-outline',
+      title: 'No Live Sales Tracking',
+      text: 'Owners wait until evening or end-of-month registers are compiled to know actual sales and collections.',
+    },
+  ];
+
+  // How MaterialMApp Solves It
+  const solutions = [
+    {
+      id: 'dispatch',
+      icon: 'phone-portrait-outline',
+      iconColor: '#0d9488',
+      iconBg: '#f0fdfa',
+      title: '10-Second Digital Dispatch',
+      text: 'Operators record deliveries rapidly from weighbridge phones or office computers without paper registers.',
+    },
+    {
+      id: 'challan',
+      icon: 'receipt-outline',
+      iconColor: '#0284c7',
+      iconBg: '#f0f9ff',
+      title: 'Continuous Serial Challans',
+      text: 'Guaranteed sequential challan numbers automatically assigned with zero gaps and zero duplicates.',
+    },
+    {
+      id: 'math',
+      icon: 'flash-outline',
       iconColor: '#d97706',
-      title: 'Automated Tax & Royalty Engine',
-      subtitle: 'Instant weighbridge & tax calculations',
-      description: 'Automatic Net Weight computation (Gross Wt – Tare Wt), volumetric pricing (CUM × Rate), dynamic royalty bill processing, and conditional GST tax rate calculation with 100% mathematical precision.',
-      tag: 'Compliance',
-      tagBg: '#fffbeb',
-      tagColor: '#b45309',
+      iconBg: '#fffbeb',
+      title: 'Instant Weighbridge Math',
+      text: 'Enter Gross & Tare weights — Net weight, royalty, and GST calculate instantly with 100% precision.',
     },
     {
-      id: 'import',
-      icon: 'cloud-upload',
-      iconBg: '#f3e8ff',
+      id: 'reports',
+      icon: 'bar-chart-outline',
       iconColor: '#7c3aed',
-      title: 'Dual-Channel Entry & Excel Import',
-      subtitle: 'High-speed mobile entry & bulk spreadsheet ingestion',
-      description: 'Empowers weighbridge operators to rapidly log single vehicle deliveries from phones while administrative staff can bulk-import thousands of entries from multi-sheet Excel files with instant validation.',
-      tag: 'Data Pipeline',
-      tagBg: '#faf5ff',
-      tagColor: '#6d28d9',
+      iconBg: '#faf5ff',
+      title: 'Live Owner Dashboard',
+      text: 'Check daily sales turnover, vehicle trip counts, buyer balances, and tax liabilities from anywhere.',
+    },
+    {
+      id: 'excel',
+      icon: 'cloud-upload-outline',
+      iconColor: '#16a34a',
+      iconBg: '#f0fdf4',
+      title: '1-Click Excel Ingestion',
+      text: 'Upload thousands of old delivery records from Excel sheets with automatic validation in seconds.',
     },
     {
       id: 'masters',
-      icon: 'layers',
-      iconBg: '#e0e7ff',
-      iconColor: '#4f46e5',
-      title: 'Centralized Master Management',
-      subtitle: 'Single source of truth for quarry entities',
-      description: 'Unified management for Vehicles, Transports, Materials, Parties/Buyers, and Sale Types. Features one-tap Active/Inactive toggles, search filtering, and bulk operations with complete referential integrity.',
-      tag: 'Operations',
-      tagBg: '#eef2ff',
-      tagColor: '#4338ca',
+      icon: 'layers-outline',
+      iconColor: '#e11d48',
+      iconBg: '#fff1f2',
+      title: 'Centralized Master Records',
+      text: 'Maintain all vehicles, parties, materials, and sale types in one place for complete data accuracy.',
+    },
+  ];
+
+  // 4 Easy Workflow Steps
+  const steps = [
+    {
+      num: '1',
+      title: 'Pick Vehicle & Party',
+      icon: 'car-outline',
+      desc: 'Select existing vehicle and buyer from your saved master list in one tap.',
     },
     {
-      id: 'security',
-      icon: 'shield-checkmark',
-      iconBg: '#ffe4e6',
-      iconColor: '#e11d48',
-      title: 'Enterprise Security & Protected Config',
-      subtitle: 'JWT token auth & zero-exposure environment config',
-      description: 'Secured with JSON Web Token (JWT) authorization, role-based access control, and environment-isolated credentials (.env). All database connection strings and secret keys are completely protected.',
-      tag: 'Security',
-      tagBg: '#fff1f2',
-      tagColor: '#be123c',
+      num: '2',
+      title: 'Enter Weights',
+      icon: 'scale-outline',
+      desc: 'Type Gross and Tare weights directly from the weighbridge scale.',
+    },
+    {
+      num: '3',
+      title: 'Auto-Generate Challan',
+      icon: 'receipt-outline',
+      desc: 'System automatically calculates Net weight, royalty, and GST, then generates the challan.',
+    },
+    {
+      num: '4',
+      title: 'Instant Owner Visibility',
+      icon: 'trending-up-outline',
+      desc: 'The delivery syncs immediately so management can see sales and tax totals in real time.',
+    },
+  ];
+
+  // Business Impact Points
+  const impactPoints = [
+    {
+      icon: 'time-outline',
+      title: 'Save 2+ Hours Daily',
+      text: 'Eliminate repeated manual handwriting, paper searches, and spreadsheet double entry.',
+    },
+    {
+      icon: 'shield-checkmark-outline',
+      title: 'Zero Billing Errors',
+      text: 'Consistent calculation rules ensure 100% accurate net weights, rates, and GST amounts.',
+    },
+    {
+      icon: 'people-outline',
+      title: 'Better Team Coordination',
+      text: 'Connect weighbridge operators, dispatch staff, and accounting in one smooth workflow.',
+    },
+    {
+      icon: 'trending-up-outline',
+      title: 'Complete Sales Control',
+      text: 'Always know who bought what, which trucks moved, and exact tax dues in real time.',
     },
   ];
 
   return (
-    <ScrollView style={[styles.container, isMobile && { padding: 12 }]} contentContainerStyle={{ paddingBottom: 100 }}>
-      {/* 1. Hero Identity Card */}
-      <View style={[styles.heroCard, isMobile && { padding: 16 }]}>
-        <View style={styles.heroHeader}>
-          <View style={styles.heroLogoSquircle}>
-            <Text style={styles.heroLogoText}>M</Text>
-          </View>
-          <View style={{ flex: 1, marginLeft: 14 }}>
-            <View style={{ flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: 6 }}>
-              <Text style={styles.heroTitle}>MaterialMApp</Text>
-              <View style={styles.versionBadge}>
-                <Text style={styles.versionBadgeText}>v2.4.0 Production</Text>
-              </View>
-            </View>
-            <Text style={styles.heroTagline}>
-              Enterprise Quarry Logistics & Delivery Management Platform
-            </Text>
+    <ScrollView
+      style={[styles.container, isMobile && { padding: 12 }]}
+      contentContainerStyle={{ paddingBottom: 80 }}
+      showsVerticalScrollIndicator={true}
+    >
+      {/* 1. HERO SALES BANNER */}
+      <View className="mma-animate-fadeup" style={[styles.heroCard, isMobile && { padding: 18 }]}>
+        <View style={styles.heroBadgeRow}>
+          <View style={styles.heroPillBadge}>
+            <Ionicons name="sparkles" size={12} color="#0d9488" style={{ marginRight: 5 }} />
+            <Text style={styles.heroPillText}>Quarry & Crushing Plant Software</Text>
           </View>
         </View>
 
-        <Text style={styles.heroDescription}>
-          MaterialMApp is a production-grade dispatch logistics system built for crushing plants, quarries, and bulk material transport operations. It connects mobile weighbridge operators and management through real-time sync, automated royalty/GST tax processing, and executive intelligence.
+        <Text style={styles.heroTitle}>
+          Smarter Material Dispatch.{'\n'}Less Manual Work.
         </Text>
 
-        <View style={styles.heroStatsRow}>
-          <View style={styles.heroStatItem}>
-            <Text style={styles.heroStatValue}>6</Text>
-            <Text style={styles.heroStatLabel}>Sale Modes</Text>
-          </View>
-          <View style={styles.heroStatDivider} />
-          <View style={styles.heroStatItem}>
-            <Text style={styles.heroStatValue}>100%</Text>
-            <Text style={styles.heroStatLabel}>Data Integrity</Text>
-          </View>
-          <View style={styles.heroStatDivider} />
-          <View style={styles.heroStatItem}>
-            <Text style={styles.heroStatValue}>Real-time</Text>
-            <Text style={styles.heroStatLabel}>MongoDB Sync</Text>
-          </View>
-        </View>
-      </View>
+        <Text style={styles.heroSubtitle}>
+          MaterialMApp replaces slow paper registers with fast digital challans, automated weighbridge
+          calculations, and real-time sales tracking for quarry and plant owners.
+        </Text>
 
-      {/* 2. Key Features Section Header */}
-      <View style={styles.sectionHeaderRow}>
-        <View style={styles.sectionHeaderIcon}>
-          <Ionicons name="sparkles" size={16} color="#0284c7" />
-        </View>
-        <View>
-          <Text style={styles.sectionTitle}>Key Production Features</Text>
-          <Text style={styles.sectionSubtitle}>End-to-end capabilities engineered for operational speed</Text>
-        </View>
-      </View>
-
-      {/* 3. Features Cards Grid */}
-      <View style={styles.featuresGrid}>
-        {features.map((item) => (
-          <View key={item.id} style={[styles.featureCard, isMobile && styles.featureCardMobile]}>
-            <View style={styles.featureTopRow}>
-              <View style={[styles.featureIconSquircle, { backgroundColor: item.iconBg }]}>
-                <Ionicons name={item.icon} size={22} color={item.iconColor} />
-              </View>
-              <View style={[styles.featureTagBadge, { backgroundColor: item.tagBg }]}>
-                <Text style={[styles.featureTagText, { color: item.tagColor }]}>{item.tag}</Text>
-              </View>
+        {/* 3 Quick Value Highlights */}
+        <View style={styles.valueRow}>
+          <View style={styles.valueItem}>
+            <View style={styles.valueIconBox}>
+              <Ionicons name="flash" size={16} color="#0d9488" />
             </View>
+            <View>
+              <Text style={styles.valueItemTitle}>10-Second Entries</Text>
+              <Text style={styles.valueItemSub}>Fast mobile & PC dispatch</Text>
+            </View>
+          </View>
 
-            <Text style={styles.featureTitle}>{item.title}</Text>
-            <Text style={styles.featureSubtitle}>{item.subtitle}</Text>
-            <Text style={styles.featureDescription}>{item.description}</Text>
+          <View style={styles.valueDivider} />
+
+          <View style={styles.valueItem}>
+            <View style={styles.valueIconBox}>
+              <Ionicons name="checkmark-done" size={16} color="#0284c7" />
+            </View>
+            <View>
+              <Text style={styles.valueItemTitle}>100% Exact Math</Text>
+              <Text style={styles.valueItemSub}>Auto Net Wt, Royalty & GST</Text>
+            </View>
+          </View>
+
+          <View style={styles.valueDivider} />
+
+          <View style={styles.valueItem}>
+            <View style={styles.valueIconBox}>
+              <Ionicons name="phone-portrait" size={16} color="#7c3aed" />
+            </View>
+            <View>
+              <Text style={styles.valueItemTitle}>Live Mobile Tracking</Text>
+              <Text style={styles.valueItemSub}>Check sales from anywhere</Text>
+            </View>
+          </View>
+        </View>
+      </View>
+
+      {/* 2. THE COMMON PROBLEMS */}
+      <View style={styles.sectionHeader}>
+        <Text style={styles.sectionTitle}>The Challenges of Traditional Operations</Text>
+        <Text style={styles.sectionSubtitle}>
+          Common everyday headaches across manual registers and spreadsheet dispatches
+        </Text>
+      </View>
+
+      <View style={styles.grid}>
+        {challenges.map((c, idx) => (
+          <View
+            key={c.id}
+            className={`mma-card-hover mma-animate-fadeup mma-delay-${idx + 1}`}
+            style={[styles.challengeCard, isMobile && styles.fullWidthCard]}
+          >
+            <View style={styles.challengeIconBox}>
+              <Ionicons name={c.icon} size={20} color="#dc2626" />
+            </View>
+            <Text style={styles.cardHeading}>{c.title}</Text>
+            <Text style={styles.cardBody}>{c.text}</Text>
           </View>
         ))}
       </View>
 
-      {/* 4. Technical Architecture & Specifications */}
-      <View style={[styles.specsCard, isMobile && { padding: 16 }]}>
-        <View style={styles.specsHeader}>
-          <Ionicons name="hardware-chip-outline" size={20} color="#0284c7" style={{ marginRight: 8 }} />
-          <Text style={styles.specsTitle}>System Specifications & Architecture</Text>
-        </View>
+      {/* 3. HOW MATERIALMAPP SOLVES IT */}
+      <View style={[styles.sectionHeader, { marginTop: 32 }]}>
+        <Text style={styles.sectionTitle}>One Platform. Complete Dispatch Control.</Text>
+        <Text style={styles.sectionSubtitle}>
+          Built specifically to make weighbridge and material sales fast, simple, and accurate
+        </Text>
+      </View>
 
-        <View style={styles.specsTable}>
-          <View style={styles.specsRow}>
-            <Text style={styles.specsKey}>Application Frontend</Text>
-            <Text style={styles.specsVal}>React Native & Expo Web (Cross-Platform Mobile/Web)</Text>
+      <View style={styles.grid}>
+        {solutions.map((s, idx) => (
+          <View
+            key={s.id}
+            className={`mma-card-hover mma-animate-fadeup mma-delay-${(idx % 4) + 1}`}
+            style={[styles.solutionCard, isMobile && styles.fullWidthCard]}
+          >
+            <View style={[styles.solutionIconBox, { backgroundColor: s.iconBg }]}>
+              <Ionicons name={s.icon} size={20} color={s.iconColor} />
+            </View>
+            <Text style={styles.cardHeading}>{s.title}</Text>
+            <Text style={styles.cardBody}>{s.text}</Text>
           </View>
-          <View style={styles.specsRow}>
-            <Text style={styles.specsKey}>Backend API Engine</Text>
-            <Text style={styles.specsVal}>FastAPI (Python 3.11+) with Async Motor Driver</Text>
+        ))}
+      </View>
+
+      {/* 4. EASY 4-STEP WORKFLOW */}
+      <View style={[styles.sectionHeader, { marginTop: 32 }]}>
+        <Text style={styles.sectionTitle}>How It Works in 4 Easy Steps</Text>
+        <Text style={styles.sectionSubtitle}>
+          From truck arrival at the weighbridge to live dashboard reporting
+        </Text>
+      </View>
+
+      <View style={[styles.workflowCard, isMobile && { padding: 16 }]}>
+        <View style={styles.stepsRow}>
+          {steps.map((st, idx) => {
+            const isSelected = activeStep === idx;
+            return (
+              <TouchableOpacity
+                key={st.num}
+                activeOpacity={0.8}
+                onPress={() => setActiveStep(idx)}
+                className="mma-card-hover"
+                style={[
+                  styles.stepBox,
+                  isMobile && styles.stepBoxMobile,
+                  isSelected && styles.stepBoxActive,
+                ]}
+              >
+                <View style={styles.stepHeader}>
+                  <View
+                    style={[
+                      styles.stepBadge,
+                      isSelected ? styles.stepBadgeActive : styles.stepBadgeDefault,
+                    ]}
+                  >
+                    <Text
+                      style={[
+                        styles.stepBadgeText,
+                        isSelected ? { color: '#ffffff' } : { color: '#0d9488' },
+                      ]}
+                    >
+                      Step {st.num}
+                    </Text>
+                  </View>
+                  <Ionicons
+                    name={st.icon}
+                    size={18}
+                    color={isSelected ? '#0d9488' : '#64748b'}
+                  />
+                </View>
+                <Text style={styles.stepTitle}>{st.title}</Text>
+                <Text style={styles.stepDesc}>{st.desc}</Text>
+              </TouchableOpacity>
+            );
+          })}
+        </View>
+      </View>
+
+      {/* 5. BUSINESS IMPACT */}
+      <View style={[styles.sectionHeader, { marginTop: 32 }]}>
+        <Text style={styles.sectionTitle}>Less Repetitive Work. Faster Operations.</Text>
+        <Text style={styles.sectionSubtitle}>
+          Real business benefits for quarry owners, plant managers, and weighbridge teams
+        </Text>
+      </View>
+
+      <View style={styles.grid}>
+        {impactPoints.map((item, idx) => (
+          <View
+            key={item.title}
+            className={`mma-card-hover mma-animate-fadeup mma-delay-${idx + 1}`}
+            style={[styles.impactCard, isMobile && styles.fullWidthCard]}
+          >
+            <View style={styles.impactIconBox}>
+              <Ionicons name={item.icon} size={20} color="#0d9488" />
+            </View>
+            <Text style={styles.cardHeading}>{item.title}</Text>
+            <Text style={styles.cardBody}>{item.text}</Text>
           </View>
-          <View style={styles.specsRow}>
-            <Text style={styles.specsKey}>Database & Storage</Text>
-            <Text style={styles.specsVal}>MongoDB with Multi-Collection Destination Routing</Text>
+        ))}
+      </View>
+
+      {/* 6. CALL TO ACTION SALES BANNER */}
+      <View className="mma-animate-fadeup" style={[styles.ctaCard, isMobile && { padding: 20 }]}>
+        <Text style={styles.ctaTitle}>Ready to Digitize Your Quarry Dispatch?</Text>
+        <Text style={styles.ctaDesc}>
+          Join modern quarries and crushing plants using MaterialMApp for faster dispatch, accurate
+          billing, and complete peace of mind.
+        </Text>
+        <View style={styles.ctaPillsRow}>
+          <View style={styles.ctaPill}>
+            <Ionicons name="checkmark-circle" size={14} color="#14b8a6" style={{ marginRight: 4 }} />
+            <Text style={styles.ctaPillText}>Fast Setup</Text>
           </View>
-          <View style={styles.specsRow}>
-            <Text style={styles.specsKey}>Security & Protocols</Text>
-            <Text style={styles.specsVal}>HS256 JWT Authentication, Encrypted Environment Variables (.env)</Text>
+          <View style={styles.ctaPill}>
+            <Ionicons name="checkmark-circle" size={14} color="#14b8a6" style={{ marginRight: 4 }} />
+            <Text style={styles.ctaPillText}>Mobile & PC Friendly</Text>
           </View>
-          <View style={[styles.specsRow, { borderBottomWidth: 0 }]}>
-            <Text style={styles.specsKey}>Weighbridge Calculations</Text>
-            <Text style={styles.specsVal}>Automated Net Wt, CUM Rate, Royalty & Dynamic GST Engine</Text>
+          <View style={styles.ctaPill}>
+            <Ionicons name="checkmark-circle" size={14} color="#14b8a6" style={{ marginRight: 4 }} />
+            <Text style={styles.ctaPillText}>Secure Cloud Sync</Text>
           </View>
         </View>
       </View>
 
-      {/* 5. Footer Copyright */}
-      <View style={styles.footerRow}>
+      {/* Footer */}
+      <View style={styles.footer}>
+        <Text style={styles.footerBrand}>MaterialMApp Logistics Platform</Text>
         <Text style={styles.footerText}>
-          MaterialMApp Enterprise Logistics Platform • Built for high-volume dispatch operations.
-        </Text>
-        <Text style={styles.footerSubText}>
-          © 2026 MaterialMApp Inc. All rights reserved.
+          Designed for Quarry Owners, Plant Managers, Weighbridge Operators & Accounting.
         </Text>
       </View>
     </ScrollView>
@@ -208,254 +378,305 @@ const styles = StyleSheet.create({
   /* Hero Card */
   heroCard: {
     backgroundColor: '#ffffff',
-    borderRadius: 16,
+    borderRadius: 18,
     borderWidth: 1,
     borderColor: '#e2e8f0',
-    padding: 24,
+    padding: 28,
     marginBottom: 20,
     shadowColor: '#0f172a',
-    shadowOffset: { width: 0, height: 3 },
+    shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.05,
-    shadowRadius: 8,
-    elevation: 3,
+    shadowRadius: 10,
+    elevation: 2,
   },
-  heroHeader: {
+  heroBadgeRow: {
+    flexDirection: 'row',
+    marginBottom: 12,
+  },
+  heroPillBadge: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 14,
+    backgroundColor: '#f0fdfa',
+    borderWidth: 1,
+    borderColor: '#ccfbf1',
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 20,
   },
-  heroLogoSquircle: {
-    width: 52,
-    height: 52,
-    borderRadius: 14,
-    backgroundColor: '#0d9488',
-    alignItems: 'center',
-    justifyContent: 'center',
-    shadowColor: '#0d9488',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.25,
-    shadowRadius: 6,
-    elevation: 4,
-  },
-  heroLogoText: {
-    color: '#ffffff',
-    fontSize: 26,
-    fontWeight: '900',
+  heroPillText: {
+    fontSize: 11.5,
+    fontWeight: '700',
+    color: '#0f766e',
   },
   heroTitle: {
-    fontSize: 22,
+    fontSize: 24,
     fontWeight: '800',
     color: '#0f172a',
+    lineHeight: 32,
+    marginBottom: 8,
     letterSpacing: -0.3,
   },
-  versionBadge: {
-    backgroundColor: '#ecfdf5',
-    borderWidth: 1,
-    borderColor: '#a7f3d0',
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: 12,
+  heroSubtitle: {
+    fontSize: 14,
+    lineHeight: 22,
+    color: '#475569',
+    marginBottom: 20,
+    maxWidth: 720,
   },
-  versionBadgeText: {
-    fontSize: 11,
-    fontWeight: '700',
-    color: '#059669',
-  },
-  heroTagline: {
-    fontSize: 13,
-    fontWeight: '600',
-    color: '#64748b',
-    marginTop: 2,
-  },
-  heroDescription: {
-    fontSize: 13.5,
-    lineHeight: 21,
-    color: '#334155',
-    marginBottom: 16,
-  },
-  heroStatsRow: {
+  valueRow: {
     flexDirection: 'row',
     alignItems: 'center',
+    flexWrap: 'wrap',
+    gap: 12,
+    paddingTop: 16,
+    borderTopWidth: 1,
+    borderTopColor: '#f1f5f9',
+  },
+  valueItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+    minWidth: 180,
+  },
+  valueIconBox: {
+    width: 34,
+    height: 34,
+    borderRadius: 10,
     backgroundColor: '#f8fafc',
-    borderRadius: 12,
-    paddingVertical: 12,
-    paddingHorizontal: 16,
     borderWidth: 1,
     borderColor: '#e2e8f0',
-  },
-  heroStatItem: {
-    flex: 1,
     alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 10,
   },
-  heroStatValue: {
-    fontSize: 16,
-    fontWeight: '800',
-    color: '#0284c7',
+  valueItemTitle: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#0f172a',
   },
-  heroStatLabel: {
-    fontSize: 11,
-    fontWeight: '600',
+  valueItemSub: {
+    fontSize: 11.5,
     color: '#64748b',
-    marginTop: 2,
   },
-  heroStatDivider: {
+  valueDivider: {
     width: 1,
     height: 28,
     backgroundColor: '#e2e8f0',
   },
   /* Section Header */
-  sectionHeaderRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
+  sectionHeader: {
     marginBottom: 14,
-    gap: 10,
-  },
-  sectionHeaderIcon: {
-    width: 32,
-    height: 32,
-    borderRadius: 8,
-    backgroundColor: '#e0f2fe',
-    alignItems: 'center',
-    justifyContent: 'center',
   },
   sectionTitle: {
-    fontSize: 16,
+    fontSize: 17,
     fontWeight: '800',
     color: '#0f172a',
+    letterSpacing: -0.2,
   },
   sectionSubtitle: {
-    fontSize: 12,
+    fontSize: 12.5,
     color: '#64748b',
-    marginTop: 1,
+    marginTop: 2,
   },
-  /* Features Grid */
-  featuresGrid: {
+  /* Grids */
+  grid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 14,
-    marginBottom: 20,
+    gap: 12,
   },
-  featureCard: {
+  fullWidthCard: {
+    width: '100% !important',
+  },
+  /* Challenge Card */
+  challengeCard: {
+    backgroundColor: '#ffffff',
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: '#fee2e2',
+    padding: 16,
+    width: '48.8%',
+    shadowColor: '#0f172a',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.03,
+    shadowRadius: 5,
+    elevation: 1,
+  },
+  challengeIconBox: {
+    width: 34,
+    height: 34,
+    borderRadius: 8,
+    backgroundColor: '#fef2f2',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 10,
+  },
+  /* Solution Card */
+  solutionCard: {
+    backgroundColor: '#ffffff',
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+    padding: 16,
+    width: '32.1%',
+    shadowColor: '#0f172a',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.03,
+    shadowRadius: 5,
+    elevation: 1,
+  },
+  solutionIconBox: {
+    width: 34,
+    height: 34,
+    borderRadius: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 10,
+  },
+  cardHeading: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#0f172a',
+    marginBottom: 4,
+  },
+  cardBody: {
+    fontSize: 12.5,
+    lineHeight: 18,
+    color: '#475569',
+  },
+  /* Workflow */
+  workflowCard: {
+    backgroundColor: '#ffffff',
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+    padding: 18,
+  },
+  stepsRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 10,
+  },
+  stepBox: {
+    flex: 1,
+    minWidth: 180,
+    backgroundColor: '#f8fafc',
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+    padding: 14,
+  },
+  stepBoxMobile: {
+    minWidth: '100%',
+  },
+  stepBoxActive: {
+    backgroundColor: '#f0fdfa',
+    borderColor: '#5eead4',
+  },
+  stepHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 8,
+  },
+  stepBadge: {
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 12,
+  },
+  stepBadgeDefault: {
+    backgroundColor: '#e6fffa',
+  },
+  stepBadgeActive: {
+    backgroundColor: '#0d9488',
+  },
+  stepBadgeText: {
+    fontSize: 11,
+    fontWeight: '700',
+  },
+  stepTitle: {
+    fontSize: 13.5,
+    fontWeight: '700',
+    color: '#0f172a',
+    marginBottom: 4,
+  },
+  stepDesc: {
+    fontSize: 12,
+    lineHeight: 17,
+    color: '#64748b',
+  },
+  /* Impact Card */
+  impactCard: {
     backgroundColor: '#ffffff',
     borderRadius: 14,
     borderWidth: 1,
     borderColor: '#e2e8f0',
     padding: 16,
     width: '48.8%',
-    shadowColor: '#0f172a',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.04,
-    shadowRadius: 5,
-    elevation: 2,
   },
-  featureCardMobile: {
-    width: '100%',
-  },
-  featureTopRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    marginBottom: 12,
-  },
-  featureIconSquircle: {
-    width: 42,
-    height: 42,
-    borderRadius: 10,
+  impactIconBox: {
+    width: 34,
+    height: 34,
+    borderRadius: 8,
+    backgroundColor: '#f0fdfa',
     alignItems: 'center',
     justifyContent: 'center',
+    marginBottom: 10,
   },
-  featureTagBadge: {
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: 6,
-  },
-  featureTagText: {
-    fontSize: 10.5,
-    fontWeight: '700',
-    textTransform: 'uppercase',
-  },
-  featureTitle: {
-    fontSize: 15,
-    fontWeight: '700',
-    color: '#0f172a',
-    marginBottom: 2,
-  },
-  featureSubtitle: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: '#0284c7',
-    marginBottom: 8,
-  },
-  featureDescription: {
-    fontSize: 12.5,
-    lineHeight: 19,
-    color: '#475569',
-  },
-  /* Specs Card */
-  specsCard: {
-    backgroundColor: '#ffffff',
-    borderRadius: 16,
-    borderWidth: 1,
-    borderColor: '#e2e8f0',
-    padding: 20,
-    marginBottom: 20,
-    shadowColor: '#0f172a',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.04,
-    shadowRadius: 5,
-    elevation: 2,
-  },
-  specsHeader: {
-    flexDirection: 'row',
+  /* CTA Card */
+  ctaCard: {
+    backgroundColor: '#0f172a',
+    borderRadius: 18,
+    padding: 26,
+    marginTop: 28,
     alignItems: 'center',
-    marginBottom: 14,
   },
-  specsTitle: {
-    fontSize: 15,
+  ctaTitle: {
+    fontSize: 18,
     fontWeight: '800',
-    color: '#0f172a',
-  },
-  specsTable: {
-    backgroundColor: '#f8fafc',
-    borderRadius: 10,
-    borderWidth: 1,
-    borderColor: '#e2e8f0',
-    overflow: 'hidden',
-  },
-  specsRow: {
-    flexDirection: 'row',
-    paddingVertical: 10,
-    paddingHorizontal: 14,
-    borderBottomWidth: 1,
-    borderBottomColor: '#e2e8f0',
-    alignItems: 'center',
-  },
-  specsKey: {
-    width: 140,
-    fontSize: 11.5,
-    fontWeight: '700',
-    color: '#64748b',
-    textTransform: 'uppercase',
-  },
-  specsVal: {
-    flex: 1,
-    fontSize: 12.5,
-    fontWeight: '600',
-    color: '#1e293b',
-  },
-  /* Footer */
-  footerRow: {
-    alignItems: 'center',
-    paddingVertical: 16,
-    gap: 4,
-  },
-  footerText: {
-    fontSize: 12,
-    color: '#64748b',
+    color: '#ffffff',
+    marginBottom: 6,
     textAlign: 'center',
   },
-  footerSubText: {
-    fontSize: 11,
+  ctaDesc: {
+    fontSize: 13,
+    lineHeight: 19,
+    color: '#cbd5e1',
+    textAlign: 'center',
+    maxWidth: 580,
+    marginBottom: 16,
+  },
+  ctaPillsRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'center',
+    gap: 8,
+  },
+  ctaPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(255, 255, 255, 0.08)',
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 20,
+  },
+  ctaPillText: {
+    fontSize: 11.5,
+    fontWeight: '600',
+    color: '#e2e8f0',
+  },
+  /* Footer */
+  footer: {
+    alignItems: 'center',
+    paddingVertical: 24,
+    gap: 4,
+  },
+  footerBrand: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#64748b',
+  },
+  footerText: {
+    fontSize: 11.5,
     color: '#94a3b8',
     textAlign: 'center',
   },

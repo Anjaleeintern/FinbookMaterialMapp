@@ -22,6 +22,24 @@ const CATEGORIES = [
   { id: 'Type/Mode', label: 'Type / Mode', singular: 'Type / Mode', icon: 'git-branch-outline', sample: 'Cash Sale' },
 ];
 
+const STATIC_TYPE_MODES = [
+  'Cash Sale',
+  'Credit Sale',
+  'QR Sale',
+  'HR Loading',
+  'Royalty Sale',
+  'Without Royalty',
+  'With Royalty',
+  'Case Sale',
+];
+
+const isItemStatic = (item) => {
+  if (!item) return false;
+  if (item.category !== 'Type/Mode') return false;
+  const v = String(item.value || '').trim();
+  return STATIC_TYPE_MODES.some((std) => std.toLowerCase() === v.toLowerCase());
+};
+
 const formatDate = (isoStr) => {
   if (!isoStr) return '12 Oct 2025 10:24 AM';
   try {
@@ -59,9 +77,6 @@ export const MastersView = React.memo(({ masters, onRefresh }) => {
   const [selectedIds, setSelectedIds] = useState(new Set());
   const [sortAsc, setSortAsc] = useState(true);
 
-  // Pagination
-  const [currentPage, setCurrentPage] = useState(1);
-  const itemsPerPage = 5;
 
   // Add / Edit Modal
   const [editModalVisible, setEditModalVisible] = useState(false);
@@ -72,11 +87,13 @@ export const MastersView = React.memo(({ masters, onRefresh }) => {
   const [formSubmitting, setFormSubmitting] = useState(false);
   const [modalError, setModalError] = useState('');
 
-  // Import / Bulk Modal
+  // Import / Bulk Modal (Multi-column Excel & CSV support)
   const [importModalVisible, setImportModalVisible] = useState(false);
   const [importCategory, setImportCategory] = useState('VehicleNo');
   const [importRawText, setImportRawText] = useState('');
-  const [importParsedItems, setImportParsedItems] = useState([]);
+  const [selectedImportFile, setSelectedImportFile] = useState(null);
+  const [importPreviewData, setImportPreviewData] = useState(null);
+  const [isDraggingOver, setIsDraggingOver] = useState(false);
   const [importing, setImporting] = useState(false);
   const [importError, setImportError] = useState('');
   const [importSuccess, setImportSuccess] = useState('');
@@ -120,7 +137,15 @@ export const MastersView = React.memo(({ masters, onRefresh }) => {
     CATEGORIES.forEach((c) => {
       const catKey = c.id === 'Type/Mode' ? 'TypeMode' : c.id;
       const fromDetails = masterList.filter((m) => m.category === c.id);
-      if (fromDetails.length > 0) {
+      if (c.id === 'Type/Mode') {
+        const mainTypes = fromDetails.filter(
+          (m) =>
+            m.value.toLowerCase() !== 'royalty sale' &&
+            m.value.toLowerCase() !== 'without royalty' &&
+            m.value.toLowerCase() !== 'with royalty'
+        );
+        counts[c.id] = mainTypes.length > 0 ? mainTypes.length : 4;
+      } else if (fromDetails.length > 0) {
         counts[c.id] = fromDetails.length;
       } else {
         counts[c.id] = masters?.[catKey]?.length || 0;
@@ -141,6 +166,8 @@ export const MastersView = React.memo(({ masters, onRefresh }) => {
         category: m.category,
         value: m.value,
         status: m.status || 'Active',
+        is_static: m.is_static !== undefined ? m.is_static : isItemStatic(m),
+        sub_types: m.sub_types,
         created_at: m.created_at,
         updated_at: m.updated_at,
       }));
@@ -151,15 +178,39 @@ export const MastersView = React.memo(({ masters, onRefresh }) => {
         category: activeCategory,
         value: val,
         status: 'Active',
+        is_static: activeCategory === 'Type/Mode' && isItemStatic({ category: 'Type/Mode', value: val }),
         created_at: new Date(Date.now() - idx * 86400000).toISOString(),
         updated_at: new Date(Date.now() - idx * 86400000).toISOString(),
       }));
     }
 
-    // Apply Search Filter
+    if (activeCategory === 'Type/Mode') {
+      // Find or attach sub_types to HR Loading
+      const hrItem = items.find((m) => m.value.trim().toLowerCase() === 'hr loading');
+      if (hrItem) {
+        hrItem.sub_types = [
+          { label: 'Royalty (With Royalty)', value: 'Royalty Sale', is_static: true },
+          { label: 'Without Royalty', value: 'Without Royalty', is_static: true },
+        ];
+      }
+
+      // Filter out standalone Royalty Sale and Without Royalty from top-level list
+      items = items.filter((m) => {
+        const v = m.value.trim().toLowerCase();
+        return v !== 'royalty sale' && v !== 'without royalty' && v !== 'with royalty';
+      });
+    }
+
+    // Apply Search Filter (searches both top-level value and sub-types)
     if (searchQuery.trim()) {
       const q = searchQuery.trim().toLowerCase();
-      items = items.filter((item) => String(item.value).toLowerCase().includes(q));
+      items = items.filter((item) => {
+        if (String(item.value).toLowerCase().includes(q)) return true;
+        if (item.sub_types && item.sub_types.some((s) => s.label.toLowerCase().includes(q) || s.value.toLowerCase().includes(q))) {
+          return true;
+        }
+        return false;
+      });
     }
 
     // Apply Status Filter
@@ -178,49 +229,40 @@ export const MastersView = React.memo(({ masters, onRefresh }) => {
 
   // Status counts for pills
   const statusCounts = useMemo(() => {
-    const fromApi = masterList.filter((m) => m.category === activeCategory);
-    let allCount = 0;
-    let activeCount = 0;
-    let inactiveCount = 0;
-
-    if (fromApi.length > 0) {
-      allCount = fromApi.length;
-      activeCount = fromApi.filter((m) => m.status === 'Active').length;
-      inactiveCount = fromApi.filter((m) => m.status === 'Inactive').length;
-    } else {
-      const catKey = activeCategory === 'Type/Mode' ? 'TypeMode' : activeCategory;
-      const count = masters?.[catKey]?.length || 0;
-      allCount = count;
-      activeCount = count;
-      inactiveCount = 0;
+    let items = masterList.filter((m) => m.category === activeCategory);
+    if (activeCategory === 'Type/Mode') {
+      items = items.filter(
+        (m) =>
+          m.value.toLowerCase() !== 'royalty sale' &&
+          m.value.toLowerCase() !== 'without royalty' &&
+          m.value.toLowerCase() !== 'with royalty'
+      );
     }
+    const allCount = items.length > 0 ? items.length : (activeCategory === 'Type/Mode' ? 4 : (masters?.[activeCategory]?.length || 0));
+    const activeCount = items.filter((m) => m.status === 'Active').length || allCount;
+    const inactiveCount = items.filter((m) => m.status === 'Inactive').length;
 
     return { all: allCount, active: activeCount, inactive: inactiveCount };
   }, [masterList, masters, activeCategory]);
 
-  // Paginated records
-  const totalPages = Math.max(1, Math.ceil(activeRecords.length / itemsPerPage));
-  const paginatedRecords = useMemo(() => {
-    const start = (currentPage - 1) * itemsPerPage;
-    return activeRecords.slice(start, start + itemsPerPage);
-  }, [activeRecords, currentPage, itemsPerPage]);
-
   useEffect(() => {
-    setCurrentPage(1);
     setSelectedIds(new Set());
   }, [activeCategory, searchQuery, statusFilter]);
 
-  // Checkbox Selection
+  // Checkbox Selection - Select/Deselect all records (excluding static protected items)
   const toggleSelectAll = () => {
-    if (selectedIds.size === paginatedRecords.length && paginatedRecords.length > 0) {
+    const selectableRecords = activeRecords.filter((r) => !isItemStatic(r));
+    if (selectedIds.size === selectableRecords.length && selectableRecords.length > 0) {
       setSelectedIds(new Set());
     } else {
-      const newSet = new Set(paginatedRecords.map((r) => r.id));
+      const newSet = new Set(selectableRecords.map((r) => r.id));
       setSelectedIds(newSet);
     }
   };
 
   const toggleSelectOne = (id) => {
+    const item = activeRecords.find((r) => r.id === id);
+    if (item && isItemStatic(item)) return;
     const newSet = new Set(selectedIds);
     if (newSet.has(id)) {
       newSet.delete(id);
@@ -279,8 +321,13 @@ export const MastersView = React.memo(({ masters, onRefresh }) => {
     }
   };
 
-  // Delete single item
+  // Delete single item (protects static items)
   const handleDeleteItem = async (item) => {
+    if (isItemStatic(item)) {
+      alert(`'${item.value}' is a permanent static Type/Mode and cannot be deleted.`);
+      return;
+    }
+
     if (Platform.OS === 'web') {
       const ok = window.confirm(`Are you sure you want to delete '${item.value}' from ${item.category}?`);
       if (!ok) return;
@@ -327,12 +374,23 @@ export const MastersView = React.memo(({ masters, onRefresh }) => {
     const idsArray = Array.from(selectedIds);
 
     if (actionType === 'delete') {
+      // Exclude static items from bulk delete
+      const deletableIds = idsArray.filter((id) => {
+        const item = masterList.find((m) => m.id === id);
+        return !isItemStatic(item);
+      });
+
+      if (deletableIds.length === 0) {
+        alert('Static system items cannot be deleted.');
+        return;
+      }
+
       if (Platform.OS === 'web') {
-        const ok = window.confirm(`Are you sure you want to delete ${idsArray.length} selected items?`);
+        const ok = window.confirm(`Are you sure you want to delete ${deletableIds.length} selected items?`);
         if (!ok) return;
       }
       try {
-        await api.bulkDeleteMasters(idsArray);
+        await api.bulkDeleteMasters(deletableIds);
         setSelectedIds(new Set());
         await loadMasterDetails();
         if (onRefresh) onRefresh();
@@ -354,29 +412,18 @@ export const MastersView = React.memo(({ masters, onRefresh }) => {
     }
   };
 
-  // Download CSV Template
-  const handleDownloadTemplate = (cat = activeCategory) => {
-    const config = CATEGORIES.find((c) => c.id === cat) || CATEGORIES[0];
-    const samples = {
-      'VehicleNo': 'VehicleNo\nMP09DD5763\nMP09HH9584\nMH12AB1234\nRJ14CD5678\nGJ01XY7890',
-      'TransportName': 'TransportName\nVMPL\nMSK\nBALAJI LOGISTICS\nSPEED FREIGHT',
-      'MaterialName': 'MaterialName\n10MM\n20MM\nGSB\nM-SAND\nWMM',
-      'PartyName': 'PartyName\nNAWAZ KHAN\nALTAMASH KHAN\nSAGEER PATEL\nPUSHPENDRA\nANIL AARIYA',
-      'Type/Mode': 'TypeMode\nRoyalty Sale\nWithout Royalty\nCredit Sale\nCash Sale\nQR Sale\nHR Loading',
-    };
-    const content = samples[cat] || `${config.label}\nSample1\nSample2`;
-
+  // Download Unified Master Template (Excel .xlsx or CSV .csv with all master columns)
+  const handleDownloadTemplate = (format = 'xlsx') => {
     if (Platform.OS === 'web' && typeof window !== 'undefined') {
-      const blob = new Blob([content], { type: 'text/csv;charset=utf-8;' });
-      const url = URL.createObjectURL(blob);
+      const url = api.getMasterTemplateUrl(format);
       const link = document.createElement('a');
       link.href = url;
-      link.setAttribute('download', `${cat.replace(/[^a-zA-Z0-9]/g, '_')}_Template.csv`);
+      link.setAttribute('download', `Master_Data_Template.${format}`);
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
     } else {
-      alert(`CSV Template for ${config.label}:\n\n${content}`);
+      alert(`Master Template URL:\n${api.getMasterTemplateUrl(format)}`);
     }
   };
 
@@ -384,54 +431,83 @@ export const MastersView = React.memo(({ masters, onRefresh }) => {
   const handleOpenImport = (cat = activeCategory) => {
     setImportCategory(cat);
     setImportRawText('');
-    setImportParsedItems([]);
+    setSelectedImportFile(null);
+    setImportPreviewData(null);
     setImportError('');
     setImportSuccess('');
     setImportModalVisible(true);
   };
 
-  // Parse Text or CSV in Import Modal
-  const handleParseImport = () => {
-    if (!importRawText.trim()) {
-      setImportError('Please paste some records or upload a CSV file.');
-      return;
-    }
-
+  // Process File (.xlsx, .xls, .csv, .txt)
+  const handleProcessFile = async (file) => {
+    if (!file) return;
+    setSelectedImportFile(file);
+    setImportRawText('');
     setImportError('');
-    const lines = importRawText.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
-    const parsed = [];
+    setImportSuccess('');
+    setImporting(true);
 
-    lines.forEach((line) => {
-      const firstCol = line.split(',')[0].replace(/^["']|["']$/g, '').trim();
-      const lower = firstCol.toLowerCase();
-      if (
-        firstCol &&
-        lower !== 'vehicleno' &&
-        lower !== 'vehicle no' &&
-        lower !== 'transportname' &&
-        lower !== 'materialname' &&
-        lower !== 'partyname' &&
-        lower !== 'typemode' &&
-        lower !== 'type/mode'
-      ) {
-        if (!parsed.includes(firstCol)) {
-          parsed.push(firstCol);
+    try {
+      const res = await api.importMasterFile(file, true, importCategory || activeCategory);
+      if (res.success) {
+        setImportPreviewData(res);
+        if (res.total_new === 0 && res.total_duplicates > 0) {
+          setImportError(`All ${res.total_duplicates} records in this file already exist in masters.`);
+        } else if (res.total_new === 0) {
+          setImportError('No master items found in the selected file.');
+        } else {
+          setImportSuccess(res.message || `Found ${res.total_new} new items in ${file.name}`);
         }
+      } else {
+        setImportError(res.detail || 'Failed to parse file');
       }
-    });
-
-    if (parsed.length === 0) {
-      setImportError('No valid items found in input.');
-      return;
+    } catch (err) {
+      setImportError(err.message || 'Failed to read file');
+    } finally {
+      setImporting(false);
     }
-
-    setImportParsedItems(parsed);
   };
 
-  // Execute Bulk Import
+  // Parse Text or CSV in Import Modal
+  const handleParseImport = async () => {
+    if (!importRawText.trim()) {
+      if (selectedImportFile) {
+        return handleProcessFile(selectedImportFile);
+      }
+      setImportError('Please select an Excel / CSV file or paste master records.');
+      return;
+    }
+
+    setImporting(true);
+    setImportError('');
+    setImportSuccess('');
+    setSelectedImportFile(null);
+
+    try {
+      const res = await api.importMasterPasted(importRawText, importCategory || activeCategory, true);
+      if (res.success) {
+        setImportPreviewData(res);
+        if (res.total_new === 0 && res.total_duplicates > 0) {
+          setImportError(`All ${res.total_duplicates} records already exist in masters.`);
+        } else if (res.total_new === 0) {
+          setImportError('No valid master items found in input.');
+        } else {
+          setImportSuccess(res.message || `Found ${res.total_new} new items ready to import.`);
+        }
+      } else {
+        setImportError(res.detail || 'Failed to parse pasted data');
+      }
+    } catch (err) {
+      setImportError(err.message || 'Failed to parse pasted data');
+    } finally {
+      setImporting(false);
+    }
+  };
+
+  // Execute Bulk Import directly into MongoDB
   const handleExecuteImport = async () => {
-    if (importParsedItems.length === 0) {
-      setImportError('No parsed items to import. Please click Preview first.');
+    if (!importPreviewData || importPreviewData.total_new === 0) {
+      setImportError('No new items to import. Please select a valid file or preview data first.');
       return;
     }
 
@@ -440,14 +516,32 @@ export const MastersView = React.memo(({ masters, onRefresh }) => {
     setImportSuccess('');
 
     try {
-      const res = await api.bulkAddMasters(importCategory, importParsedItems, 'Active');
-      setImportSuccess(
-        `Successfully imported ${res.added_count} items! ${res.skipped_count > 0 ? `(${res.skipped_count} duplicates skipped)` : ''}`
-      );
-      setImportParsedItems([]);
-      setImportRawText('');
-      await loadMasterDetails();
-      if (onRefresh) onRefresh();
+      let res;
+      if (selectedImportFile) {
+        res = await api.importMasterFile(selectedImportFile, false, importCategory || activeCategory);
+      } else {
+        res = await api.importMasterPasted(importRawText, importCategory || activeCategory, false);
+      }
+
+      if (res.success) {
+        const catSummaries = [];
+        if (res.categories) {
+          Object.values(res.categories).forEach((cat) => {
+            if (cat.new_count > 0) {
+              catSummaries.push(`${cat.label || cat.category}: ${cat.new_count}`);
+            }
+          });
+        }
+        const breakdownStr = catSummaries.length > 0 ? ` (${catSummaries.join(', ')})` : '';
+        setImportSuccess(`Successfully imported ${res.total_new} records directly into masters!${breakdownStr}`);
+        setImportPreviewData(null);
+        setSelectedImportFile(null);
+        setImportRawText('');
+        await loadMasterDetails();
+        if (onRefresh) onRefresh();
+      } else {
+        setImportError(res.detail || 'Failed to import records');
+      }
     } catch (err) {
       setImportError(err.message || 'Failed to import records');
     } finally {
@@ -458,50 +552,20 @@ export const MastersView = React.memo(({ masters, onRefresh }) => {
   // Handle file select on web
   const handleWebFileSelect = (e) => {
     const file = e.target.files?.[0];
-    if (!file) return;
-    const reader = new FileReader();
-    reader.onload = (evt) => {
-      const content = evt.target?.result;
-      if (typeof content === 'string') {
-        setImportRawText(content);
-        const lines = content.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
-        const parsed = [];
-        lines.forEach((line) => {
-          const firstCol = line.split(',')[0].replace(/^["']|["']$/g, '').trim();
-          const lower = firstCol.toLowerCase();
-          if (
-            firstCol &&
-            lower !== 'vehicleno' &&
-            lower !== 'vehicle no' &&
-            lower !== 'transportname' &&
-            lower !== 'materialname' &&
-            lower !== 'partyname' &&
-            lower !== 'typemode' &&
-            lower !== 'type/mode'
-          ) {
-            if (!parsed.includes(firstCol)) {
-              parsed.push(firstCol);
-            }
-          }
-        });
-        setImportParsedItems(parsed);
-      }
-    };
-    reader.readAsText(file);
+    if (file) {
+      handleProcessFile(file);
+    }
+    if (e.target) e.target.value = '';
   };
 
   return (
-    <ScrollView
-      style={styles.pageScrollView}
-      contentContainerStyle={[styles.scrollContent, { paddingBottom: isMobile ? 120 : 60 }]}
-      showsVerticalScrollIndicator={true}
-    >
-      {/* Hidden file input for web upload */}
+    <View style={[styles.pageContainer, isMobile && { padding: 10, paddingBottom: 72 }]}>
+      {/* Hidden file input for web upload (Excel & CSV) */}
       {Platform.OS === 'web' && (
         <input
           ref={fileInputRef}
           type="file"
-          accept=".csv,.txt"
+          accept=".xlsx,.xls,.csv,.txt,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel,text/csv"
           style={{ display: 'none' }}
           onChange={handleWebFileSelect}
         />
@@ -537,7 +601,7 @@ export const MastersView = React.memo(({ masters, onRefresh }) => {
 
           <TouchableOpacity
             style={styles.btnOutline}
-            onPress={() => handleDownloadTemplate(activeCategory)}
+            onPress={() => handleDownloadTemplate('xlsx')}
             activeOpacity={0.8}
           >
             <Ionicons name="download-outline" size={15} color="#0284c7" style={{ marginRight: 4 }} />
@@ -744,7 +808,7 @@ export const MastersView = React.memo(({ masters, onRefresh }) => {
                 >
                   <Ionicons
                     name={
-                      selectedIds.size === paginatedRecords.length && paginatedRecords.length > 0
+                      selectedIds.size === activeRecords.length && activeRecords.length > 0
                         ? 'checkbox'
                         : 'square-outline'
                     }
@@ -779,178 +843,202 @@ export const MastersView = React.memo(({ masters, onRefresh }) => {
                 </Text>
               </View>
 
-              {/* Table Body */}
-              {loading ? (
-                <View style={styles.loadingArea}>
-                  <ActivityIndicator size="small" color="#0284c7" />
-                  <Text style={styles.loadingText}>Loading master data...</Text>
-                </View>
-              ) : paginatedRecords.length === 0 ? (
-                <View style={styles.emptyTableArea}>
-                  <Ionicons name="folder-open-outline" size={38} color="#cbd5e1" />
-                  <Text style={styles.emptyTitle}>No {currentCatConfig.label} found.</Text>
-                  <Text style={styles.emptySubtitle}>
-                    {searchQuery
-                      ? 'Try adjusting your search or filters.'
-                      : `Click "+ Add New Master" or "Import" to add records.`}
-                  </Text>
-                </View>
-              ) : (
-                paginatedRecords.map((item, idx) => {
-                  const rowNumber = (currentPage - 1) * itemsPerPage + idx + 1;
-                  const isSelected = selectedIds.has(item.id);
-                  const isActive = item.status === 'Active';
+              {/* Table Body Scrollable */}
+              <ScrollView
+                style={styles.tableBodyScrollView}
+                contentContainerStyle={styles.tableBodyScrollContent}
+                showsVerticalScrollIndicator={true}
+              >
+                {loading ? (
+                  <View style={styles.loadingArea}>
+                    <ActivityIndicator size="small" color="#0284c7" />
+                    <Text style={styles.loadingText}>Loading master data...</Text>
+                  </View>
+                ) : activeRecords.length === 0 ? (
+                  <View style={styles.emptyTableArea}>
+                    <Ionicons name="folder-open-outline" size={38} color="#cbd5e1" />
+                    <Text style={styles.emptyTitle}>No {currentCatConfig.label} found.</Text>
+                    <Text style={styles.emptySubtitle}>
+                      {searchQuery
+                        ? 'Try adjusting your search or filters.'
+                        : `Click "+ Add New Master" or "Import" to add records.`}
+                    </Text>
+                  </View>
+                ) : (
+                  activeRecords.map((item, idx) => {
+                    const rowNumber = idx + 1;
+                    const isSelected = selectedIds.has(item.id);
+                    const isActive = item.status === 'Active';
+                    const isStatic = isItemStatic(item);
+                    const hasSubTypes = item.sub_types && item.sub_types.length > 0;
 
-                  return (
-                    <View
-                      key={item.id}
-                      style={[
-                        styles.tableRow,
-                        idx % 2 === 1 && styles.tableRowEven,
-                        isSelected && styles.tableRowSelected,
-                        isMobile && { paddingHorizontal: 4, paddingVertical: 8 },
-                      ]}
-                    >
-                      {/* Checkbox */}
-                      <TouchableOpacity
-                        style={[styles.tdCell, { width: isMobile ? 28 : 40, alignItems: 'center', paddingHorizontal: 0 }]}
-                        onPress={() => toggleSelectOne(item.id)}
-                      >
-                        <Ionicons
-                          name={isSelected ? 'checkbox' : 'square-outline'}
-                          size={isMobile ? 15 : 16}
-                          color={isSelected ? '#0284c7' : '#94a3b8'}
-                        />
-                      </TouchableOpacity>
-
-                      {/* Index */}
-                      <Text style={[styles.tdCell, { width: isMobile ? 24 : 46, textAlign: 'center', paddingHorizontal: 1, color: '#64748b', fontSize: isMobile ? 10 : 12 }]}>
-                        {rowNumber}
-                      </Text>
-
-                      {/* Value */}
-                      <Text
-                        style={[
-                          styles.tdCell,
-                          styles.boldCell,
-                          { flex: 1, minWidth: isMobile ? 60 : 180, paddingHorizontal: isMobile ? 3 : 6, fontSize: isMobile ? 12 : 13 },
-                        ]}
-                        numberOfLines={1}
-                      >
-                        {item.value}
-                      </Text>
-
-                      {/* Status Badge */}
-                      <View style={[styles.tdCell, { width: isMobile ? 66 : 110, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 1 }]}>
-                        <TouchableOpacity
+                    return (
+                      <React.Fragment key={item.id}>
+                        <View
                           style={[
-                            styles.statusBadge,
-                            isActive ? styles.badgeActive : styles.badgeInactive,
-                            isMobile && { paddingHorizontal: 5, paddingVertical: 2, height: 21, borderRadius: 10 },
+                            styles.tableRow,
+                            idx % 2 === 1 && styles.tableRowEven,
+                            isSelected && styles.tableRowSelected,
+                            isMobile && { paddingHorizontal: 4, paddingVertical: 8 },
                           ]}
-                          onPress={() => handleToggleStatus(item)}
-                          title="Click to toggle status"
                         >
-                          <View
-                            style={[
-                              styles.statusDot,
-                              isActive ? styles.dotActive : styles.dotInactive,
-                              isMobile && { width: 5, height: 5, marginRight: 3 },
-                            ]}
+                        {/* Checkbox */}
+                        <TouchableOpacity
+                          style={[styles.tdCell, { width: isMobile ? 28 : 40, alignItems: 'center', paddingHorizontal: 0 }]}
+                          onPress={() => toggleSelectOne(item.id)}
+                        >
+                          <Ionicons
+                            name={isSelected ? 'checkbox' : 'square-outline'}
+                            size={isMobile ? 15 : 16}
+                            color={isSelected ? '#0284c7' : '#94a3b8'}
                           />
-                          <Text
-                            style={[
-                              styles.statusBadgeText,
-                              isActive ? styles.badgeTextActive : styles.badgeTextInactive,
-                              isMobile && { fontSize: 9, fontWeight: '700' },
-                            ]}
-                          >
-                            {item.status}
-                          </Text>
                         </TouchableOpacity>
+
+                        {/* Index */}
+                        <Text style={[styles.tdCell, { width: isMobile ? 24 : 46, textAlign: 'center', paddingHorizontal: 1, color: '#64748b', fontSize: isMobile ? 10 : 12 }]}>
+                          {rowNumber}
+                        </Text>
+
+                        {/* Value */}
+                        <Text
+                          style={[
+                            styles.tdCell,
+                            styles.boldCell,
+                            { flex: 1, minWidth: isMobile ? 60 : 180, paddingHorizontal: isMobile ? 3 : 6, fontSize: isMobile ? 12 : 13 },
+                          ]}
+                          numberOfLines={1}
+                        >
+                          {item.value}
+                        </Text>
+
+                        {/* Status Badge */}
+                        <View style={[styles.tdCell, { width: isMobile ? 66 : 110, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 1 }]}>
+                          <TouchableOpacity
+                            style={[
+                              styles.statusBadge,
+                              isActive ? styles.badgeActive : styles.badgeInactive,
+                              isMobile && { paddingHorizontal: 5, paddingVertical: 2, height: 21, borderRadius: 10 },
+                            ]}
+                            onPress={() => handleToggleStatus(item)}
+                            title="Click to toggle status"
+                          >
+                            <View
+                              style={[
+                                styles.statusDot,
+                                isActive ? styles.dotActive : styles.dotInactive,
+                                isMobile && { width: 5, height: 5, marginRight: 3 },
+                              ]}
+                            />
+                            <Text
+                              style={[
+                                styles.statusBadgeText,
+                                isActive ? styles.badgeTextActive : styles.badgeTextInactive,
+                                isMobile && { fontSize: 9, fontWeight: '700' },
+                              ]}
+                            >
+                              {item.status}
+                            </Text>
+                          </TouchableOpacity>
+                        </View>
+
+                        {/* Actions */}
+                        <View style={[styles.tdCell, { width: isMobile ? 62 : 110, flexDirection: 'row', justifyContent: 'center', alignItems: 'center', paddingHorizontal: 1 }]}>
+                          <TouchableOpacity
+                            style={[styles.actionIconBtn, isMobile && { width: 26, height: 26, marginHorizontal: 1, padding: 3, alignItems: 'center', justifyContent: 'center' }]}
+                            onPress={() => handleOpenEdit(item)}
+                            title="Edit"
+                          >
+                            <Ionicons name="pencil-outline" size={isMobile ? 13 : 15} color="#0284c7" />
+                          </TouchableOpacity>
+
+                          {!isStatic && (
+                            <TouchableOpacity
+                              style={[styles.actionIconBtn, isMobile && { width: 26, height: 26, marginHorizontal: 1, padding: 3, alignItems: 'center', justifyContent: 'center' }]}
+                              onPress={() => handleDeleteItem(item)}
+                              title="Delete"
+                            >
+                              <Ionicons name="trash-outline" size={isMobile ? 13 : 15} color="#ef4444" />
+                            </TouchableOpacity>
+                          )}
+
+                          {!isMobile && (
+                            <TouchableOpacity
+                              style={styles.actionIconBtn}
+                              onPress={() => handleToggleStatus(item)}
+                              title={isActive ? 'Deactivate' : 'Activate'}
+                            >
+                              <Ionicons name="ellipsis-horizontal" size={15} color="#64748b" />
+                            </TouchableOpacity>
+                          )}
+                        </View>
                       </View>
 
-                      {/* Actions */}
-                      <View style={[styles.tdCell, { width: isMobile ? 62 : 110, flexDirection: 'row', justifyContent: 'center', alignItems: 'center', paddingHorizontal: 1 }]}>
-                        <TouchableOpacity
-                          style={[styles.actionIconBtn, isMobile && { width: 26, height: 26, marginHorizontal: 1, padding: 3, alignItems: 'center', justifyContent: 'center' }]}
-                          onPress={() => handleOpenEdit(item)}
-                          title="Edit"
-                        >
-                          <Ionicons name="pencil-outline" size={isMobile ? 13 : 15} color="#0284c7" />
-                        </TouchableOpacity>
-                        <TouchableOpacity
-                          style={[styles.actionIconBtn, isMobile && { width: 26, height: 26, marginHorizontal: 1, padding: 3, alignItems: 'center', justifyContent: 'center' }]}
-                          onPress={() => handleDeleteItem(item)}
-                          title="Delete"
-                        >
-                          <Ionicons name="trash-outline" size={isMobile ? 13 : 15} color="#ef4444" />
-                        </TouchableOpacity>
-                        {!isMobile && (
-                          <TouchableOpacity
-                            style={styles.actionIconBtn}
-                            onPress={() => handleToggleStatus(item)}
-                            title={isActive ? 'Deactivate' : 'Activate'}
+                      {/* RENDER HR LOADING SUB-TYPES DIRECTLY UNDER HR LOADING */}
+                      {hasSubTypes && item.sub_types.map((sub, sIdx) => {
+                        const isLast = sIdx === item.sub_types.length - 1;
+                        const branchChar = isLast ? '└─ ' : '├─ ';
+                        return (
+                          <View
+                            key={`${item.id}_sub_${sIdx}`}
+                            style={[
+                              styles.tableRow,
+                              styles.subTypeRow,
+                              isMobile && { paddingHorizontal: 4, paddingVertical: 6 },
+                            ]}
                           >
-                            <Ionicons name="ellipsis-horizontal" size={15} color="#64748b" />
-                          </TouchableOpacity>
-                        )}
-                      </View>
-                    </View>
-                  );
-                })
-              )}
+                            {/* Sub Branch icon */}
+                            <View style={[styles.tdCell, { width: isMobile ? 28 : 40, alignItems: 'center', paddingHorizontal: 0 }]} />
+
+                            {/* Sub Index */}
+                            <Text style={[styles.tdCell, { width: isMobile ? 24 : 46, textAlign: 'center', paddingHorizontal: 1, color: '#94a3b8', fontSize: isMobile ? 9 : 11 }]}>
+                              {`${rowNumber}.${sIdx + 1}`}
+                            </Text>
+
+                            {/* Sub Value */}
+                            <View style={[styles.tdCell, { flex: 1, minWidth: isMobile ? 60 : 180, flexDirection: 'row', alignItems: 'center', paddingHorizontal: isMobile ? 3 : 6, gap: 6 }]}>
+                              <Text style={styles.subTypeBranchText}>{branchChar}</Text>
+                              <Text style={[styles.subTypeValueText, isMobile && { fontSize: 11 }]}>
+                                {sub.label || sub.value}
+                              </Text>
+                            </View>
+
+                            {/* Status Badge */}
+                            <View style={[styles.tdCell, { width: isMobile ? 66 : 110, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 1 }]}>
+                              <View style={[styles.statusBadge, styles.badgeActive, isMobile && { paddingHorizontal: 5, paddingVertical: 2, height: 21, borderRadius: 10 }]}>
+                                <View style={[styles.statusDot, styles.dotActive, isMobile && { width: 5, height: 5, marginRight: 3 }]} />
+                                <Text style={[styles.statusBadgeText, styles.badgeTextActive, isMobile && { fontSize: 9, fontWeight: '700' }]}>
+                                  Active
+                                </Text>
+                              </View>
+                            </View>
+
+                            {/* Sub Action */}
+                            <View style={[styles.tdCell, { width: isMobile ? 62 : 110, flexDirection: 'row', justifyContent: 'center', alignItems: 'center', paddingHorizontal: 1 }]} />
+                          </View>
+                        );
+                      })}
+                      </React.Fragment>
+                    );
+                  })
+                )}
+              </ScrollView>
             </View>
           </View>
 
-          {/* TABLE FOOTER & PAGINATION */}
+          {/* TABLE FOOTER & RECORD COUNT */}
           <View style={styles.paginationBar}>
             <Text style={styles.paginationInfo}>
-              Showing{' '}
-              {activeRecords.length === 0 ? 0 : (currentPage - 1) * itemsPerPage + 1} -{' '}
-              {Math.min(currentPage * itemsPerPage, activeRecords.length)} of {activeRecords.length} records
+              Showing all {activeRecords.length} {currentCatConfig.label} records &bull; Scroll to view all
             </Text>
 
-            <View style={styles.pageButtonsGroup}>
-              <TouchableOpacity
-                style={[styles.pageBtn, currentPage === 1 && styles.pageBtnDisabled]}
-                onPress={() => setCurrentPage((p) => Math.max(1, p - 1))}
-                disabled={currentPage === 1}
-              >
-                <Ionicons name="chevron-back" size={14} color={currentPage === 1 ? '#cbd5e1' : '#334155'} />
-              </TouchableOpacity>
-
-              {Array.from({ length: totalPages }).map((_, i) => {
-                const pageNum = i + 1;
-                const isCurrent = currentPage === pageNum;
-                if (totalPages > 6 && Math.abs(currentPage - pageNum) > 2 && pageNum !== 1 && pageNum !== totalPages) {
-                  return null;
-                }
-                return (
-                  <TouchableOpacity
-                    key={pageNum}
-                    style={[styles.pageBtn, isCurrent && styles.pageBtnActive]}
-                    onPress={() => setCurrentPage(pageNum)}
-                  >
-                    <Text style={[styles.pageBtnText, isCurrent && styles.pageBtnTextActive]}>
-                      {pageNum}
-                    </Text>
-                  </TouchableOpacity>
-                );
-              })}
-
-              <TouchableOpacity
-                style={[styles.pageBtn, currentPage === totalPages && styles.pageBtnDisabled]}
-                onPress={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
-                disabled={currentPage === totalPages}
-              >
-                <Ionicons
-                  name="chevron-forward"
-                  size={14}
-                  color={currentPage === totalPages ? '#cbd5e1' : '#334155'}
-                />
-              </TouchableOpacity>
-            </View>
+            {selectedIds.size > 0 && (
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                <Ionicons name="checkmark-done" size={14} color="#0284c7" />
+                <Text style={[styles.paginationInfo, { color: '#0284c7', fontWeight: '700' }]}>
+                  {selectedIds.size} of {activeRecords.length} selected
+                </Text>
+              </View>
+            )}
           </View>
         </View>
       </View>
@@ -1071,14 +1159,14 @@ export const MastersView = React.memo(({ masters, onRefresh }) => {
         </View>
       </Modal>
 
-      {/* MODAL 2: IMPORT MASTER DATA */}
+      {/* MODAL 2: IMPORT MASTER DATA (Excel & CSV with Multi-column Auto-detection) */}
       <Modal visible={importModalVisible} transparent animationType="slide" onRequestClose={() => setImportModalVisible(false)}>
         <View style={styles.modalBackdrop}>
-          <View style={[styles.modalDialog, { maxWidth: 580 }]}>
+          <View style={[styles.modalDialog, { maxWidth: 620 }]}>
             <View style={styles.modalHeader}>
               <View style={{ flexDirection: 'row', alignItems: 'center' }}>
                 <Ionicons name="cloud-upload-outline" size={20} color="#0284c7" style={{ marginRight: 8 }} />
-                <Text style={styles.modalTitle}>Import Master Data</Text>
+                <Text style={styles.modalTitle}>Import Master Data (Excel & CSV)</Text>
               </View>
               <TouchableOpacity onPress={() => setImportModalVisible(false)}>
                 <Ionicons name="close" size={20} color="#64748b" />
@@ -1102,73 +1190,186 @@ export const MastersView = React.memo(({ masters, onRefresh }) => {
 
               {/* Template Step Banner */}
               <View style={styles.importTemplateBanner}>
-                <View style={{ flex: 1 }}>
-                  <Text style={styles.importStepTitle}>Download Template</Text>
+                <View style={{ flex: 1, marginRight: 8 }}>
+                  <Text style={styles.importStepTitle}>Download Multi-Master Template</Text>
                   <Text style={styles.importStepSub}>
-                    Download the pre-formatted CSV template and fill in your data.
+                    One sheet with columns: VehicleNo, TransportName, MaterialName, PartyName, Type/Mode.
                   </Text>
                 </View>
-                <TouchableOpacity
-                  style={styles.downloadTemplateBtn}
-                  onPress={() => handleDownloadTemplate(importCategory)}
-                >
-                  <Ionicons name="download-outline" size={15} color="#0284c7" style={{ marginRight: 5 }} />
-                  <Text style={styles.downloadTemplateBtnText}>Download Template</Text>
-                </TouchableOpacity>
+                <View style={{ flexDirection: 'row', gap: 6 }}>
+                  <TouchableOpacity
+                    style={styles.downloadTemplateBtn}
+                    onPress={() => handleDownloadTemplate('xlsx')}
+                  >
+                    <Ionicons name="document-text-outline" size={13} color="#0284c7" style={{ marginRight: 4 }} />
+                    <Text style={styles.downloadTemplateBtnText}>Excel (.xlsx)</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={styles.downloadTemplateBtn}
+                    onPress={() => handleDownloadTemplate('csv')}
+                  >
+                    <Ionicons name="download-outline" size={13} color="#0284c7" style={{ marginRight: 4 }} />
+                    <Text style={styles.downloadTemplateBtnText}>CSV (.csv)</Text>
+                  </TouchableOpacity>
+                </View>
               </View>
 
               {/* File upload drag drop zone */}
-              <View style={styles.uploadZone}>
-                <Ionicons name="cloud-upload-outline" size={32} color="#0284c7" />
-                <Text style={styles.uploadZoneTitle}>Choose file or drag and drop</Text>
-                <Text style={styles.uploadZoneSub}>Excel / CSV (Max 5MB)</Text>
-
-                {Platform.OS === 'web' && (
+              {selectedImportFile ? (
+                <View style={styles.selectedFileBox}>
+                  <Ionicons name="document-attach-outline" size={28} color="#0284c7" style={{ marginRight: 10 }} />
+                  <View style={{ flex: 1 }}>
+                    <Text style={{ fontSize: 13, fontWeight: '700', color: '#0f172a' }} numberOfLines={1}>
+                      {selectedImportFile.name}
+                    </Text>
+                    <Text style={{ fontSize: 11, color: '#64748b', marginTop: 2 }}>
+                      Size: {(selectedImportFile.size / 1024).toFixed(1)} KB &bull; Ready to process
+                    </Text>
+                  </View>
                   <TouchableOpacity
                     style={styles.browseFileBtn}
                     onPress={() => fileInputRef.current?.click()}
                   >
-                    <Text style={styles.browseFileBtnText}>Browse CSV File</Text>
+                    <Text style={styles.browseFileBtnText}>Change File</Text>
                   </TouchableOpacity>
-                )}
-              </View>
+                </View>
+              ) : (
+                <View
+                  style={[
+                    styles.uploadZone,
+                    isDraggingOver && { borderColor: '#0284c7', backgroundColor: '#f0f9ff' },
+                  ]}
+                  {...(Platform.OS === 'web'
+                    ? {
+                        onDragOver: (e) => {
+                          e.preventDefault();
+                          setIsDraggingOver(true);
+                        },
+                        onDragLeave: (e) => {
+                          e.preventDefault();
+                          setIsDraggingOver(false);
+                        },
+                        onDrop: (e) => {
+                          e.preventDefault();
+                          setIsDraggingOver(false);
+                          const f = e.dataTransfer?.files?.[0];
+                          if (f) handleProcessFile(f);
+                        },
+                      }
+                    : {})}
+                >
+                  <Ionicons name="cloud-upload-outline" size={34} color="#0284c7" />
+                  <Text style={styles.uploadZoneTitle}>Choose file or drag and drop</Text>
+                  <Text style={styles.uploadZoneSub}>
+                    Excel (.xlsx, .xls) / CSV (Max 10MB) &bull; All master columns auto-mapped
+                  </Text>
+
+                  {Platform.OS === 'web' && (
+                    <TouchableOpacity
+                      style={styles.browseFileBtn}
+                      onPress={() => fileInputRef.current?.click()}
+                    >
+                      <Text style={styles.browseFileBtnText}>Browse Excel / CSV File</Text>
+                    </TouchableOpacity>
+                  )}
+                </View>
+              )}
 
               {/* Or paste text */}
               <View style={styles.formGroup}>
-                <Text style={styles.formLabel}>Or Paste Records (One per line or comma-separated):</Text>
+                <Text style={styles.formLabel}>
+                  Or Paste Master Records (Copied from Excel or CSV with columns):
+                </Text>
                 <TextInput
-                  style={[styles.formInput, { height: 90, textAlignVertical: 'top', paddingTop: 8 }]}
-                  placeholder={`Example:\nMP09DD5763\nMP09HH9584\nMH12AB1234`}
+                  style={[styles.formInput, { height: 80, textAlignVertical: 'top', paddingTop: 8, fontSize: 12, fontFamily: Platform.OS === 'web' ? 'monospace' : undefined }]}
+                  placeholder={"VehicleNo\tTransportName\tMaterialName\tPartyName\nMP09DD5763\tVMPL\t20MM\tNAWAZ KHAN\nMH12AB1234\tMSK\t10MM\tALTAMASH KHAN"}
                   placeholderTextColor="#94a3b8"
                   value={importRawText}
-                  onChangeText={setImportRawText}
+                  onChangeText={(txt) => {
+                    setImportRawText(txt);
+                    if (selectedImportFile) setSelectedImportFile(null);
+                  }}
                   multiline
                 />
               </View>
 
-              <TouchableOpacity style={styles.btnOutlineSecondary} onPress={handleParseImport}>
-                <Ionicons name="eye-outline" size={15} color="#0284c7" style={{ marginRight: 6 }} />
-                <Text style={styles.btnOutlineSecondaryText}>Upload & Preview</Text>
+              <TouchableOpacity
+                style={[styles.btnOutlineSecondary, importing && { opacity: 0.7 }]}
+                onPress={handleParseImport}
+                disabled={importing}
+              >
+                {importing ? (
+                  <ActivityIndicator size="small" color="#0284c7" style={{ marginRight: 6 }} />
+                ) : (
+                  <Ionicons name="eye-outline" size={15} color="#0284c7" style={{ marginRight: 6 }} />
+                )}
+                <Text style={styles.btnOutlineSecondaryText}>
+                  {importing ? 'Processing File...' : 'Upload & Preview Data'}
+                </Text>
               </TouchableOpacity>
 
-              {/* Parsed items preview */}
-              {importParsedItems.length > 0 && (
+              {/* Multi-Category Master Preview */}
+              {importPreviewData && (
                 <View style={styles.previewBox}>
-                  <Text style={styles.previewTitle}>
-                    Preview: {importParsedItems.length} records ready to import into {importCategory}
-                  </Text>
-                  <View style={styles.previewListChips}>
-                    {importParsedItems.slice(0, 15).map((val, idx) => (
-                      <View key={idx} style={styles.previewChip}>
-                        <Text style={styles.previewChipText}>{val}</Text>
+                  <View style={styles.previewSummaryHeader}>
+                    <Text style={styles.previewTitle}>
+                      Detected Master Records in Sheet:
+                    </Text>
+                    <View style={{ flexDirection: 'row', gap: 6 }}>
+                      <View style={styles.catBadgeNew}>
+                        <Text style={styles.catBadgeNewText}>
+                          {importPreviewData.total_new} New Masters
+                        </Text>
                       </View>
-                    ))}
-                    {importParsedItems.length > 15 && (
-                      <Text style={{ fontSize: 11, color: '#64748b', alignSelf: 'center' }}>
-                        +{importParsedItems.length - 15} more...
-                      </Text>
-                    )}
+                      {importPreviewData.total_duplicates > 0 && (
+                        <View style={styles.catBadgeDup}>
+                          <Text style={styles.catBadgeDupText}>
+                            {importPreviewData.total_duplicates} Duplicates Skipped
+                          </Text>
+                        </View>
+                      )}
+                    </View>
                   </View>
+
+                  {/* Render cards for each detected master category */}
+                  {CATEGORIES.map((cat) => {
+                    const catInfo = importPreviewData.categories?.[cat.id];
+                    if (!catInfo || catInfo.total_found === 0) return null;
+
+                    return (
+                      <View key={cat.id} style={styles.multiCatCard}>
+                        <View style={styles.multiCatHeader}>
+                          <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                            <Ionicons name={cat.icon} size={15} color="#0284c7" style={{ marginRight: 6 }} />
+                            <Text style={styles.multiCatName}>{cat.label}</Text>
+                          </View>
+                          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                            <Text style={styles.multiCatCount}>
+                              {catInfo.new_count} to insert
+                            </Text>
+                            {catInfo.duplicate_count > 0 && (
+                              <Text style={{ fontSize: 10, color: '#ca8a04', fontWeight: '600' }}>
+                                ({catInfo.duplicate_count} existing)
+                              </Text>
+                            )}
+                          </View>
+                        </View>
+
+                        <View style={styles.previewListChips}>
+                          {(catInfo.sample_new || []).map((val, idx) => (
+                            <View key={idx} style={styles.previewChip}>
+                              <Text style={styles.previewChipText}>{val}</Text>
+                            </View>
+                          ))}
+                          {catInfo.new_count > (catInfo.sample_new?.length || 0) && (
+                            <Text style={{ fontSize: 10, color: '#64748b', alignSelf: 'center' }}>
+                              +{catInfo.new_count - catInfo.sample_new.length} more...
+                            </Text>
+                          )}
+                        </View>
+                      </View>
+                    );
+                  })}
                 </View>
               )}
             </ScrollView>
@@ -1182,7 +1383,7 @@ export const MastersView = React.memo(({ masters, onRefresh }) => {
                 <Text style={styles.modalCancelBtnText}>Close</Text>
               </TouchableOpacity>
 
-              {importParsedItems.length > 0 && (
+              {importPreviewData && importPreviewData.total_new > 0 && (
                 <TouchableOpacity
                   style={[styles.modalSaveBtn, importing && { opacity: 0.7 }]}
                   onPress={handleExecuteImport}
@@ -1192,7 +1393,7 @@ export const MastersView = React.memo(({ masters, onRefresh }) => {
                     <ActivityIndicator size="small" color="#ffffff" />
                   ) : (
                     <Text style={styles.modalSaveBtnText}>
-                      Import {importParsedItems.length} Records
+                      Import & Push All {importPreviewData.total_new} Masters
                     </Text>
                   )}
                 </TouchableOpacity>
@@ -1201,26 +1402,26 @@ export const MastersView = React.memo(({ masters, onRefresh }) => {
           </View>
         </View>
       </Modal>
-    </ScrollView>
+    </View>
   );
 });
 
 const styles = StyleSheet.create({
-  pageScrollView: {
+  pageContainer: {
     flex: 1,
+    height: '100%',
+    maxHeight: '100%',
     backgroundColor: '#f8fafc',
-  },
-  scrollContent: {
     padding: 16,
-    paddingBottom: 90,
+    overflow: 'hidden',
   },
   pageHeader: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    marginBottom: 14,
+    marginBottom: 10,
     flexWrap: 'wrap',
-    gap: 10,
+    gap: 8,
   },
   titleArea: {
     flex: 1,
@@ -1288,7 +1489,7 @@ const styles = StyleSheet.create({
 
   // COMPACT METRIC CARDS
   metricCardsContainer: {
-    marginBottom: 14,
+    marginBottom: 10,
   },
   metricRowDesktop: {
     flexDirection: 'row',
@@ -1379,9 +1580,13 @@ const styles = StyleSheet.create({
 
   // Main Layout Grid
   mainLayoutGrid: {
+    flex: 1,
+    minHeight: 0,
     width: '100%',
   },
   tableContainerCard: {
+    flex: 1,
+    minHeight: 0,
     width: '100%',
     backgroundColor: '#ffffff',
     borderRadius: 10,
@@ -1393,6 +1598,8 @@ const styles = StyleSheet.create({
     shadowRadius: 4,
     elevation: 1,
     overflow: 'hidden',
+    display: 'flex',
+    flexDirection: 'column',
   },
 
   // Horizontal Navigation Tabs
@@ -1538,10 +1745,26 @@ const styles = StyleSheet.create({
 
   // Table Structure
   tableResponsiveWrapper: {
+    flex: 1,
+    minHeight: 0,
     width: '100%',
+    display: 'flex',
+    flexDirection: 'column',
   },
   fullTable: {
+    flex: 1,
+    minHeight: 0,
     width: '100%',
+    display: 'flex',
+    flexDirection: 'column',
+  },
+  tableBodyScrollView: {
+    flex: 1,
+    minHeight: 0,
+    width: '100%',
+  },
+  tableBodyScrollContent: {
+    flexGrow: 1,
   },
   tableHeaderRow: {
     flexDirection: 'row',
@@ -1629,6 +1852,66 @@ const styles = StyleSheet.create({
     padding: 5,
     borderRadius: 5,
     marginHorizontal: 1,
+  },
+
+  // Static & Sub-type Styles
+  staticBadge: {
+    backgroundColor: '#f1f5f9',
+    borderWidth: 1,
+    borderColor: '#cbd5e1',
+    borderRadius: 4,
+    paddingHorizontal: 5,
+    paddingVertical: 1,
+  },
+  staticBadgeText: {
+    fontSize: 9.5,
+    fontWeight: '700',
+    color: '#64748b',
+    textTransform: 'uppercase',
+    letterSpacing: 0.3,
+  },
+  subTypesPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#e0f2fe',
+    borderWidth: 1,
+    borderColor: '#bae6fd',
+    borderRadius: 4,
+    paddingHorizontal: 6,
+    paddingVertical: 1,
+  },
+  subTypesPillText: {
+    fontSize: 9.5,
+    fontWeight: '700',
+    color: '#0284c7',
+  },
+  subTypeRow: {
+    backgroundColor: '#f8fafc',
+    borderBottomWidth: 1,
+    borderBottomColor: '#f1f5f9',
+  },
+  subTypeBranchText: {
+    color: '#94a3b8',
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  subTypeValueText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#334155',
+  },
+  subTypeTag: {
+    backgroundColor: '#eff6ff',
+    borderWidth: 1,
+    borderColor: '#bfdbfe',
+    borderRadius: 4,
+    paddingHorizontal: 5,
+    paddingVertical: 1,
+  },
+  subTypeTagText: {
+    fontSize: 9,
+    fontWeight: '700',
+    color: '#2563eb',
   },
 
   // Pagination
@@ -1998,6 +2281,16 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: '#0f172a',
   },
+  selectedFileBox: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#f0fdf4',
+    borderWidth: 1,
+    borderColor: '#bbf7d0',
+    borderRadius: 8,
+    padding: 12,
+    marginBottom: 12,
+  },
   btnOutlineSecondary: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -2016,17 +2309,73 @@ const styles = StyleSheet.create({
   },
   previewBox: {
     backgroundColor: '#f8fafc',
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+    padding: 12,
+    marginBottom: 8,
+  },
+  previewSummaryHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    flexWrap: 'wrap',
+    gap: 8,
+    marginBottom: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: '#e2e8f0',
+    paddingBottom: 8,
+  },
+  previewTitle: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#0f172a',
+  },
+  catBadgeNew: {
+    backgroundColor: '#dcfce7',
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 12,
+  },
+  catBadgeNewText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#15803d',
+  },
+  catBadgeDup: {
+    backgroundColor: '#fef3c7',
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 12,
+  },
+  catBadgeDupText: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: '#b45309',
+  },
+  multiCatCard: {
+    backgroundColor: '#ffffff',
     borderRadius: 7,
     borderWidth: 1,
     borderColor: '#e2e8f0',
     padding: 10,
     marginBottom: 8,
   },
-  previewTitle: {
-    fontSize: 11,
+  multiCatHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 8,
+  },
+  multiCatName: {
+    fontSize: 12,
     fontWeight: '700',
     color: '#0f172a',
-    marginBottom: 6,
+  },
+  multiCatCount: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#0284c7',
   },
   previewListChips: {
     flexDirection: 'row',

@@ -7,6 +7,8 @@ import {
   useWindowDimensions,
   Platform,
   TouchableOpacity,
+  Modal,
+  TextInput,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '../context/AuthContext';
@@ -88,65 +90,83 @@ const computeNiceTicks = (maxVal) => {
 const parseEntryDate = (dateStr) => {
   if (!dateStr) return null;
   try {
-    if (dateStr.includes('/')) {
-      const parts = dateStr.split('/');
+    const str = String(dateStr).trim();
+    if (str.includes('/')) {
+      const parts = str.split('/');
       if (parts.length === 3) {
-        let month = parseInt(parts[0], 10) - 1;
-        let day = parseInt(parts[1], 10);
+        let p0 = parseInt(parts[0], 10);
+        let p1 = parseInt(parts[1], 10);
         let year = parseInt(parts[2], 10);
-        if (month > 11) {
-          month = parseInt(parts[1], 10) - 1;
-          day = parseInt(parts[0], 10);
-        }
         if (year < 100) year += 2000;
+        let month = p0 - 1;
+        let day = p1;
+        // If p0 > 12, then it's DD/MM/YYYY format
+        if (p0 > 12) {
+          day = p0;
+          month = p1 - 1;
+        }
         return new Date(year, month, day);
       }
     }
-    if (dateStr.includes('-')) {
-      const parts = dateStr.split('-');
+    if (str.includes('-')) {
+      const parts = str.split('-');
       if (parts.length === 3) {
-        const year = parseInt(parts[0], 10);
-        const month = parseInt(parts[1], 10) - 1;
-        const day = parseInt(parts[2].substring(0, 2), 10);
-        return new Date(year, month, day);
+        if (parts[0].length === 4) {
+          // YYYY-MM-DD
+          const year = parseInt(parts[0], 10);
+          const month = parseInt(parts[1], 10) - 1;
+          const day = parseInt(parts[2].substring(0, 2), 10);
+          return new Date(year, month, day);
+        } else if (parts[2].length >= 4) {
+          // MM-DD-YYYY or DD-MM-YYYY
+          let p0 = parseInt(parts[0], 10);
+          let p1 = parseInt(parts[1], 10);
+          let year = parseInt(parts[2].substring(0, 4), 10);
+          let month = p0 - 1;
+          let day = p1;
+          if (p0 > 12) {
+            day = p0;
+            month = p1 - 1;
+          }
+          return new Date(year, month, day);
+        }
       }
     }
+    const d = new Date(str);
+    if (!isNaN(d.getTime())) return d;
   } catch {
     return null;
   }
   return null;
 };
 
+const toISODateString = (date) => {
+  if (!date || isNaN(date.getTime())) return '';
+  const y = date.getFullYear();
+  const m = String(date.getMonth() + 1).padStart(2, '0');
+  const d = String(date.getDate()).padStart(2, '0');
+  return `${y}-${m}-${d}`;
+};
+
+const toDisplayDateString = (date) => {
+  if (!date || isNaN(date.getTime())) return '';
+  const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+  const d = String(date.getDate()).padStart(2, '0');
+  const m = monthNames[date.getMonth()] || '';
+  const y = date.getFullYear();
+  return `${d}-${m} ${y}`;
+};
+
 const formatDateKey = (dateStr) => {
   if (!dateStr) return '15-Oct';
-  try {
-    if (dateStr.includes('/')) {
-      const parts = dateStr.split('/');
-      if (parts.length === 3) {
-        const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-        let mIdx = parseInt(parts[0], 10) - 1;
-        let dayNum = parts[1];
-        if (mIdx > 11) {
-          mIdx = parseInt(parts[1], 10) - 1;
-          dayNum = parts[0];
-        }
-        const mName = monthNames[mIdx] || 'Oct';
-        return `${String(dayNum).padStart(2, '0')}-${mName}`;
-      }
-    }
-    if (dateStr.includes('-')) {
-      const parts = dateStr.split('-');
-      if (parts.length === 3 && parts[0].length === 4) {
-        const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-        const mIdx = parseInt(parts[1], 10) - 1;
-        const dayNum = parts[2].substring(0, 2);
-        return `${String(dayNum).padStart(2, '0')}-${monthNames[mIdx] || 'Oct'}`;
-      }
-    }
-  } catch {
-    return dateStr;
+  const d = parseEntryDate(dateStr);
+  if (d && !isNaN(d.getTime())) {
+    const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    const dayNum = String(d.getDate()).padStart(2, '0');
+    const mName = monthNames[d.getMonth()] || 'Oct';
+    return `${dayNum}-${mName}`;
   }
-  return dateStr;
+  return String(dateStr);
 };
 
 const getSaleModeBucket = (entry) => {
@@ -204,8 +224,25 @@ export const DashboardView = React.memo(({ entries = [], onOpenAddModal, onNavig
   const [hoveredMaterialIdx, setHoveredMaterialIdx] = useState(null);
   const [hoveredModeKey, setHoveredModeKey] = useState(null);
 
-  // Quick Date Filter Tabs: 'all' (Default All-Time Overall) | 'daily' | 'weekly' | 'monthly'
+  // App-Based Date Filter State
   const [dateFilter, setDateFilter] = useState('all');
+  const [customStartDate, setCustomStartDate] = useState(null); // 'YYYY-MM-DD'
+  const [customEndDate, setCustomEndDate] = useState(null);     // 'YYYY-MM-DD'
+  const [showDateModal, setShowDateModal] = useState(false);
+  const [tempStartDate, setTempStartDate] = useState(() => toISODateString(new Date()));
+  const [tempEndDate, setTempEndDate] = useState(() => toISODateString(new Date()));
+  const [calendarMonth, setCalendarMonth] = useState(() => new Date());
+  const [activeDateTab, setActiveDateTab] = useState('start'); // 'start' | 'end'
+
+  // Set of dates that have entries in MongoDB for calendar dots
+  const entryDateSet = useMemo(() => {
+    const set = new Set();
+    entries.forEach((e) => {
+      const d = parseEntryDate(e.date);
+      if (d) set.add(toISODateString(d));
+    });
+    return set;
+  }, [entries]);
 
   // One-time global CSS animation injection (Real app dynamic feel & smooth entrance)
   useEffect(() => {
@@ -327,67 +364,77 @@ export const DashboardView = React.memo(({ entries = [], onOpenAddModal, onNavig
     const validDates = parsedEntries.map((e) => e._parsedDate).filter(Boolean);
     validDates.sort((a, b) => b.getTime() - a.getTime());
 
-    // Target reference date: check if today has entries, or fallback to latest entry date
-    const hasTodayEntry = parsedEntries.some((e) => {
-      const d = e._parsedDate;
-      return d && d.getFullYear() === today.getFullYear() && d.getMonth() === today.getMonth() && d.getDate() === today.getDate();
-    });
+    // Target reference date is ALWAYS the real current date (Today)
+    const targetDate = today;
+    const curDay = String(today.getDate()).padStart(2, '0');
+    const curMonth = monthNames[today.getMonth()] || 'Oct';
+    const curYear = today.getFullYear();
+    const todayDisplayStr = `${curDay}-${curMonth} ${curYear}`;
 
-    const targetDate = hasTodayEntry ? today : (validDates.length > 0 ? validDates[0] : today);
-    const tDay = String(targetDate.getDate()).padStart(2, '0');
-    const tMonth = monthNames[targetDate.getMonth()] || 'Oct';
-    const tYear = targetDate.getFullYear();
-
-    // 2. Filter active entries based on selected filter: 'daily' (Today) | 'weekly' | 'monthly' | 'all'
+    // 2. Filter active entries based on selected filter: 'custom' | 'daily' (Today) | 'weekly' | 'monthly' | 'all'
     let activeEntries = parsedEntries;
-    let rangeText = 'Today';
+    let rangeText = `${todayDisplayStr} (All Time)`;
 
-    if (dateFilter === 'daily') {
+    if (dateFilter === 'custom' && customStartDate && customEndDate) {
+      const cStart = parseEntryDate(customStartDate);
+      const cEnd = parseEntryDate(customEndDate);
+      if (cStart && cEnd) {
+        cStart.setHours(0, 0, 0, 0);
+        cEnd.setHours(23, 59, 59, 999);
+        activeEntries = parsedEntries.filter((e) => {
+          const d = e._parsedDate;
+          if (!d) return false;
+          return d >= cStart && d <= cEnd;
+        });
+        const sDay = String(cStart.getDate()).padStart(2, '0');
+        const sMonth = monthNames[cStart.getMonth()] || 'Oct';
+        const sYear = cStart.getFullYear();
+        const eDay = String(cEnd.getDate()).padStart(2, '0');
+        const eMonth = monthNames[cEnd.getMonth()] || 'Oct';
+        const eYear = cEnd.getFullYear();
+        const isStartToday = sDay === curDay && sMonth === curMonth && sYear === curYear;
+        if (sDay === eDay && sMonth === eMonth && sYear === eYear) {
+          rangeText = `${sDay}-${sMonth} ${sYear}${isStartToday ? ' (Today)' : ''}`;
+        } else {
+          rangeText = `${sDay}-${sMonth} ${sYear} – ${eDay}-${eMonth} ${eYear}`;
+        }
+      }
+    } else if (dateFilter === 'daily') {
       activeEntries = parsedEntries.filter((e) => {
         const d = e._parsedDate;
-        if (!d) return true;
-        return d.getFullYear() === targetDate.getFullYear() &&
-               d.getMonth() === targetDate.getMonth() &&
-               d.getDate() === targetDate.getDate();
+        if (!d) return false;
+        return d.getFullYear() === today.getFullYear() &&
+               d.getMonth() === today.getMonth() &&
+               d.getDate() === today.getDate();
       });
-      rangeText = `${tDay}-${tMonth} ${tYear} (Today)`;
+      rangeText = `${todayDisplayStr} (Today)`;
     } else if (dateFilter === 'weekly') {
-      const weekStart = new Date(targetDate);
-      weekStart.setDate(targetDate.getDate() - 6);
+      const weekStart = new Date(today);
+      weekStart.setDate(today.getDate() - 6);
       weekStart.setHours(0, 0, 0, 0);
-      const weekEnd = new Date(targetDate);
+      const weekEnd = new Date(today);
       weekEnd.setHours(23, 59, 59, 999);
 
       activeEntries = parsedEntries.filter((e) => {
         const d = e._parsedDate;
-        if (!d) return true;
+        if (!d) return false;
         return d >= weekStart && d <= weekEnd;
       });
 
       const wStartDay = String(weekStart.getDate()).padStart(2, '0');
       const wStartMonth = monthNames[weekStart.getMonth()] || 'Oct';
-      rangeText = `${wStartDay}-${wStartMonth} – ${tDay}-${tMonth} ${tYear} (This Week)`;
+      rangeText = `${wStartDay}-${wStartMonth} – ${curDay}-${curMonth} ${curYear} (This Week)`;
     } else if (dateFilter === 'monthly') {
       activeEntries = parsedEntries.filter((e) => {
         const d = e._parsedDate;
-        if (!d) return true;
-        return d.getFullYear() === targetDate.getFullYear() &&
-               d.getMonth() === targetDate.getMonth();
+        if (!d) return false;
+        return d.getFullYear() === today.getFullYear() &&
+               d.getMonth() === today.getMonth();
       });
-      rangeText = `${tMonth} ${tYear} (This Month)`;
+      rangeText = `${curMonth} ${curYear} (This Month)`;
     } else {
       activeEntries = parsedEntries;
-      if (validDates.length > 0) {
-        const first = validDates[validDates.length - 1];
-        const last = validDates[0];
-        const fDay = String(first.getDate()).padStart(2, '0');
-        const fMonth = monthNames[first.getMonth()] || 'Oct';
-        const lDay = String(last.getDate()).padStart(2, '0');
-        const lMonth = monthNames[last.getMonth()] || 'Oct';
-        rangeText = `${fDay}-${fMonth} ${first.getFullYear()} – ${lDay}-${lMonth} ${last.getFullYear()}`;
-      } else {
-        rangeText = 'All Time';
-      }
+      rangeText = `${todayDisplayStr} (All Time)`;
     }
 
     // 1. Overall metrics across ALL entries in MongoDB (All-Time Business Totals)
@@ -396,7 +443,16 @@ export const DashboardView = React.memo(({ entries = [], onOpenAddModal, onNavig
     let overallGst = 0;
     const overallTrips = entries.length;
 
-    // Filtered metrics (if date filter tab is applied)
+    entries.forEach((e) => {
+      const saleAmt = Number(e.total_amount) || Number(e.amount) || 0;
+      const taxAmt = Number(e.amount) || 0;
+      const gstAmt = Number(e.gst_amount) || 0;
+      overallTotalSale += saleAmt;
+      overallTaxable += taxAmt;
+      overallGst += gstAmt;
+    });
+
+    // 2. Filtered metrics & distributions for activeEntries
     let totalSale = 0;
     let taxableAmount = 0;
     let gstCollected = 0;
@@ -415,23 +471,32 @@ export const DashboardView = React.memo(({ entries = [], onOpenAddModal, onNavig
     const partyMap = {};
     const datesFound = [];
 
-    // Calculate Overall totals, Party totals, and Date-wise mapping across ALL entries
-    entries.forEach((e) => {
+    activeEntries.forEach((e) => {
       const saleAmt = Number(e.total_amount) || Number(e.amount) || 0;
       const taxAmt = Number(e.amount) || 0;
       const gstAmt = Number(e.gst_amount) || 0;
 
-      overallTotalSale += saleAmt;
-      overallTaxable += taxAmt;
-      overallGst += gstAmt;
+      totalSale += saleAmt;
+      taxableAmount += taxAmt;
+      gstCollected += gstAmt;
 
-      // Party ranking across all entries
+      const bucket = getSaleModeBucket(e);
+      if (modeTotals[bucket] !== undefined) {
+        modeTotals[bucket] += saleAmt;
+      } else {
+        modeTotals.credit += saleAmt;
+      }
+
+      // Material
+      const mat = (e.material_name || 'Unspecified').trim();
+      matTotals[mat] = (matTotals[mat] || 0) + saleAmt;
+
+      // Party ranking for active period
       const pName = (e.party_name || 'Unspecified Party').trim();
       if (!partyMap[pName]) {
         partyMap[pName] = { name: pName, royalty: 0, non_royalty: 0, credit: 0, cash: 0, total: 0 };
       }
       partyMap[pName].total += saleAmt;
-      const bucket = getSaleModeBucket(e);
       if (bucket === 'royalty' || bucket === 'hr_royalty') partyMap[pName].royalty += saleAmt;
       else if (bucket === 'cash') partyMap[pName].cash += saleAmt;
       else if (bucket === 'credit') partyMap[pName].credit += saleAmt;
@@ -463,28 +528,6 @@ export const DashboardView = React.memo(({ entries = [], onOpenAddModal, onNavig
       }
     });
 
-    // Active entries computation for Material and Mode breakdowns
-    activeEntries.forEach((e) => {
-      const saleAmt = Number(e.total_amount) || Number(e.amount) || 0;
-      const taxAmt = Number(e.amount) || 0;
-      const gstAmt = Number(e.gst_amount) || 0;
-
-      totalSale += saleAmt;
-      taxableAmount += taxAmt;
-      gstCollected += gstAmt;
-
-      const bucket = getSaleModeBucket(e);
-      if (modeTotals[bucket] !== undefined) {
-        modeTotals[bucket] += saleAmt;
-      } else {
-        modeTotals.credit += saleAmt;
-      }
-
-      // Material
-      const mat = (e.material_name || 'Unspecified').trim();
-      matTotals[mat] = (matTotals[mat] || 0) + saleAmt;
-    });
-
     // Material Data & Slices
     const matList = Object.entries(matTotals)
       .map(([name, amount], idx) => {
@@ -514,25 +557,70 @@ export const DashboardView = React.memo(({ entries = [], onOpenAddModal, onNavig
       { key: 'hr_without_royalty', label: 'HR Loading (Without Royalty)', amount: modeTotals.hr_without_royalty, percent: sumAllModes > 0 ? Math.round((modeTotals.hr_without_royalty / sumAllModes) * 100) : 0, color: MODE_COLORS.hr_without_royalty },
     ];
 
-    // Date-wise Timeline Data: Current date se last 7 days (1 week)
-    let baseDate = targetDate || new Date();
-    if (datesFound.length > 0) {
-      datesFound.forEach((dStr) => {
-        const parsed = parseEntryDate(dStr);
-        if (parsed && parsed > baseDate) {
-          baseDate = parsed;
+    // Date-wise Timeline Data: Dynamic based on dateFilter
+    let timelineKeys = [];
+    if (dateFilter === 'custom' && customStartDate && customEndDate) {
+      const cStart = parseEntryDate(customStartDate);
+      const cEnd = parseEntryDate(customEndDate);
+      if (cStart && cEnd) {
+        cStart.setHours(0, 0, 0, 0);
+        cEnd.setHours(0, 0, 0, 0);
+        const diffDays = Math.round((cEnd.getTime() - cStart.getTime()) / (1000 * 60 * 60 * 24)) + 1;
+        if (diffDays >= 1 && diffDays <= 14) {
+          for (let i = 0; i < diffDays; i++) {
+            const cur = new Date(cStart);
+            cur.setDate(cStart.getDate() + i);
+            const dayNum = String(cur.getDate()).padStart(2, '0');
+            const mName = monthNames[cur.getMonth()] || 'Oct';
+            timelineKeys.push(`${dayNum}-${mName}`);
+          }
+        } else {
+          const activeKeys = Object.keys(dateMap);
+          if (activeKeys.length > 0 && activeKeys.length <= 14) {
+            timelineKeys = activeKeys;
+          } else {
+            const step = Math.max(1, Math.floor(diffDays / 7));
+            for (let i = 0; i < diffDays; i += step) {
+              const cur = new Date(cStart);
+              cur.setDate(cStart.getDate() + i);
+              const dayNum = String(cur.getDate()).padStart(2, '0');
+              const mName = monthNames[cur.getMonth()] || 'Oct';
+              timelineKeys.push(`${dayNum}-${mName}`);
+              if (timelineKeys.length >= 8) break;
+            }
+          }
         }
-      });
+      }
     }
 
-    // 7 continuous days ending at baseDate (current date se last 7 days / week)
-    const timelineKeys = [];
-    for (let offset = 6; offset >= 0; offset--) {
-      const d = new Date(baseDate);
-      d.setDate(baseDate.getDate() - offset);
-      const dayNum = String(d.getDate()).padStart(2, '0');
-      const mName = monthNames[d.getMonth()] || 'Oct';
-      timelineKeys.push(`${dayNum}-${mName}`);
+    if (timelineKeys.length === 0) {
+      if (dateFilter === 'daily') {
+        const dNum = String(today.getDate()).padStart(2, '0');
+        const mName = monthNames[today.getMonth()] || 'Oct';
+        timelineKeys.push(`${dNum}-${mName}`);
+      } else {
+        const activeDateKeys = Object.keys(dateMap);
+        if (activeDateKeys.length > 0 && activeDateKeys.length <= 10) {
+          timelineKeys = activeDateKeys;
+        } else {
+          let baseDate = targetDate || new Date();
+          if (datesFound.length > 0) {
+            datesFound.forEach((dStr) => {
+              const parsed = parseEntryDate(dStr);
+              if (parsed && parsed > baseDate) {
+                baseDate = parsed;
+              }
+            });
+          }
+          for (let offset = 6; offset >= 0; offset--) {
+            const d = new Date(baseDate);
+            d.setDate(baseDate.getDate() - offset);
+            const dayNum = String(d.getDate()).padStart(2, '0');
+            const mName = monthNames[d.getMonth()] || 'Oct';
+            timelineKeys.push(`${dayNum}-${mName}`);
+          }
+        }
+      }
     }
 
     const timeline = timelineKeys.map((k) => {
@@ -558,7 +646,7 @@ export const DashboardView = React.memo(({ entries = [], onOpenAddModal, onNavig
 
     const stackedTicks = computeNiceTicks(maxTVal);
 
-    // Parties ranked by total purchase across all entries
+    // Parties ranked by total purchase across active entries
     const pList = Object.values(partyMap).sort((a, b) => b.total - a.total);
     let maxPVal = 1000;
     pList.forEach((p) => {
@@ -577,6 +665,7 @@ export const DashboardView = React.memo(({ entries = [], onOpenAddModal, onNavig
         trips: activeEntries.length,
       },
       dateRangeStr: rangeText,
+      targetDate,
       materialData: matList,
       timelineData: timeline,
       maxTimelineVal: maxTVal,
@@ -585,60 +674,62 @@ export const DashboardView = React.memo(({ entries = [], onOpenAddModal, onNavig
       partyData: pList,
       maxPartyVal: maxPVal,
     };
-  }, [entries, dateFilter]);
+  }, [entries, dateFilter, customStartDate, customEndDate]);
 
-  // 4 KPI cards showing ALL DATA and OVERALL SALES
+  // Dynamic KPI cards showing filtered or overall metrics
+  const isFiltered = dateFilter !== 'all';
   const kpiCards = [
     {
       id: 'sales',
-      title: 'Overall Total Sales (₹)',
-      value: `₹ ${formatINR(metrics.overallTotalSale)}`,
-      trend: 'All-Time Overall Sales',
+      title: isFiltered ? 'Selected Range Total Sales (₹)' : 'Overall Total Sales (₹)',
+      value: `₹ ${formatINR(isFiltered ? metrics.totalSale : metrics.overallTotalSale)}`,
+      trend: isFiltered ? `Sales for ${dateRangeStr}` : 'All-Time Overall Sales',
       icon: 'wallet',
       iconBg: '#e0f2fe',
       iconColor: '#0284c7',
       cardBg: '#ffffff',
-      borderColor: '#e2e8f0',
+      borderColor: isFiltered ? '#bae6fd' : '#e2e8f0',
     },
     {
       id: 'trips',
-      title: 'Total Trips / Challans',
-      value: String(metrics.overallTrips),
-      trend: 'Total Trips Recorded',
+      title: isFiltered ? 'Selected Range Trips' : 'Total Trips / Challans',
+      value: String(isFiltered ? metrics.trips : metrics.overallTrips),
+      trend: isFiltered ? `Trips for ${dateRangeStr}` : 'Total Trips Recorded',
       icon: 'bus',
       iconBg: '#dcfce7',
       iconColor: '#10b981',
       cardBg: '#ffffff',
-      borderColor: '#e2e8f0',
+      borderColor: isFiltered ? '#bbf7d0' : '#e2e8f0',
     },
     {
       id: 'taxable',
-      title: 'Overall Taxable Amount (₹)',
-      value: `₹ ${formatINR(metrics.overallTaxable)}`,
-      trend: 'All-Time Taxable Base',
+      title: isFiltered ? 'Selected Taxable Amount (₹)' : 'Overall Taxable Amount (₹)',
+      value: `₹ ${formatINR(isFiltered ? metrics.taxableAmount : metrics.overallTaxable)}`,
+      trend: isFiltered ? `Taxable Base for ${dateRangeStr}` : 'All-Time Taxable Base',
       icon: 'newspaper',
       iconBg: '#ede9fe',
       iconColor: '#7c3aed',
       cardBg: '#ffffff',
-      borderColor: '#e2e8f0',
+      borderColor: isFiltered ? '#ddd6fe' : '#e2e8f0',
     },
     {
       id: 'gst',
-      title: 'Overall GST Collected (₹)',
-      value: `₹ ${formatINR(metrics.overallGst)}`,
-      trend: 'All-Time GST Liability',
+      title: isFiltered ? 'Selected GST Collected (₹)' : 'Overall GST Collected (₹)',
+      value: `₹ ${formatINR(isFiltered ? metrics.gstCollected : metrics.overallGst)}`,
+      trend: isFiltered ? `GST Liability for ${dateRangeStr}` : 'All-Time GST Liability',
       isPercent: true,
       iconBg: '#ffedd5',
       iconColor: '#ea580c',
       cardBg: '#ffffff',
-      borderColor: '#e2e8f0',
+      borderColor: isFiltered ? '#fed7aa' : '#e2e8f0',
     },
   ];
 
   return (
-    <ScrollView style={styles.pageContainer} showsVerticalScrollIndicator={true} contentContainerStyle={[styles.contentWrap, isMobile && styles.contentWrapMobile]}>
-      {/* 1. TOP HEADER & STATUS BAR */}
-      <View style={[styles.topHeader, isMobile && styles.topHeaderMobile]}>
+    <View style={styles.pageContainer}>
+      <ScrollView style={styles.pageScrollView} showsVerticalScrollIndicator={true} contentContainerStyle={[styles.contentWrap, isMobile && styles.contentWrapMobile]}>
+        {/* 1. TOP HEADER & STATUS BAR */}
+        <View style={[styles.topHeader, isMobile && styles.topHeaderMobile]}>
         <View style={styles.greetingHeaderRow}>
           <View style={styles.greetingTitleRow}>
             <Text style={[styles.greetingTitle, isMobile && styles.greetingTitleMobile]}>{dynamicGreeting} </Text>
@@ -653,7 +744,15 @@ export const DashboardView = React.memo(({ entries = [], onOpenAddModal, onNavig
 
         <View style={[styles.subHeaderControlsRow, isMobile && styles.subHeaderControlsRowMobile]}>
           <Text style={[styles.greetingDesc, isMobile && styles.greetingDescMobile]}>
-            Here's your business overview for {dateFilter === 'daily' ? 'today' : dateFilter === 'weekly' ? 'this week' : dateFilter === 'monthly' ? 'this month' : 'all time'}
+            {dateFilter === 'custom'
+              ? `Filtered Date: ${dateRangeStr}`
+              : dateFilter === 'daily'
+              ? "Showing today's business performance"
+              : dateFilter === 'weekly'
+              ? "Showing this week's business performance"
+              : dateFilter === 'monthly'
+              ? "Showing this month's business performance"
+              : "Here's your business overview for all time"}
           </Text>
 
           <View style={[styles.filterControlsGroup, isMobile && styles.filterControlsGroupMobile]}>
@@ -670,7 +769,11 @@ export const DashboardView = React.memo(({ entries = [], onOpenAddModal, onNavig
                   <TouchableOpacity
                     key={tab.id}
                     activeOpacity={0.75}
-                    onPress={() => setDateFilter(tab.id)}
+                    onPress={() => {
+                      setCustomStartDate(null);
+                      setCustomEndDate(null);
+                      setDateFilter(tab.id);
+                    }}
                     style={[
                       styles.dateFilterTab,
                       isMobile && styles.dateFilterTabMobile,
@@ -692,12 +795,62 @@ export const DashboardView = React.memo(({ entries = [], onOpenAddModal, onNavig
               })}
             </View>
 
-            {/* Date Range Badge Pill */}
-            <View style={[styles.dateSelectorPill, isMobile && styles.dateSelectorPillMobile]}>
-              <Ionicons name="calendar-outline" size={isMobile ? 13 : 15} color="#0284c7" />
-              <Text style={[styles.dateSelectorText, isMobile && styles.dateSelectorTextMobile]}>
-                {dateRangeStr}
-              </Text>
+            {/* App-Based Date Filter Pill */}
+            <View style={[styles.datePickerGroup, isMobile && styles.datePickerGroupMobile]}>
+              <TouchableOpacity
+                activeOpacity={0.75}
+                onPress={() => {
+                  const todayISO = toISODateString(new Date());
+                  setTempStartDate(customStartDate || todayISO);
+                  setTempEndDate(customEndDate || todayISO);
+                  const refDate = parseEntryDate(customStartDate) || new Date();
+                  setCalendarMonth(new Date(refDate.getFullYear(), refDate.getMonth(), 1));
+                  setActiveDateTab('start');
+                  setShowDateModal(true);
+                }}
+                style={[
+                  styles.dateSelectorPill,
+                  isMobile && styles.dateSelectorPillMobile,
+                  dateFilter === 'custom' && styles.dateSelectorPillActive,
+                ]}
+              >
+                <Ionicons
+                  name="calendar"
+                  size={isMobile ? 14 : 16}
+                  color={dateFilter === 'custom' ? '#0284c7' : '#0284c7'}
+                />
+                <Text
+                  style={[
+                    styles.dateSelectorText,
+                    isMobile && styles.dateSelectorTextMobile,
+                    dateFilter === 'custom' && styles.dateSelectorTextActive,
+                  ]}
+                >
+                  {dateRangeStr}
+                </Text>
+                {dateFilter === 'custom' ? (
+                  <TouchableOpacity
+                    activeOpacity={0.7}
+                    onPress={(e) => {
+                      if (e && e.stopPropagation) e.stopPropagation();
+                      setCustomStartDate(null);
+                      setCustomEndDate(null);
+                      setDateFilter('all');
+                    }}
+                    style={styles.dateSelectorClearBtn}
+                    hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                  >
+                    <Ionicons name="close-circle" size={16} color="#0284c7" />
+                  </TouchableOpacity>
+                ) : (
+                  <Ionicons
+                    name="chevron-down"
+                    size={13}
+                    color="#64748b"
+                    style={{ marginLeft: 2 }}
+                  />
+                )}
+              </TouchableOpacity>
             </View>
           </View>
         </View>
@@ -1565,6 +1718,319 @@ export const DashboardView = React.memo(({ entries = [], onOpenAddModal, onNavig
 
       <View style={{ height: 40 }} />
     </ScrollView>
+
+    {/* App-Based Date Picker Bottom Sheet Modal (100% Contained, Native App Style) */}
+    <Modal
+      visible={showDateModal}
+      transparent={true}
+      animationType="slide"
+      onRequestClose={() => setShowDateModal(false)}
+    >
+      <View style={[styles.appModalBackdrop, isMobile && styles.appModalBackdropMobile]}>
+        {/* Backdrop touch to dismiss */}
+        <TouchableOpacity
+          style={StyleSheet.absoluteFill}
+          activeOpacity={1}
+          onPress={() => setShowDateModal(false)}
+        />
+
+        {/* App Bottom Sheet Card */}
+        <View style={[styles.appSheetCard, isMobile && styles.appSheetCardMobile]}>
+          {/* Top drag handle indicator */}
+          <View style={styles.appSheetHandle} />
+
+          {/* Header */}
+          <View style={styles.appSheetHeader}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+              <View style={styles.appSheetIconWrap}>
+                <Ionicons name="calendar" size={17} color="#0284c7" />
+              </View>
+              <View>
+                <Text style={styles.appSheetTitle}>Filter by Date</Text>
+                <Text style={styles.appSheetSubtitle}>Tap a date or quick preset</Text>
+              </View>
+            </View>
+            <TouchableOpacity
+              onPress={() => setShowDateModal(false)}
+              style={styles.appSheetCloseBtn}
+              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+            >
+              <Ionicons name="close" size={20} color="#64748b" />
+            </TouchableOpacity>
+          </View>
+
+          {/* Fast Quick Presets (Horizontal Scrollable Chips) */}
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.appPresetChipsScroll}
+            style={{ marginBottom: 12, flexGrow: 0 }}
+          >
+            {[
+              {
+                label: 'Today',
+                action: () => {
+                  const todayISO = toISODateString(new Date());
+                  setTempStartDate(todayISO);
+                  setTempEndDate(todayISO);
+                  setCalendarMonth(new Date());
+                },
+              },
+              {
+                label: 'Yesterday',
+                action: () => {
+                  const y = new Date();
+                  y.setDate(y.getDate() - 1);
+                  const yISO = toISODateString(y);
+                  setTempStartDate(yISO);
+                  setTempEndDate(yISO);
+                  setCalendarMonth(new Date(y.getFullYear(), y.getMonth(), 1));
+                },
+              },
+              {
+                label: 'This Week',
+                action: () => {
+                  const now = new Date();
+                  const start = new Date(now);
+                  start.setDate(now.getDate() - 6);
+                  setTempStartDate(toISODateString(start));
+                  setTempEndDate(toISODateString(now));
+                  setCalendarMonth(new Date(now.getFullYear(), now.getMonth(), 1));
+                },
+              },
+              {
+                label: 'This Month',
+                action: () => {
+                  const now = new Date();
+                  const start = new Date(now.getFullYear(), now.getMonth(), 1);
+                  setTempStartDate(toISODateString(start));
+                  setTempEndDate(toISODateString(now));
+                  setCalendarMonth(new Date(now.getFullYear(), now.getMonth(), 1));
+                },
+              },
+              {
+                label: 'Last 30 Days',
+                action: () => {
+                  const now = new Date();
+                  const start = new Date(now);
+                  start.setDate(now.getDate() - 29);
+                  setTempStartDate(toISODateString(start));
+                  setTempEndDate(toISODateString(now));
+                  setCalendarMonth(new Date(now.getFullYear(), now.getMonth(), 1));
+                },
+              },
+            ].map((p, idx) => (
+              <TouchableOpacity
+                key={idx}
+                activeOpacity={0.7}
+                onPress={p.action}
+                style={styles.appPresetChip}
+              >
+                <Text style={styles.appPresetChipText}>{p.label}</Text>
+              </TouchableOpacity>
+            ))}
+          </ScrollView>
+
+          {/* From Date / To Date Tab Cards */}
+          <View style={styles.appDateCardsRow}>
+            <TouchableOpacity
+              activeOpacity={0.8}
+              onPress={() => setActiveDateTab('start')}
+              style={[
+                styles.appDateCard,
+                activeDateTab === 'start' && styles.appDateCardActive,
+              ]}
+            >
+              <Text style={[styles.appDateCardLabel, activeDateTab === 'start' && styles.appDateCardLabelActive]}>
+                FROM DATE
+              </Text>
+              <Text style={styles.appDateCardValue}>
+                {tempStartDate ? toDisplayDateString(parseEntryDate(tempStartDate)) : 'Select'}
+              </Text>
+            </TouchableOpacity>
+
+            <View style={{ paddingHorizontal: 6, justifyContent: 'center' }}>
+              <Ionicons name="arrow-forward" size={15} color="#94a3b8" />
+            </View>
+
+            <TouchableOpacity
+              activeOpacity={0.8}
+              onPress={() => setActiveDateTab('end')}
+              style={[
+                styles.appDateCard,
+                activeDateTab === 'end' && styles.appDateCardActive,
+              ]}
+            >
+              <Text style={[styles.appDateCardLabel, activeDateTab === 'end' && styles.appDateCardLabelActive]}>
+                TO DATE
+              </Text>
+              <Text style={styles.appDateCardValue}>
+                {tempEndDate ? toDisplayDateString(parseEntryDate(tempEndDate)) : 'Select'}
+              </Text>
+            </TouchableOpacity>
+          </View>
+
+          {/* Compact In-App Calendar (Fully contained, beautiful app design, ZERO browser popups) */}
+          <View style={styles.appCalendarWrap}>
+            {/* Month Nav */}
+            <View style={styles.appMonthNavRow}>
+              <TouchableOpacity
+                onPress={() => setCalendarMonth((prev) => new Date(prev.getFullYear(), prev.getMonth() - 1, 1))}
+                style={styles.appMonthNavBtn}
+                activeOpacity={0.7}
+              >
+                <Ionicons name="chevron-back" size={16} color="#0f172a" />
+              </TouchableOpacity>
+
+              <Text style={styles.appMonthNavTitle}>
+                {(() => {
+                  const monthNames = [
+                    'January', 'February', 'March', 'April', 'May', 'June',
+                    'July', 'August', 'September', 'October', 'November', 'December',
+                  ];
+                  return `${monthNames[calendarMonth.getMonth()]} ${calendarMonth.getFullYear()}`;
+                })()}
+              </Text>
+
+              <TouchableOpacity
+                onPress={() => setCalendarMonth((prev) => new Date(prev.getFullYear(), prev.getMonth() + 1, 1))}
+                style={styles.appMonthNavBtn}
+                activeOpacity={0.7}
+              >
+                <Ionicons name="chevron-forward" size={16} color="#0f172a" />
+              </TouchableOpacity>
+            </View>
+
+            {/* Weekday Row */}
+            <View style={styles.appWeekdaysRow}>
+              {['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa'].map((w, i) => (
+                <Text key={i} style={styles.appWeekdayText}>
+                  {w}
+                </Text>
+              ))}
+            </View>
+
+            {/* Days Grid */}
+            <View style={styles.appDaysGrid}>
+              {(() => {
+                const year = calendarMonth.getFullYear();
+                const month = calendarMonth.getMonth();
+                const firstDayIdx = new Date(year, month, 1).getDay();
+                const totalDays = new Date(year, month + 1, 0).getDate();
+                const cells = [];
+
+                for (let i = 0; i < firstDayIdx; i++) {
+                  cells.push(<View key={`empty-${i}`} style={styles.appDayCellEmpty} />);
+                }
+
+                const todayISO = toISODateString(new Date());
+
+                for (let day = 1; day <= totalDays; day++) {
+                  const cellDate = new Date(year, month, day);
+                  const iso = toISODateString(cellDate);
+                  const isStart = iso === tempStartDate;
+                  const isEnd = iso === tempEndDate;
+                  const isSelected = isStart || isEnd;
+                  const inRange = tempStartDate && tempEndDate && iso > tempStartDate && iso < tempEndDate;
+                  const hasEntries = entryDateSet.has(iso);
+                  const isToday = iso === todayISO;
+
+                  cells.push(
+                    <TouchableOpacity
+                      key={`d-${day}`}
+                      activeOpacity={0.7}
+                      onPress={() => {
+                        if (activeDateTab === 'start') {
+                          setTempStartDate(iso);
+                          if (iso > tempEndDate) {
+                            setTempEndDate(iso);
+                          }
+                          setActiveDateTab('end');
+                        } else {
+                          if (iso < tempStartDate) {
+                            setTempStartDate(iso);
+                          } else {
+                            setTempEndDate(iso);
+                          }
+                        }
+                      }}
+                      style={[
+                        styles.appDayCell,
+                        inRange && styles.appDayCellInRange,
+                        isSelected && styles.appDayCellSelected,
+                        isToday && !isSelected && styles.appDayCellToday,
+                      ]}
+                    >
+                      <Text
+                        style={[
+                          styles.appDayCellText,
+                          inRange && styles.appDayCellTextInRange,
+                          isSelected && styles.appDayCellTextSelected,
+                          isToday && !isSelected && styles.appDayCellTextToday,
+                        ]}
+                      >
+                        {day}
+                      </Text>
+                      {hasEntries && !isSelected && (
+                        <View style={styles.appDayDot} />
+                      )}
+                    </TouchableOpacity>
+                  );
+                }
+                return cells;
+              })()}
+            </View>
+          </View>
+
+          {/* Bottom Action Footer */}
+          <View style={styles.appSheetActionsRow}>
+            <TouchableOpacity
+              activeOpacity={0.7}
+              onPress={() => {
+                setCustomStartDate(null);
+                setCustomEndDate(null);
+                setDateFilter('all');
+                setShowDateModal(false);
+              }}
+              style={styles.appSheetResetBtn}
+            >
+              <Ionicons name="refresh-outline" size={15} color="#475569" />
+              <Text style={styles.appSheetResetBtnText}>All Time</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              activeOpacity={0.8}
+              onPress={() => {
+                let s = tempStartDate;
+                let e = tempEndDate || tempStartDate;
+                if (!s && !e) {
+                  setCustomStartDate(null);
+                  setCustomEndDate(null);
+                  setDateFilter('all');
+                } else {
+                  if (!s) s = e;
+                  if (!e) e = s;
+                  if (s > e) {
+                    const tmp = s;
+                    s = e;
+                    e = tmp;
+                  }
+                  setCustomStartDate(s);
+                  setCustomEndDate(e);
+                  setDateFilter('custom');
+                }
+                setShowDateModal(false);
+              }}
+              style={styles.appSheetApplyBtn}
+            >
+              <Ionicons name="checkmark" size={16} color="#ffffff" />
+              <Text style={styles.appSheetApplyBtnText}>Apply Filter</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </View>
+    </Modal>
+  </View>
   );
 });
 
@@ -1572,6 +2038,9 @@ const styles = StyleSheet.create({
   pageContainer: {
     flex: 1,
     backgroundColor: '#f8fafc',
+  },
+  pageScrollView: {
+    flex: 1,
   },
   contentWrap: {
     padding: 18,
@@ -1732,6 +2201,11 @@ const styles = StyleSheet.create({
     shadowRadius: 3,
     elevation: 1,
   },
+  dateSelectorPillActive: {
+    borderColor: '#0284c7',
+    backgroundColor: '#f0f9ff',
+    borderWidth: 1.5,
+  },
   dateSelectorPillMobile: {
     paddingHorizontal: 14,
     paddingVertical: 6,
@@ -1746,8 +2220,16 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: '#334155',
   },
+  dateSelectorTextActive: {
+    color: '#0284c7',
+    fontWeight: '700',
+  },
   dateSelectorTextMobile: {
     fontSize: 12,
+  },
+  dateSelectorClearBtn: {
+    marginLeft: 4,
+    padding: 2,
   },
   onlineBadge: {
     flexDirection: 'row',
@@ -2238,5 +2720,269 @@ const styles = StyleSheet.create({
     fontSize: 11.5,
     fontWeight: '500',
     color: '#1e293b',
+  },
+
+  // App-Based Date Bottom Sheet Styles
+  appModalBackdrop: {
+    flex: 1,
+    backgroundColor: 'rgba(15, 23, 42, 0.65)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 16,
+  },
+  appModalBackdropMobile: {
+    justifyContent: 'flex-end',
+    padding: 0,
+  },
+  appSheetCard: {
+    width: '100%',
+    maxWidth: 420,
+    backgroundColor: '#ffffff',
+    borderRadius: 20,
+    padding: 18,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 12 },
+    shadowOpacity: 0.22,
+    shadowRadius: 24,
+    elevation: 12,
+  },
+  appSheetCardMobile: {
+    maxWidth: '100%',
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    borderBottomLeftRadius: 0,
+    borderBottomRightRadius: 0,
+    padding: 16,
+    paddingBottom: 24,
+  },
+  appSheetHandle: {
+    width: 40,
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: '#cbd5e1',
+    alignSelf: 'center',
+    marginBottom: 12,
+  },
+  appSheetHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 12,
+    paddingBottom: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: '#f1f5f9',
+  },
+  appSheetIconWrap: {
+    width: 36,
+    height: 36,
+    borderRadius: 10,
+    backgroundColor: '#e0f2fe',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  appSheetTitle: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: '#0f172a',
+  },
+  appSheetSubtitle: {
+    fontSize: 11.5,
+    color: '#64748b',
+    marginTop: 1,
+  },
+  appSheetCloseBtn: {
+    padding: 6,
+    borderRadius: 8,
+    backgroundColor: '#f1f5f9',
+  },
+  appPresetChipsScroll: {
+    flexDirection: 'row',
+    gap: 8,
+    paddingVertical: 2,
+  },
+  appPresetChip: {
+    paddingVertical: 6,
+    paddingHorizontal: 12,
+    borderRadius: 8,
+    backgroundColor: '#f1f5f9',
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+  },
+  appPresetChipText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#334155',
+  },
+  appDateCardsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 12,
+    backgroundColor: '#f8fafc',
+    borderRadius: 12,
+    padding: 8,
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+  },
+  appDateCard: {
+    flex: 1,
+    paddingVertical: 8,
+    paddingHorizontal: 10,
+    borderRadius: 8,
+    backgroundColor: '#ffffff',
+    borderWidth: 1.5,
+    borderColor: '#e2e8f0',
+  },
+  appDateCardActive: {
+    borderColor: '#0284c7',
+    backgroundColor: '#f0f9ff',
+  },
+  appDateCardLabel: {
+    fontSize: 10,
+    fontWeight: '700',
+    color: '#64748b',
+    letterSpacing: 0.5,
+    marginBottom: 2,
+  },
+  appDateCardLabelActive: {
+    color: '#0284c7',
+  },
+  appDateCardValue: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#0f172a',
+  },
+  appCalendarWrap: {
+    backgroundColor: '#ffffff',
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#f1f5f9',
+    padding: 8,
+    marginBottom: 14,
+  },
+  appMonthNavRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 8,
+    paddingHorizontal: 4,
+  },
+  appMonthNavBtn: {
+    padding: 6,
+    borderRadius: 8,
+    backgroundColor: '#f1f5f9',
+  },
+  appMonthNavTitle: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#0f172a',
+  },
+  appWeekdaysRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    paddingBottom: 6,
+    borderBottomWidth: 1,
+    borderBottomColor: '#f1f5f9',
+    marginBottom: 4,
+  },
+  appWeekdayText: {
+    width: '14.28%',
+    textAlign: 'center',
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#94a3b8',
+  },
+  appDaysGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+  },
+  appDayCellEmpty: {
+    width: '14.28%',
+    height: 32,
+  },
+  appDayCell: {
+    width: '14.28%',
+    height: 32,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 16,
+    position: 'relative',
+    marginVertical: 1,
+  },
+  appDayCellInRange: {
+    backgroundColor: '#e0f2fe',
+    borderRadius: 0,
+  },
+  appDayCellSelected: {
+    backgroundColor: '#0284c7',
+    borderRadius: 16,
+  },
+  appDayCellToday: {
+    borderWidth: 1.5,
+    borderColor: '#0284c7',
+  },
+  appDayCellText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#1e293b',
+  },
+  appDayCellTextInRange: {
+    color: '#0369a1',
+    fontWeight: '700',
+  },
+  appDayCellTextSelected: {
+    color: '#ffffff',
+    fontWeight: '800',
+  },
+  appDayCellTextToday: {
+    color: '#0284c7',
+    fontWeight: '700',
+  },
+  appDayDot: {
+    width: 3.5,
+    height: 3.5,
+    borderRadius: 2,
+    backgroundColor: '#10b981',
+    position: 'absolute',
+    bottom: 2,
+  },
+  appSheetActionsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 10,
+  },
+  appSheetResetBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingVertical: 10,
+    paddingHorizontal: 14,
+    borderRadius: 10,
+    backgroundColor: '#f1f5f9',
+  },
+  appSheetResetBtnText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#475569',
+  },
+  appSheetApplyBtn: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    paddingVertical: 10,
+    paddingHorizontal: 18,
+    borderRadius: 10,
+    backgroundColor: '#0284c7',
+  },
+  appSheetApplyBtnText: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#ffffff',
+  },
+  dateSelectorClearBtn: {
+    marginLeft: 2,
+    padding: 2,
   },
 });

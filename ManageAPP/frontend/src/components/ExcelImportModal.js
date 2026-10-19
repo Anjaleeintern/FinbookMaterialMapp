@@ -465,6 +465,7 @@ export const ExcelImportModal = ({ visible, onClose, onSuccess }) => {
                     <ScrollView horizontal={true} style={styles.tableScrollView}>
                       <View style={styles.previewTable}>
                         <View style={styles.tableHeaderRow}>
+                          <Text style={[styles.thCell, { width: 95 }]}>Challan No</Text>
                           <Text style={[styles.thCell, { width: 90 }]}>Date</Text>
                           <Text style={[styles.thCell, { width: 120 }]}>Vehicle No</Text>
                           <Text style={[styles.thCell, { width: 130 }]}>Type/Mode</Text>
@@ -480,6 +481,9 @@ export const ExcelImportModal = ({ visible, onClose, onSuccess }) => {
                           const badge = getCollectionBadgeColor(item.target_collection);
                           return (
                             <View key={idx} style={[styles.tableDataRow, idx % 2 === 1 && styles.tableDataRowAlt]}>
+                              <Text style={[styles.tdCell, styles.boldCell, { width: 95, color: '#0d9488' }]}>
+                                {item.challan_no || 'Auto'}
+                              </Text>
                               <Text style={[styles.tdCell, { width: 90 }]}>{item.date}</Text>
                               <Text style={[styles.tdCell, styles.boldCell, { width: 120 }]}>{item.vehicle_no}</Text>
                               <View style={{ width: 130, justifyContent: 'center' }}>

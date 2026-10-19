@@ -23,7 +23,7 @@ async def get_all_dest_collections() -> list:
     return list(cols)
 
 def extract_challan_number(challan_str: str) -> int:
-    """Extract integer number from strings like 'CH-0015', 'CH-15', '15'."""
+    """Extract integer number from strings like '0015', '015', '15', 'CH-0015'."""
     if not challan_str:
         return 0
     match = re.search(r'(\d+)', str(challan_str))
@@ -34,15 +34,26 @@ def extract_challan_number(challan_str: str) -> int:
             return 0
     return 0
 
+def format_challan_candidate(seq_num: int, fmt: str = None) -> str:
+    """
+    Format challan number with at least 3 digits zero-padded: 001, 002, 003...
+    Guarantees continuous consistent series across manual and excel entries.
+    """
+    try:
+        val = int(seq_num)
+        return f"{val:03d}"
+    except (ValueError, TypeError):
+        return str(seq_num)
+
 async def get_highest_existing_challan_number() -> int:
-    """Scan all collections to find the absolute highest challan number."""
+    """Scan all collections to find the absolute highest challan number actually stored in MongoDB."""
     db = get_database()
     max_num = 0
     collections = await get_all_dest_collections()
     for col_name in collections:
         try:
             cursor = db[col_name].find({}, {"challan_no": 1})
-            docs = await cursor.to_list(length=3000)
+            docs = await cursor.to_list(length=20000)
             for doc in docs:
                 c_no = doc.get("challan_no")
                 num = extract_challan_number(c_no)
@@ -53,12 +64,21 @@ async def get_highest_existing_challan_number() -> int:
     return max_num
 
 async def sync_challan_counter() -> int:
-    """Ensure db.counters has seq >= highest existing challan number in the database."""
+    """
+    Ensure db.counters has seq in sync with highest existing challan number in the database.
+    """
     db = get_database()
     max_existing = await get_highest_existing_challan_number()
-    counter = await db.counters.find_one({"_id": "challan_seq"})
-    current_seq = counter.get("seq", 0) if counter else 0
-    target_seq = max(current_seq, max_existing)
+
+    if max_existing == 0:
+        target_seq = 0
+    else:
+        counter = await db.counters.find_one({"_id": "challan_seq"})
+        current_seq = counter.get("seq", 0) if counter else 0
+        if current_seq < max_existing or current_seq > (max_existing + 20):
+            target_seq = max_existing
+        else:
+            target_seq = max(current_seq, max_existing)
 
     await db.counters.update_one(
         {"_id": "challan_seq"},
@@ -68,22 +88,8 @@ async def sync_challan_counter() -> int:
     return target_seq
 
 async def detect_challan_format() -> str:
-    """Detect if existing challans use 'CH-' prefix or are plain numeric."""
-    db = get_database()
-    collections = await get_all_dest_collections()
-    for col_name in collections:
-        try:
-            doc = await db[col_name].find_one({"challan_no": {"$regex": r"^CH-", "$options": "i"}}, {"_id": 1})
-            if doc:
-                return "CH"
-        except Exception:
-            pass
+    """Default format is 3-digit numeric series (001, 002, 003...)."""
     return "NUM"
-
-def format_challan_candidate(seq_num: int, fmt: str) -> str:
-    if fmt == "CH":
-        return f"CH-{seq_num:04d}"
-    return str(seq_num)
 
 async def is_challan_no_used(challan_no: str, exclude_id: str = None) -> bool:
     """Check if a challan_no is already used in any collection, checking both raw and formatted variants."""
@@ -96,7 +102,10 @@ async def is_challan_no_used(challan_no: str, exclude_id: str = None) -> bool:
     variants = {str(challan_no).strip()}
     if num > 0:
         variants.add(str(num))
+        variants.add(f"{num:03d}")
+        variants.add(f"{num:04d}")
         variants.add(f"CH-{num:04d}")
+        variants.add(f"CH-{num:03d}")
         variants.add(f"CH-{num}")
 
     for col_name in collections:
@@ -117,12 +126,11 @@ async def repair_duplicate_challans():
     seen = {}
     duplicates = []
     collections = await get_all_dest_collections()
-    fmt = await detect_challan_format()
 
     for col_name in collections:
         try:
             cursor = db[col_name].find({}, {"challan_no": 1, "created_at": 1, "date": 1})
-            docs = await cursor.to_list(length=5000)
+            docs = await cursor.to_list(length=10000)
             for doc in docs:
                 c_no = doc.get("challan_no")
                 if c_no:
@@ -137,7 +145,7 @@ async def repair_duplicate_challans():
         highest = await get_highest_existing_challan_number()
         for col_name, doc_id, old_c_no, _ in duplicates:
             highest += 1
-            new_c_no = format_challan_candidate(highest, fmt)
+            new_c_no = format_challan_candidate(highest)
             logger.info("Fixing duplicate challan %s in %s -> %s", old_c_no, col_name, new_c_no)
             await db[col_name].update_one({"_id": doc_id}, {"$set": {"challan_no": new_c_no}})
 
@@ -148,13 +156,8 @@ async def repair_duplicate_challans():
         )
 
 async def get_next_challan_no() -> str:
-    """Atomically generate the next unique challan number continuing the existing DB series."""
+    """Atomically generate the next unique challan number continuing the existing DB series (001, 002, 003...)."""
     db = get_database()
-    # Repair any duplicates and sync counter
-    await repair_duplicate_challans()
-    await sync_challan_counter()
-
-    fmt = await detect_challan_format()
 
     # Atomically increment counter
     counter = await db.counters.find_one_and_update(
@@ -164,9 +167,9 @@ async def get_next_challan_no() -> str:
         return_document=ReturnDocument.AFTER
     )
     seq_num = counter.get("seq", 1)
-    cand = format_challan_candidate(seq_num, fmt)
+    cand = format_challan_candidate(seq_num)
 
-    # Self-healing loop in case number was pre-seeded
+    # Self-healing loop in case number was pre-seeded or already used in DB
     while await is_challan_no_used(cand):
         counter = await db.counters.find_one_and_update(
             {"_id": "challan_seq"},
@@ -175,24 +178,28 @@ async def get_next_challan_no() -> str:
             return_document=ReturnDocument.AFTER
         )
         seq_num = counter.get("seq", 1)
-        cand = format_challan_candidate(seq_num, fmt)
+        cand = format_challan_candidate(seq_num)
 
     return cand
 
 async def peek_next_challan_no() -> str:
-    """Peek what the next challan number will be in the series without incrementing."""
+    """Peek what the next challan number will be in the series without incrementing (001, 002, 003...)."""
     db = get_database()
-    await repair_duplicate_challans()
     max_existing = await get_highest_existing_challan_number()
-    counter = await db.counters.find_one({"_id": "challan_seq"})
-    current_seq = counter.get("seq", 0) if counter else 0
-    base_seq = max(current_seq, max_existing)
-    next_seq = base_seq + 1
+    if max_existing == 0:
+        base_seq = 0
+    else:
+        counter = await db.counters.find_one({"_id": "challan_seq"})
+        current_seq = counter.get("seq", 0) if counter else 0
+        if current_seq < max_existing or current_seq > (max_existing + 20):
+            base_seq = max_existing
+        else:
+            base_seq = max(current_seq, max_existing)
 
-    fmt = await detect_challan_format()
-    cand = format_challan_candidate(next_seq, fmt)
+    next_seq = base_seq + 1
+    cand = format_challan_candidate(next_seq)
     while await is_challan_no_used(cand):
         next_seq += 1
-        cand = format_challan_candidate(next_seq, fmt)
+        cand = format_challan_candidate(next_seq)
 
     return cand

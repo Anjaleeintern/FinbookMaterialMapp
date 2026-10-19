@@ -457,12 +457,13 @@ def process_raw_imported_rows(
             if payment_mode:
                 payment_mode = str(payment_mode).strip()
 
-            challan_no = str(r.get("challan_no") or "").strip()
+            # Always neglect any challan number from Excel to ensure continuous un-interrupted system series
+            challan_no = None
 
             # Create Pydantic model for calculation validation
             entry_create = EntryCreate(
                 date=date_str,
-                challan_no=challan_no if challan_no else None,
+                challan_no=None,
                 vehicle_no=vehicle_no,
                 transport_type=transport_type,
                 type_mode=type_mode,
@@ -513,18 +514,9 @@ async def execute_bulk_import_to_mongodb(valid_entries: List[Dict[str, Any]]) ->
         entry.pop("_sort_date", None)
         row_num = entry.pop("row_number", None)
 
-        # Unique sequential challan assignment
-        provided_challan = (entry.get("challan_no") or "").strip()
-        if not provided_challan or await is_challan_no_used(provided_challan):
-            entry["challan_no"] = await get_next_challan_no()
-        else:
-            num = extract_challan_number(provided_challan)
-            if num > 0:
-                await db.counters.update_one(
-                    {"_id": "challan_seq"},
-                    {"$max": {"seq": num}},
-                    upsert=True
-                )
+        # STRICT REQUIREMENT: Neglect any Excel challan number to maintain un-interrupted system series.
+        # Always generate atomic, unique, continuous challan sequence (001, 002, 003...) from MongoDB counters.
+        entry["challan_no"] = await get_next_challan_no()
 
         entry["created_at"] = datetime.utcnow()
         entry["saved_in"] = target_collection
@@ -633,12 +625,11 @@ def generate_sample_excel_template() -> bytes:
     for col_letter, width in column_widths.items():
         ws.column_dimensions[col_letter].width = width
 
-    # Add instructions sheet
     ws_notes = wb.create_sheet(title="Instructions & Rules")
     notes = [
         ["Column Name", "Required?", "Allowed Values / Examples", "Description"],
         ["Date", "Yes", "MM/DD/YYYY, DD/MM/YYYY, YYYY-MM-DD", "Delivery transaction date."],
-        ["ChallanNo", "Optional", "CH-0001 or leave blank", "If blank or already used, auto-increments CH-XXXX automatically."],
+        ["ChallanNo", "Optional", "Leave blank or auto", "Auto-generated sequentially by system (001, 002...) to maintain continuous series across manual and excel entries."],
         ["VehicleNo", "Yes", "MP09GG1230, etc.", "Vehicle registration number."],
         ["TransportType", "No", "MSK, VMPL, etc.", "Transporter name (defaults to 'Own / Default' if blank)."],
         ["Type/Mode", "Yes", "Royalty Sale, Without Royalty, Credit Sale, Cash Sale, QR Sale, HR Loading", "Routes directly to MongoDB collection."],

@@ -32,6 +32,8 @@ class MasterItemDetail(BaseModel):
     category: str
     value: str
     status: str = "Active"
+    is_static: Optional[bool] = False
+    sub_types: Optional[List[str]] = None
     created_at: Optional[str] = None
     updated_at: Optional[str] = None
 
@@ -50,6 +52,7 @@ class MasterItemOut(BaseModel):
     category: str
     value: str
     status: str = "Active"
+    is_static: Optional[bool] = False
     created_at: Optional[str] = None
     updated_at: Optional[str] = None
 
@@ -59,3 +62,8 @@ class MasterListResponse(BaseModel):
     MaterialName: List[str]
     PartyName: List[str]
     TypeMode: List[str]
+
+class PasteMasterImportRequest(BaseModel):
+    raw_text: str
+    default_category: Optional[str] = "VehicleNo"
+

@@ -14,6 +14,7 @@ from services.challan_service import (
     extract_challan_number,
     repair_duplicate_challans,
     get_highest_existing_challan_number,
+    format_challan_candidate,
 )
 from services.calculation_service import process_entry_calculations
 from services.excel_service import (
@@ -112,11 +113,16 @@ async def import_excel_entries(
             by_col[col] = by_col.get(col, 0) + 1
 
         # Format records for clean preview (remove non-serializable datetime)
+        # Calculate projected continuous challan numbers (001, 002, 003...)
+        next_cand = await peek_next_challan_no()
+        start_seq = extract_challan_number(next_cand)
+
         safe_preview = []
-        for v in valid_entries[:50]:
+        for idx, v in enumerate(valid_entries[:50]):
             item_copy = dict(v)
             if "_sort_date" in item_copy:
                 del item_copy["_sort_date"]
+            item_copy["challan_no"] = format_challan_candidate(start_seq + idx)
             safe_preview.append(item_copy)
 
         sheet_names = sorted(list(set(str(r.get("_sheet_name", "")) for r in raw_rows if r.get("_sheet_name"))))
@@ -173,19 +179,25 @@ async def create_entry(entry: EntryCreate):
     # Calculate all formulas and sanitize conditional fields
     calc_data = process_entry_calculations(entry)
 
-    # Ensure strictly unique auto-incrementing ChallanNo
+    # Strictly unique auto-incrementing ChallanNo in continuous series (001, 002, 003...)
     provided_challan = (calc_data.get("challan_no") or "").strip()
     if not provided_challan or await is_challan_no_used(provided_challan):
         calc_data["challan_no"] = await get_next_challan_no()
     else:
-        # A new unique challan was supplied; ensure counter is updated to at least this number
         num = extract_challan_number(provided_challan)
         if num > 0:
-            await db.counters.update_one(
-                {"_id": "challan_seq"},
-                {"$max": {"seq": num}},
-                upsert=True
-            )
+            formatted = format_challan_candidate(num)
+            if await is_challan_no_used(formatted):
+                calc_data["challan_no"] = await get_next_challan_no()
+            else:
+                calc_data["challan_no"] = formatted
+                await db.counters.update_one(
+                    {"_id": "challan_seq"},
+                    {"$max": {"seq": num}},
+                    upsert=True
+                )
+        else:
+            calc_data["challan_no"] = await get_next_challan_no()
 
     calc_data["created_at"] = datetime.now(timezone.utc)
     calc_data["saved_in"] = target_collection

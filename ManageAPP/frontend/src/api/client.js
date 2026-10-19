@@ -73,8 +73,9 @@ export const setAuthToken = (token) => {
 export const getAuthToken = () => authToken;
 
 const request = async (endpoint, options = {}) => {
+  const isFormData = typeof FormData !== 'undefined' && options.body instanceof FormData;
   const headers = {
-    'Content-Type': 'application/json',
+    ...(isFormData ? {} : { 'Content-Type': 'application/json' }),
     ...(authToken ? { Authorization: `Bearer ${authToken}` } : {}),
     ...options.headers,
   };
@@ -137,6 +138,26 @@ export const api = {
       method: 'POST',
       body: JSON.stringify({ category, items, status }),
     }),
+  importMasterFile: (file, preview = true, defaultCategory = 'VehicleNo') => {
+    const formData = new FormData();
+    formData.append('file', file);
+    formData.append('preview', preview ? 'true' : 'false');
+    formData.append('default_category', defaultCategory);
+    return request('/api/masters/import-file', {
+      method: 'POST',
+      body: formData,
+    });
+  },
+  importMasterPasted: (rawText, defaultCategory = 'VehicleNo', preview = true) =>
+    request('/api/masters/import-pasted', {
+      method: 'POST',
+      body: JSON.stringify({
+        raw_text: rawText,
+        default_category: defaultCategory,
+        preview: !!preview,
+      }),
+    }),
+  getMasterTemplateUrl: (format = 'xlsx') => `${BASE_URL}/api/masters/template?format=${format}`,
   bulkDeleteMasters: (ids) =>
     request('/api/masters/bulk-delete', {
       method: 'POST',

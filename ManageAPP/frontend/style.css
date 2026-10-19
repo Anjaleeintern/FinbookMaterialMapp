@@ -670,3 +670,124 @@ html, body, #root {
   -webkit-touch-callout: none;
 }
 
+/* ==========================================================================
+   MaterialMApp Product Overview & Login Animated CSS
+   ========================================================================== */
+
+@keyframes mmaFadeUp {
+  0% {
+    opacity: 0;
+    transform: translateY(14px);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes mmaFadeIn {
+  0% {
+    opacity: 0;
+  }
+  100% {
+    opacity: 1;
+  }
+}
+
+@keyframes mmaFloat {
+  0%, 100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-4px);
+  }
+}
+
+@keyframes mmaPulseGlow {
+  0%, 100% {
+    box-shadow: 0 0 0 0 rgba(13, 148, 136, 0.35);
+  }
+  50% {
+    box-shadow: 0 0 0 6px rgba(13, 148, 136, 0);
+  }
+}
+
+@keyframes mmaShimmer {
+  0% {
+    background-position: -200% 0;
+  }
+  100% {
+    background-position: 200% 0;
+  }
+}
+
+.mma-animate-fadeup {
+  animation: mmaFadeUp 0.45s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+.mma-animate-fadein {
+  animation: mmaFadeIn 0.35s ease-out both;
+}
+
+.mma-animate-float {
+  animation: mmaFloat 3.5s ease-in-out infinite;
+}
+
+.mma-card-hover {
+  transition: transform 0.22s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.22s cubic-bezier(0.16, 1, 0.3, 1), border-color 0.22s ease !important;
+}
+
+.mma-card-hover:hover {
+  transform: translateY(-3px) !important;
+  box-shadow: 0 10px 20px -5px rgba(15, 23, 42, 0.08), 0 4px 6px -2px rgba(15, 23, 42, 0.04) !important;
+  border-color: #0d9488 !important;
+}
+
+.mma-btn-hover {
+  transition: transform 0.18s ease, filter 0.18s ease, box-shadow 0.18s ease !important;
+}
+
+.mma-btn-hover:hover {
+  transform: translateY(-1.5px) !important;
+  filter: brightness(1.05) !important;
+  box-shadow: 0 6px 14px -3px rgba(2, 132, 199, 0.35) !important;
+}
+
+.mma-btn-hover:active {
+  transform: translateY(0) !important;
+  filter: brightness(0.95) !important;
+}
+
+.mma-pulse-badge {
+  animation: mmaPulseGlow 2.5s infinite ease-in-out;
+}
+
+/* Stagger entrance delays */
+.mma-delay-1 { animation-delay: 0.04s; }
+.mma-delay-2 { animation-delay: 0.08s; }
+.mma-delay-3 { animation-delay: 0.12s; }
+.mma-delay-4 { animation-delay: 0.16s; }
+
+/* Responsive adjustments */
+@media (max-width: 767px) {
+  .mma-mobile-full {
+    width: 100% !important;
+    max-width: 100% !important;
+  }
+}
+
+/* Accessibility: Honor reduced motion preferences */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+  }
+  .mma-card-hover:hover,
+  .mma-btn-hover:hover {
+    transform: none !important;
+  }
+}
+
