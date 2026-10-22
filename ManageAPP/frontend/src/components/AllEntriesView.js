@@ -268,313 +268,578 @@ export const AllEntriesView = React.memo(({ entries, loading, onOpenAddModal, on
 
   return (
     <View style={styles.container}>
-      {/* Top Action Bar */}
-      <View style={[styles.actionHeader, isMobile && styles.actionHeaderMobile]}>
-        {/* Row 1: Title, Count, View Mode Switcher, and Primary Add Button */}
-        <View style={styles.actionHeaderTopRow}>
-          <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-            <Text style={styles.titleText} numberOfLines={1}>All Entries</Text>
-            <View style={[styles.countBadge, hasActiveFilter && styles.countBadgeFiltered]}>
-              <Text style={[styles.countText, hasActiveFilter && styles.countTextFiltered]}>
-                {hasActiveFilter ? `${filteredEntries.length} / ${entries.length}` : entries.length}
-              </Text>
+      {/* 1. TOP HEADER & CONTROLS: Mobile (matching reference image media_1792651587761.png) vs Desktop */}
+      {isMobile ? (
+        <View style={styles.mobileHeaderWrap}>
+          {/* Row 1: Title & Count on left, List / Grid View Toggles on right */}
+          <View style={styles.mobileTitleRow}>
+            <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+              <Text style={styles.mobileTitleText}>All Entries</Text>
+              <View style={[styles.mobileCountBadge, hasActiveFilter && styles.mobileCountBadgeFiltered]}>
+                <Text style={[styles.mobileCountBadgeText, hasActiveFilter && styles.mobileCountBadgeTextFiltered]}>
+                  {hasActiveFilter ? `${filteredEntries.length} / ${entries.length}` : entries.length}
+                </Text>
+              </View>
             </View>
-          </View>
 
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-            {/* View Mode Toggle: Grid / Table */}
-            <View style={styles.toggleGroup}>
+            <View style={styles.mobileToggleGroup}>
               <TouchableOpacity
-                style={[styles.toggleBtn, viewMode === 'cards' && styles.toggleBtnActive]}
+                style={[styles.mobileToggleBtn, viewMode === 'cards' && styles.mobileToggleBtnActive]}
                 onPress={() => setViewMode('cards')}
                 activeOpacity={0.7}
               >
                 <Ionicons
-                  name="grid"
-                  size={15}
+                  name="list"
+                  size={18}
                   color={viewMode === 'cards' ? '#0284c7' : '#64748b'}
                 />
               </TouchableOpacity>
               <TouchableOpacity
-                style={[styles.toggleBtn, viewMode === 'table' && styles.toggleBtnActive]}
+                style={[styles.mobileToggleBtn, viewMode === 'table' && styles.mobileToggleBtnActive]}
                 onPress={() => setViewMode('table')}
                 activeOpacity={0.7}
               >
                 <Ionicons
-                  name="list"
-                  size={15}
+                  name="grid"
+                  size={18}
                   color={viewMode === 'table' ? '#0284c7' : '#64748b'}
                 />
               </TouchableOpacity>
             </View>
-
-            {/* Primary Add Button */}
-            <TouchableOpacity style={styles.addBtn} onPress={onOpenAddModal} activeOpacity={0.85}>
-              <Ionicons name="add" size={17} color="#ffffff" style={{ marginRight: 2 }} />
-              <Text style={styles.addBtnText}>Add Entry</Text>
-            </TouchableOpacity>
           </View>
-        </View>
 
-        {/* Row 2: Source Filter Pills & Bulk Actions */}
-        <View style={[styles.actionHeaderBottomRow, isMobile && styles.actionHeaderBottomRowMobile]}>
-          {/* Quick Source Filter Tabs (All | Excel | Manual) */}
-          <View style={styles.sourceToggleGroup}>
+          {/* Row 2: Source Filter Pills (All | Excel | Manual) */}
+          <View style={styles.mobileSourceRow}>
             <TouchableOpacity
-              style={[styles.sourcePillBtn, selectedSource === 'All' && styles.sourcePillBtnActive]}
+              style={[styles.mobileSourceTab, selectedSource === 'All' && styles.mobileSourceTabActive]}
               onPress={() => setSelectedSource('All')}
-              activeOpacity={0.7}
+              activeOpacity={0.75}
             >
-              <Text style={[styles.sourcePillText, selectedSource === 'All' && styles.sourcePillTextActive]}>
+              <Text style={[styles.mobileSourceTabText, selectedSource === 'All' && styles.mobileSourceTabTextActive]}>
                 All ({countsBySource.total})
               </Text>
             </TouchableOpacity>
+
             <TouchableOpacity
-              style={[styles.sourcePillBtn, selectedSource === 'Excel Import' && styles.sourcePillBtnActive]}
+              style={[styles.mobileSourceTab, selectedSource === 'Excel Import' && styles.mobileSourceTabActive]}
               onPress={() => setSelectedSource('Excel Import')}
-              activeOpacity={0.7}
+              activeOpacity={0.75}
             >
-              <Ionicons name="document-text" size={12} color={selectedSource === 'Excel Import' ? '#047857' : '#059669'} style={{ marginRight: 3 }} />
-              <Text style={[styles.sourcePillText, selectedSource === 'Excel Import' && styles.sourcePillTextActive, { color: selectedSource === 'Excel Import' ? '#047857' : '#059669' }]}>
+              <Ionicons
+                name="document-text"
+                size={13}
+                color={selectedSource === 'Excel Import' ? '#ffffff' : '#10b981'}
+                style={{ marginRight: 4 }}
+              />
+              <Text
+                style={[
+                  styles.mobileSourceTabText,
+                  selectedSource === 'Excel Import' && styles.mobileSourceTabTextActive,
+                  selectedSource !== 'Excel Import' && { color: '#059669' },
+                ]}
+              >
                 Excel ({countsBySource.excel})
               </Text>
             </TouchableOpacity>
+
             <TouchableOpacity
-              style={[styles.sourcePillBtn, selectedSource === 'Manual Entry' && styles.sourcePillBtnActive]}
+              style={[styles.mobileSourceTab, selectedSource === 'Manual Entry' && styles.mobileSourceTabActive]}
               onPress={() => setSelectedSource('Manual Entry')}
-              activeOpacity={0.7}
+              activeOpacity={0.75}
             >
-              <Ionicons name="create-outline" size={12} color={selectedSource === 'Manual Entry' ? '#0284c7' : '#0284c7'} style={{ marginRight: 3 }} />
-              <Text style={[styles.sourcePillText, selectedSource === 'Manual Entry' && styles.sourcePillTextActive, { color: selectedSource === 'Manual Entry' ? '#0369a1' : '#0284c7' }]}>
+              <Ionicons
+                name="sync"
+                size={13}
+                color={selectedSource === 'Manual Entry' ? '#ffffff' : '#0284c7'}
+                style={{ marginRight: 4 }}
+              />
+              <Text
+                style={[
+                  styles.mobileSourceTabText,
+                  selectedSource === 'Manual Entry' && styles.mobileSourceTabTextActive,
+                  selectedSource !== 'Manual Entry' && { color: '#0284c7' },
+                ]}
+              >
                 Manual ({countsBySource.manual})
               </Text>
             </TouchableOpacity>
           </View>
 
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-            {/* Delete Button (shown when items selected) */}
-            {selectedIds.size > 0 && (
-              <TouchableOpacity
-                style={[styles.deleteBtn, styles.deleteBtnActive]}
-                onPress={handleDelete}
-                disabled={deleting}
-                activeOpacity={0.8}
-              >
-                {deleting ? (
-                  <ActivityIndicator size="small" color="#ffffff" style={{ marginRight: 4 }} />
-                ) : (
-                  <Ionicons name="trash-outline" size={15} color="#ffffff" style={{ marginRight: 4 }} />
+          {/* Row 3: 2x2 Filter Dropdowns on Left + Add/Import Actions on Right */}
+          <View style={styles.mobileFiltersActionsRow}>
+            {/* Left: Filters Area (2x2 Grid) */}
+            <View style={styles.mobileFiltersCol}>
+              <View style={styles.mobileFiltersHeaderRow}>
+                <View style={styles.mobileFiltersPill}>
+                  <Ionicons name="funnel" size={12} color="#0284c7" style={{ marginRight: 4 }} />
+                  <Text style={styles.mobileFiltersPillText}>Filters:</Text>
+                </View>
+                {hasActiveFilter && (
+                  <TouchableOpacity onPress={handleClearFilters} style={styles.mobileResetPill} activeOpacity={0.7}>
+                    <Ionicons name="close-circle" size={12} color="#ef4444" style={{ marginRight: 3 }} />
+                    <Text style={styles.mobileResetPillText}>Reset</Text>
+                  </TouchableOpacity>
                 )}
-                <Text style={styles.deleteBtnTextActive}>Delete ({selectedIds.size})</Text>
-              </TouchableOpacity>
-            )}
+              </View>
 
-            {/* Import Excel Button */}
-            <TouchableOpacity
-              style={styles.importExcelBtn}
-              onPress={onOpenImportModal}
-              activeOpacity={0.8}
-            >
-              <Ionicons name="cloud-upload-outline" size={15} color="#059669" style={{ marginRight: 4 }} />
-              <Text style={styles.importExcelBtnText}>Import Excel</Text>
-            </TouchableOpacity>
+              <View style={styles.mobileFiltersGrid}>
+                {/* Row 1: Date & Type */}
+                <View style={styles.mobileFilterRow}>
+                  {/* DATE Dropdown */}
+                  <View style={styles.mobileFilterCard}>
+                    <Text style={styles.mobileFilterCardLabel}>DATE</Text>
+                    <View style={styles.mobileFilterCardValRow}>
+                      <Text style={styles.mobileFilterCardVal} numberOfLines={1}>
+                        {selectedDate === 'All' ? 'All Dates' : selectedDate}
+                      </Text>
+                      <Ionicons name="chevron-down" size={13} color="#64748b" />
+                    </View>
+                    {Platform.OS === 'web' ? (
+                      <select
+                        value={selectedDate}
+                        onChange={(e) => setSelectedDate(e.target.value)}
+                        style={styles.mobileHiddenSelect}
+                      >
+                        <option value="All">All Dates</option>
+                        {uniqueDates.map((d) => (
+                          <option key={d} value={d}>{d}</option>
+                        ))}
+                      </select>
+                    ) : (
+                      <TouchableOpacity
+                        style={StyleSheet.absoluteFill}
+                        onPress={() => setMobilePicker({ title: 'Date', options: uniqueDates, current: selectedDate, onSelect: setSelectedDate })}
+                      />
+                    )}
+                  </View>
+
+                  {/* TYPE Dropdown */}
+                  <View style={styles.mobileFilterCard}>
+                    <Text style={styles.mobileFilterCardLabel}>TYPE</Text>
+                    <View style={styles.mobileFilterCardValRow}>
+                      <Text style={styles.mobileFilterCardVal} numberOfLines={1}>
+                        {selectedType === 'All' ? 'All Types' : selectedType}
+                      </Text>
+                      <Ionicons name="chevron-down" size={13} color="#64748b" />
+                    </View>
+                    {Platform.OS === 'web' ? (
+                      <select
+                        value={selectedType}
+                        onChange={(e) => setSelectedType(e.target.value)}
+                        style={styles.mobileHiddenSelect}
+                      >
+                        <option value="All">All Types</option>
+                        {uniqueTypes.map((t) => (
+                          <option key={t} value={t}>{t}</option>
+                        ))}
+                      </select>
+                    ) : (
+                      <TouchableOpacity
+                        style={StyleSheet.absoluteFill}
+                        onPress={() => setMobilePicker({ title: 'Type', options: uniqueTypes, current: selectedType, onSelect: setSelectedType })}
+                      />
+                    )}
+                  </View>
+                </View>
+
+                {/* Row 2: Mode & Material */}
+                <View style={styles.mobileFilterRow}>
+                  {/* MODE Dropdown */}
+                  <View style={styles.mobileFilterCard}>
+                    <Text style={styles.mobileFilterCardLabel}>MODE</Text>
+                    <View style={styles.mobileFilterCardValRow}>
+                      <Text style={styles.mobileFilterCardVal} numberOfLines={1}>
+                        {selectedMode === 'All' ? 'All Modes' : selectedMode}
+                      </Text>
+                      <Ionicons name="chevron-down" size={13} color="#64748b" />
+                    </View>
+                    {Platform.OS === 'web' ? (
+                      <select
+                        value={selectedMode}
+                        onChange={(e) => setSelectedMode(e.target.value)}
+                        style={styles.mobileHiddenSelect}
+                      >
+                        <option value="All">All Modes</option>
+                        {uniqueModes.map((m) => (
+                          <option key={m} value={m}>{m}</option>
+                        ))}
+                      </select>
+                    ) : (
+                      <TouchableOpacity
+                        style={StyleSheet.absoluteFill}
+                        onPress={() => setMobilePicker({ title: 'Mode', options: uniqueModes, current: selectedMode, onSelect: setSelectedMode })}
+                      />
+                    )}
+                  </View>
+
+                  {/* MATERIAL Dropdown */}
+                  <View style={styles.mobileFilterCard}>
+                    <Text style={styles.mobileFilterCardLabel}>MATERIAL</Text>
+                    <View style={styles.mobileFilterCardValRow}>
+                      <Text style={styles.mobileFilterCardVal} numberOfLines={1}>
+                        {selectedMaterial === 'All' ? 'All Materials' : selectedMaterial}
+                      </Text>
+                      <Ionicons name="chevron-down" size={13} color="#64748b" />
+                    </View>
+                    {Platform.OS === 'web' ? (
+                      <select
+                        value={selectedMaterial}
+                        onChange={(e) => setSelectedMaterial(e.target.value)}
+                        style={styles.mobileHiddenSelect}
+                      >
+                        <option value="All">All Materials</option>
+                        {uniqueMaterials.map((mat) => (
+                          <option key={mat} value={mat}>{mat}</option>
+                        ))}
+                      </select>
+                    ) : (
+                      <TouchableOpacity
+                        style={StyleSheet.absoluteFill}
+                        onPress={() => setMobilePicker({ title: 'Material', options: uniqueMaterials, current: selectedMaterial, onSelect: setSelectedMaterial })}
+                      />
+                    )}
+                  </View>
+                </View>
+              </View>
+            </View>
+
+            {/* Right: Actions Column (Add Entry & Import Excel) */}
+            <View style={styles.mobileActionsCol}>
+              <TouchableOpacity
+                style={styles.mobileAddBtn}
+                onPress={onOpenAddModal}
+                activeOpacity={0.85}
+              >
+                <Ionicons name="add" size={16} color="#ffffff" style={{ marginRight: 2 }} />
+                <Text style={styles.mobileAddBtnText}>Add Entry</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={styles.mobileImportBtn}
+                onPress={onOpenImportModal}
+                activeOpacity={0.85}
+              >
+                <Ionicons name="cloud-upload-outline" size={15} color="#059669" style={{ marginRight: 4 }} />
+                <Text style={styles.mobileImportBtnText}>Import Excel</Text>
+              </TouchableOpacity>
+
+              {selectedIds.size > 0 && (
+                <TouchableOpacity
+                  style={styles.mobileDeleteBtn}
+                  onPress={handleDelete}
+                  disabled={deleting}
+                  activeOpacity={0.85}
+                >
+                  {deleting ? (
+                    <ActivityIndicator size="small" color="#ffffff" />
+                  ) : (
+                    <>
+                      <Ionicons name="trash-outline" size={14} color="#ffffff" style={{ marginRight: 4 }} />
+                      <Text style={styles.mobileDeleteBtnText}>Delete ({selectedIds.size})</Text>
+                    </>
+                  )}
+                </TouchableOpacity>
+              )}
+            </View>
           </View>
         </View>
-      </View>
+      ) : (
+        /* Desktop Top Action Bar & Filter Bar */
+        <>
+          <View style={styles.actionHeader}>
+            <View style={styles.actionHeaderTopRow}>
+              <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                <Text style={styles.titleText} numberOfLines={1}>All Entries</Text>
+                <View style={[styles.countBadge, hasActiveFilter && styles.countBadgeFiltered]}>
+                  <Text style={[styles.countText, hasActiveFilter && styles.countTextFiltered]}>
+                    {hasActiveFilter ? `${filteredEntries.length} / ${entries.length}` : entries.length}
+                  </Text>
+                </View>
+              </View>
 
-      {/* Filter Bar: Date, Type, Mode, Material, Party */}
-      <View style={styles.filterBar}>
-        <ScrollView
-          horizontal={true}
-          showsHorizontalScrollIndicator={false}
-          contentContainerStyle={styles.filterBarScroll}
-        >
-          <View style={styles.filterTitleGroup}>
-            <Ionicons name="funnel" size={14} color="#0284c7" style={{ marginRight: 5 }} />
-            <Text style={styles.filterBarTitle}>Filters:</Text>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                <View style={styles.toggleGroup}>
+                  <TouchableOpacity
+                    style={[styles.toggleBtn, viewMode === 'cards' && styles.toggleBtnActive]}
+                    onPress={() => setViewMode('cards')}
+                    activeOpacity={0.7}
+                  >
+                    <Ionicons
+                      name="list"
+                      size={15}
+                      color={viewMode === 'cards' ? '#0284c7' : '#64748b'}
+                    />
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={[styles.toggleBtn, viewMode === 'table' && styles.toggleBtnActive]}
+                    onPress={() => setViewMode('table')}
+                    activeOpacity={0.7}
+                  >
+                    <Ionicons
+                      name="grid"
+                      size={15}
+                      color={viewMode === 'table' ? '#0284c7' : '#64748b'}
+                    />
+                  </TouchableOpacity>
+                </View>
+
+                <TouchableOpacity style={styles.addBtn} onPress={onOpenAddModal} activeOpacity={0.85}>
+                  <Ionicons name="add" size={17} color="#ffffff" style={{ marginRight: 2 }} />
+                  <Text style={styles.addBtnText}>Add Entry</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+
+            <View style={styles.actionHeaderBottomRow}>
+              <View style={styles.sourceToggleGroup}>
+                <TouchableOpacity
+                  style={[styles.sourcePillBtn, selectedSource === 'All' && styles.sourcePillBtnActive]}
+                  onPress={() => setSelectedSource('All')}
+                  activeOpacity={0.7}
+                >
+                  <Text style={[styles.sourcePillText, selectedSource === 'All' && styles.sourcePillTextActive]}>
+                    All ({countsBySource.total})
+                  </Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[styles.sourcePillBtn, selectedSource === 'Excel Import' && styles.sourcePillBtnActive]}
+                  onPress={() => setSelectedSource('Excel Import')}
+                  activeOpacity={0.7}
+                >
+                  <Ionicons name="document-text" size={12} color={selectedSource === 'Excel Import' ? '#047857' : '#059669'} style={{ marginRight: 3 }} />
+                  <Text style={[styles.sourcePillText, selectedSource === 'Excel Import' && styles.sourcePillTextActive, { color: selectedSource === 'Excel Import' ? '#047857' : '#059669' }]}>
+                    Excel ({countsBySource.excel})
+                  </Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[styles.sourcePillBtn, selectedSource === 'Manual Entry' && styles.sourcePillBtnActive]}
+                  onPress={() => setSelectedSource('Manual Entry')}
+                  activeOpacity={0.7}
+                >
+                  <Ionicons name="create-outline" size={12} color={selectedSource === 'Manual Entry' ? '#0284c7' : '#0284c7'} style={{ marginRight: 3 }} />
+                  <Text style={[styles.sourcePillText, selectedSource === 'Manual Entry' && styles.sourcePillTextActive, { color: selectedSource === 'Manual Entry' ? '#0369a1' : '#0284c7' }]}>
+                    Manual ({countsBySource.manual})
+                  </Text>
+                </TouchableOpacity>
+              </View>
+
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                {selectedIds.size > 0 && (
+                  <TouchableOpacity
+                    style={[styles.deleteBtn, styles.deleteBtnActive]}
+                    onPress={handleDelete}
+                    disabled={deleting}
+                    activeOpacity={0.8}
+                  >
+                    {deleting ? (
+                      <ActivityIndicator size="small" color="#ffffff" style={{ marginRight: 4 }} />
+                    ) : (
+                      <Ionicons name="trash-outline" size={15} color="#ffffff" style={{ marginRight: 4 }} />
+                    )}
+                    <Text style={styles.deleteBtnTextActive}>Delete ({selectedIds.size})</Text>
+                  </TouchableOpacity>
+                )}
+
+                <TouchableOpacity
+                  style={styles.importExcelBtn}
+                  onPress={onOpenImportModal}
+                  activeOpacity={0.8}
+                >
+                  <Ionicons name="cloud-upload-outline" size={15} color="#059669" style={{ marginRight: 4 }} />
+                  <Text style={styles.importExcelBtnText}>Import Excel</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
           </View>
 
-          {/* Date Filter */}
-          <View style={styles.filterControl}>
-            <Text style={styles.filterLabel}>Date</Text>
-            {Platform.OS === 'web' ? (
-              <select
-                value={selectedDate}
-                onChange={(e) => setSelectedDate(e.target.value)}
-                style={{
-                  ...styles.webSelectStyle,
-                  borderColor: selectedDate !== 'All' ? '#0284c7' : '#cbd5e1',
-                  backgroundColor: selectedDate !== 'All' ? '#f0f9ff' : '#ffffff',
-                }}
-              >
-                <option value="All">All Dates</option>
-                {uniqueDates.map((d) => (
-                  <option key={d} value={d}>
-                    {d}
-                  </option>
-                ))}
-              </select>
-            ) : (
-              <TouchableOpacity
-                style={[styles.mobileFilterBtn, selectedDate !== 'All' && styles.mobileFilterBtnActive]}
-                onPress={() => setMobilePicker({ title: 'Date', options: uniqueDates, current: selectedDate, onSelect: setSelectedDate })}
-              >
-                <Text style={styles.mobileFilterBtnText} numberOfLines={1}>
-                  {selectedDate === 'All' ? 'All Dates' : selectedDate}
-                </Text>
-                <Ionicons name="chevron-down" size={13} color="#64748b" />
-              </TouchableOpacity>
-            )}
-          </View>
-
-          {/* Type Filter */}
-          <View style={styles.filterControl}>
-            <Text style={styles.filterLabel}>Type</Text>
-            {Platform.OS === 'web' ? (
-              <select
-                value={selectedType}
-                onChange={(e) => setSelectedType(e.target.value)}
-                style={{
-                  ...styles.webSelectStyle,
-                  borderColor: selectedType !== 'All' ? '#0284c7' : '#cbd5e1',
-                  backgroundColor: selectedType !== 'All' ? '#f0f9ff' : '#ffffff',
-                }}
-              >
-                <option value="All">All Types</option>
-                {uniqueTypes.map((t) => (
-                  <option key={t} value={t}>
-                    {t}
-                  </option>
-                ))}
-              </select>
-            ) : (
-              <TouchableOpacity
-                style={[styles.mobileFilterBtn, selectedType !== 'All' && styles.mobileFilterBtnActive]}
-                onPress={() => setMobilePicker({ title: 'Type', options: uniqueTypes, current: selectedType, onSelect: setSelectedType })}
-              >
-                <Text style={styles.mobileFilterBtnText} numberOfLines={1}>
-                  {selectedType === 'All' ? 'All Types' : selectedType}
-                </Text>
-                <Ionicons name="chevron-down" size={13} color="#64748b" />
-              </TouchableOpacity>
-            )}
-          </View>
-
-          {/* Mode Filter */}
-          <View style={styles.filterControl}>
-            <Text style={styles.filterLabel}>Mode</Text>
-            {Platform.OS === 'web' ? (
-              <select
-                value={selectedMode}
-                onChange={(e) => setSelectedMode(e.target.value)}
-                style={{
-                  ...styles.webSelectStyle,
-                  borderColor: selectedMode !== 'All' ? '#0284c7' : '#cbd5e1',
-                  backgroundColor: selectedMode !== 'All' ? '#f0f9ff' : '#ffffff',
-                }}
-              >
-                <option value="All">All Modes</option>
-                {uniqueModes.map((m) => (
-                  <option key={m} value={m}>
-                    {m}
-                  </option>
-                ))}
-              </select>
-            ) : (
-              <TouchableOpacity
-                style={[styles.mobileFilterBtn, selectedMode !== 'All' && styles.mobileFilterBtnActive]}
-                onPress={() => setMobilePicker({ title: 'Mode', options: uniqueModes, current: selectedMode, onSelect: setSelectedMode })}
-              >
-                <Text style={styles.mobileFilterBtnText} numberOfLines={1}>
-                  {selectedMode === 'All' ? 'All Modes' : selectedMode}
-                </Text>
-                <Ionicons name="chevron-down" size={13} color="#64748b" />
-              </TouchableOpacity>
-            )}
-          </View>
-
-          {/* Material Name Filter */}
-          <View style={styles.filterControl}>
-            <Text style={styles.filterLabel}>Material</Text>
-            {Platform.OS === 'web' ? (
-              <select
-                value={selectedMaterial}
-                onChange={(e) => setSelectedMaterial(e.target.value)}
-                style={{
-                  ...styles.webSelectStyle,
-                  borderColor: selectedMaterial !== 'All' ? '#0284c7' : '#cbd5e1',
-                  backgroundColor: selectedMaterial !== 'All' ? '#f0f9ff' : '#ffffff',
-                }}
-              >
-                <option value="All">All Materials</option>
-                {uniqueMaterials.map((mat) => (
-                  <option key={mat} value={mat}>
-                    {mat}
-                  </option>
-                ))}
-              </select>
-            ) : (
-              <TouchableOpacity
-                style={[styles.mobileFilterBtn, selectedMaterial !== 'All' && styles.mobileFilterBtnActive]}
-                onPress={() => setMobilePicker({ title: 'Material', options: uniqueMaterials, current: selectedMaterial, onSelect: setSelectedMaterial })}
-              >
-                <Text style={styles.mobileFilterBtnText} numberOfLines={1}>
-                  {selectedMaterial === 'All' ? 'All Materials' : selectedMaterial}
-                </Text>
-                <Ionicons name="chevron-down" size={13} color="#64748b" />
-              </TouchableOpacity>
-            )}
-          </View>
-
-          {/* Party Wise Filter */}
-          <View style={styles.filterControl}>
-            <Text style={styles.filterLabel}>Party</Text>
-            {Platform.OS === 'web' ? (
-              <select
-                value={selectedParty}
-                onChange={(e) => setSelectedParty(e.target.value)}
-                style={{
-                  ...styles.webSelectStyle,
-                  minWidth: 140,
-                  maxWidth: 210,
-                  borderColor: selectedParty !== 'All' ? '#0284c7' : '#cbd5e1',
-                  backgroundColor: selectedParty !== 'All' ? '#f0f9ff' : '#ffffff',
-                }}
-              >
-                <option value="All">All Parties</option>
-                {uniqueParties.map((p) => (
-                  <option key={p} value={p}>
-                    {p}
-                  </option>
-                ))}
-              </select>
-            ) : (
-              <TouchableOpacity
-                style={[styles.mobileFilterBtn, selectedParty !== 'All' && styles.mobileFilterBtnActive]}
-                onPress={() => setMobilePicker({ title: 'Party', options: uniqueParties, current: selectedParty, onSelect: setSelectedParty })}
-              >
-                <Text style={styles.mobileFilterBtnText} numberOfLines={1}>
-                  {selectedParty === 'All' ? 'All Parties' : selectedParty}
-                </Text>
-                <Ionicons name="chevron-down" size={13} color="#64748b" />
-              </TouchableOpacity>
-            )}
-          </View>
-
-          {/* Reset Filters Button */}
-          {hasActiveFilter && (
-            <TouchableOpacity
-              style={styles.clearFilterBtn}
-              onPress={handleClearFilters}
-              activeOpacity={0.7}
-              title="Reset all filters"
+          <View style={styles.filterBar}>
+            <ScrollView
+              horizontal={true}
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={styles.filterBarScroll}
             >
-              <Ionicons name="close-circle" size={14} color="#ef4444" style={{ marginRight: 4 }} />
-              <Text style={styles.clearFilterBtnText}>Reset</Text>
-            </TouchableOpacity>
-          )}
-        </ScrollView>
-      </View>
+              <View style={styles.filterTitleGroup}>
+                <Ionicons name="funnel" size={14} color="#0284c7" style={{ marginRight: 5 }} />
+                <Text style={styles.filterBarTitle}>Filters:</Text>
+              </View>
+
+              <View style={styles.filterControl}>
+                <Text style={styles.filterLabel}>Date</Text>
+                {Platform.OS === 'web' ? (
+                  <select
+                    value={selectedDate}
+                    onChange={(e) => setSelectedDate(e.target.value)}
+                    style={{
+                      ...styles.webSelectStyle,
+                      borderColor: selectedDate !== 'All' ? '#0284c7' : '#cbd5e1',
+                      backgroundColor: selectedDate !== 'All' ? '#f0f9ff' : '#ffffff',
+                    }}
+                  >
+                    <option value="All">All Dates</option>
+                    {uniqueDates.map((d) => (
+                      <option key={d} value={d}>
+                        {d}
+                      </option>
+                    ))}
+                  </select>
+                ) : (
+                  <TouchableOpacity
+                    style={[styles.mobileFilterBtn, selectedDate !== 'All' && styles.mobileFilterBtnActive]}
+                    onPress={() => setMobilePicker({ title: 'Date', options: uniqueDates, current: selectedDate, onSelect: setSelectedDate })}
+                  >
+                    <Text style={styles.mobileFilterBtnText} numberOfLines={1}>
+                      {selectedDate === 'All' ? 'All Dates' : selectedDate}
+                    </Text>
+                    <Ionicons name="chevron-down" size={13} color="#64748b" />
+                  </TouchableOpacity>
+                )}
+              </View>
+
+              <View style={styles.filterControl}>
+                <Text style={styles.filterLabel}>Type</Text>
+                {Platform.OS === 'web' ? (
+                  <select
+                    value={selectedType}
+                    onChange={(e) => setSelectedType(e.target.value)}
+                    style={{
+                      ...styles.webSelectStyle,
+                      borderColor: selectedType !== 'All' ? '#0284c7' : '#cbd5e1',
+                      backgroundColor: selectedType !== 'All' ? '#f0f9ff' : '#ffffff',
+                    }}
+                  >
+                    <option value="All">All Types</option>
+                    {uniqueTypes.map((t) => (
+                      <option key={t} value={t}>
+                        {t}
+                      </option>
+                    ))}
+                  </select>
+                ) : (
+                  <TouchableOpacity
+                    style={[styles.mobileFilterBtn, selectedType !== 'All' && styles.mobileFilterBtnActive]}
+                    onPress={() => setMobilePicker({ title: 'Type', options: uniqueTypes, current: selectedType, onSelect: setSelectedType })}
+                  >
+                    <Text style={styles.mobileFilterBtnText} numberOfLines={1}>
+                      {selectedType === 'All' ? 'All Types' : selectedType}
+                    </Text>
+                    <Ionicons name="chevron-down" size={13} color="#64748b" />
+                  </TouchableOpacity>
+                )}
+              </View>
+
+              <View style={styles.filterControl}>
+                <Text style={styles.filterLabel}>Mode</Text>
+                {Platform.OS === 'web' ? (
+                  <select
+                    value={selectedMode}
+                    onChange={(e) => setSelectedMode(e.target.value)}
+                    style={{
+                      ...styles.webSelectStyle,
+                      borderColor: selectedMode !== 'All' ? '#0284c7' : '#cbd5e1',
+                      backgroundColor: selectedMode !== 'All' ? '#f0f9ff' : '#ffffff',
+                    }}
+                  >
+                    <option value="All">All Modes</option>
+                    {uniqueModes.map((m) => (
+                      <option key={m} value={m}>
+                        {m}
+                      </option>
+                    ))}
+                  </select>
+                ) : (
+                  <TouchableOpacity
+                    style={[styles.mobileFilterBtn, selectedMode !== 'All' && styles.mobileFilterBtnActive]}
+                    onPress={() => setMobilePicker({ title: 'Mode', options: uniqueModes, current: selectedMode, onSelect: setSelectedMode })}
+                  >
+                    <Text style={styles.mobileFilterBtnText} numberOfLines={1}>
+                      {selectedMode === 'All' ? 'All Modes' : selectedMode}
+                    </Text>
+                    <Ionicons name="chevron-down" size={13} color="#64748b" />
+                  </TouchableOpacity>
+                )}
+              </View>
+
+              <View style={styles.filterControl}>
+                <Text style={styles.filterLabel}>Material</Text>
+                {Platform.OS === 'web' ? (
+                  <select
+                    value={selectedMaterial}
+                    onChange={(e) => setSelectedMaterial(e.target.value)}
+                    style={{
+                      ...styles.webSelectStyle,
+                      borderColor: selectedMaterial !== 'All' ? '#0284c7' : '#cbd5e1',
+                      backgroundColor: selectedMaterial !== 'All' ? '#f0f9ff' : '#ffffff',
+                    }}
+                  >
+                    <option value="All">All Materials</option>
+                    {uniqueMaterials.map((mat) => (
+                      <option key={mat} value={mat}>
+                        {mat}
+                      </option>
+                    ))}
+                  </select>
+                ) : (
+                  <TouchableOpacity
+                    style={[styles.mobileFilterBtn, selectedMaterial !== 'All' && styles.mobileFilterBtnActive]}
+                    onPress={() => setMobilePicker({ title: 'Material', options: uniqueMaterials, current: selectedMaterial, onSelect: setSelectedMaterial })}
+                  >
+                    <Text style={styles.mobileFilterBtnText} numberOfLines={1}>
+                      {selectedMaterial === 'All' ? 'All Materials' : selectedMaterial}
+                    </Text>
+                    <Ionicons name="chevron-down" size={13} color="#64748b" />
+                  </TouchableOpacity>
+                )}
+              </View>
+
+              <View style={styles.filterControl}>
+                <Text style={styles.filterLabel}>Party</Text>
+                {Platform.OS === 'web' ? (
+                  <select
+                    value={selectedParty}
+                    onChange={(e) => setSelectedParty(e.target.value)}
+                    style={{
+                      ...styles.webSelectStyle,
+                      minWidth: 140,
+                      maxWidth: 210,
+                      borderColor: selectedParty !== 'All' ? '#0284c7' : '#cbd5e1',
+                      backgroundColor: selectedParty !== 'All' ? '#f0f9ff' : '#ffffff',
+                    }}
+                  >
+                    <option value="All">All Parties</option>
+                    {uniqueParties.map((p) => (
+                      <option key={p} value={p}>
+                        {p}
+                      </option>
+                    ))}
+                  </select>
+                ) : (
+                  <TouchableOpacity
+                    style={[styles.mobileFilterBtn, selectedParty !== 'All' && styles.mobileFilterBtnActive]}
+                    onPress={() => setMobilePicker({ title: 'Party', options: uniqueParties, current: selectedParty, onSelect: setSelectedParty })}
+                  >
+                    <Text style={styles.mobileFilterBtnText} numberOfLines={1}>
+                      {selectedParty === 'All' ? 'All Parties' : selectedParty}
+                    </Text>
+                    <Ionicons name="chevron-down" size={13} color="#64748b" />
+                  </TouchableOpacity>
+                )}
+              </View>
+
+              {hasActiveFilter && (
+                <TouchableOpacity
+                  style={styles.clearFilterBtn}
+                  onPress={handleClearFilters}
+                  activeOpacity={0.7}
+                  title="Reset all filters"
+                >
+                  <Ionicons name="close-circle" size={14} color="#ef4444" style={{ marginRight: 4 }} />
+                  <Text style={styles.clearFilterBtnText}>Reset</Text>
+                </TouchableOpacity>
+              )}
+            </ScrollView>
+          </View>
+        </>
+      )}
 
       {/* Loading State */}
       {loading ? (
@@ -631,120 +896,160 @@ export const AllEntriesView = React.memo(({ entries, loading, onOpenAddModal, on
           )}
 
           {filteredEntries.slice(0, cardRenderLimit).map((entry, idx) => {
-            const badge = getBadgeColor(entry.saved_in);
             const isSelected = selectedIds.has(entry.id);
             return (
-              <View
-                key={entry.id || idx}
-                style={[styles.entryCard, isSelected && styles.entryCardSelected]}
-              >
-                {/* 1. Card Top Bar: Checkbox, Challan ID, Date, Source, and Mode badge */}
-                <View style={styles.cardTopRow}>
-                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-                    <TouchableOpacity
-                      onPress={() => toggleSelectOne(entry.id)}
-                      activeOpacity={0.7}
-                      style={{ padding: 2 }}
-                    >
-                      <Ionicons
-                        name={isSelected ? 'checkbox' : 'square-outline'}
-                        size={20}
-                        color={isSelected ? '#0284c7' : '#94a3b8'}
-                      />
-                    </TouchableOpacity>
-                    <View style={styles.challanBadge}>
-                      <Text style={styles.challanText}>{entry.challan_no}</Text>
-                    </View>
-                    <Text style={styles.cardDateText}>{entry.date}</Text>
-                  </View>
+              <View key={entry.id || idx} style={[styles.refEntryCard, isSelected && styles.refEntryCardSelected]}>
+                {/* 1. Header Strip: Column Names */}
+                <View style={styles.refCardHeaderStrip}>
+                  <View style={{ width: 28 }} />
+                  <Text style={[styles.refCardHeaderCol, { flex: 1.1 }]}>DATE</Text>
+                  <Text style={[styles.refCardHeaderCol, { flex: 1 }]}>CHALLANNO</Text>
+                  <Text style={[styles.refCardHeaderCol, { flex: 1.3 }]}>VEHICLENO</Text>
+                  <Text style={[styles.refCardHeaderCol, { flex: 1.2 }]}>TRANSPORTTYPE</Text>
+                </View>
 
-                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-                    <View style={[styles.sourceBadge, entry.entry_source === 'manual' ? styles.sourceBadgeManual : styles.sourceBadgeExcel]}>
-                      <Text style={[styles.sourceBadgeText, entry.entry_source === 'manual' ? styles.sourceBadgeTextManual : styles.sourceBadgeTextExcel]}>
-                        {entry.entry_source === 'manual' ? 'Manual' : 'Excel'}
+                {/* 2. Sub-header: Values Row with Checkbox */}
+                <View style={styles.refCardSubHeaderRow}>
+                  <TouchableOpacity
+                    onPress={() => toggleSelectOne(entry.id)}
+                    style={styles.refCardCheckboxWrap}
+                    activeOpacity={0.7}
+                  >
+                    <Ionicons
+                      name={isSelected ? 'checkbox' : 'square-outline'}
+                      size={18}
+                      color={isSelected ? '#0284c7' : '#94a3b8'}
+                    />
+                  </TouchableOpacity>
+                  <Text style={[styles.refCardSubVal, { flex: 1.1 }]} numberOfLines={1}>
+                    {entry.date || '-'}
+                  </Text>
+                  <Text style={[styles.refCardSubValBold, { flex: 1 }]} numberOfLines={1}>
+                    {entry.challan_no || '-'}
+                  </Text>
+                  <Text style={[styles.refCardSubVal, { flex: 1.3 }]} numberOfLines={1}>
+                    {entry.vehicle_no || '-'}
+                  </Text>
+                  <Text style={[styles.refCardSubVal, { flex: 1.2 }]} numberOfLines={1}>
+                    {entry.transport_type || '-'}
+                  </Text>
+                </View>
+
+                {/* 3. Divider */}
+                <View style={styles.refCardDivider} />
+
+                {/* 4. 2-Column Key-Value Grid */}
+                <View style={styles.refCardGridBody}>
+                  {/* Row 1: TYPE/MODE | PARTYNAME */}
+                  <View style={styles.refCardGridRow}>
+                    <View style={styles.refCardGridCol}>
+                      <Text style={styles.refCardFieldLabel}>TYPE/MODE</Text>
+                      <Text style={styles.refCardFieldVal} numberOfLines={1}>
+                        {entry.type_mode || 'N/A'}
                       </Text>
                     </View>
-                    <View style={[styles.collectionBadge, { backgroundColor: badge.bg }]}>
-                      <Text style={[styles.collectionBadgeText, { color: badge.text }]}>
-                        {formatSavedInLabel(entry.saved_in || entry.type_mode)}
+                    <View style={styles.refCardGridCol}>
+                      <Text style={styles.refCardFieldLabel}>PARTYNAME</Text>
+                      <Text style={styles.refCardFieldVal} numberOfLines={2}>
+                        {entry.party_name || 'N/A'}
                       </Text>
+                    </View>
+                  </View>
+
+                  {/* Row 2: MATERIALNAME | CUM */}
+                  <View style={styles.refCardGridRow}>
+                    <View style={styles.refCardGridCol}>
+                      <Text style={styles.refCardFieldLabel}>MATERIALNAME</Text>
+                      <Text style={styles.refCardFieldVal} numberOfLines={1}>
+                        {entry.material_name || 'N/A'}
+                      </Text>
+                    </View>
+                    <View style={styles.refCardGridCol}>
+                      <Text style={styles.refCardFieldLabel}>CUM</Text>
+                      <Text style={styles.refCardFieldVal} numberOfLines={1}>
+                        {entry.cum || 0}
+                      </Text>
+                    </View>
+                  </View>
+
+                  {/* Row 3: ETP NO. | G.WT */}
+                  <View style={styles.refCardGridRow}>
+                    <View style={styles.refCardGridCol}>
+                      <Text style={styles.refCardFieldLabel}>ETP NO.</Text>
+                      <Text style={styles.refCardFieldVal} numberOfLines={1}>
+                        {entry.etp_no || '-'}
+                      </Text>
+                    </View>
+                    <View style={styles.refCardGridCol}>
+                      <Text style={styles.refCardFieldLabel}>G.WT</Text>
+                      <Text style={styles.refCardFieldVal} numberOfLines={1}>
+                        {Number(entry.g_wt || 0).toLocaleString('en-IN')}
+                      </Text>
+                    </View>
+                  </View>
+
+                  {/* Row 4: T.WT | NET WT (Net WT is Blue) */}
+                  <View style={styles.refCardGridRow}>
+                    <View style={styles.refCardGridCol}>
+                      <Text style={styles.refCardFieldLabel}>T.WT</Text>
+                      <Text style={styles.refCardFieldVal} numberOfLines={1}>
+                        {Number(entry.t_wt || 0).toLocaleString('en-IN')}
+                      </Text>
+                    </View>
+                    <View style={styles.refCardGridCol}>
+                      <Text style={styles.refCardFieldLabel}>NET WT</Text>
+                      <Text style={[styles.refCardFieldVal, styles.refCardNetWtVal]} numberOfLines={1}>
+                        {Number(entry.net_wt || 0).toLocaleString('en-IN')}
+                      </Text>
+                    </View>
+                  </View>
+
+                  {/* Row 5: RATE | AMOUNT (Amount is Green) */}
+                  <View style={styles.refCardGridRow}>
+                    <View style={styles.refCardGridCol}>
+                      <Text style={styles.refCardFieldLabel}>RATE</Text>
+                      <Text style={styles.refCardFieldVal} numberOfLines={1}>
+                        ₹{entry.rate || 0}
+                      </Text>
+                    </View>
+                    <View style={styles.refCardGridCol}>
+                      <Text style={styles.refCardFieldLabel}>AMOUNT</Text>
+                      <Text style={[styles.refCardFieldVal, styles.refCardAmountVal]} numberOfLines={1}>
+                        ₹{Number(entry.amount || 0).toLocaleString('en-IN')}
+                      </Text>
+                    </View>
+                  </View>
+
+                  {/* Row 6: TOTAL AMT (Green) | DIRECT DESTINATION (Purple Pill) */}
+                  <View style={styles.refCardGridRow}>
+                    <View style={styles.refCardGridCol}>
+                      <Text style={styles.refCardFieldLabel}>TOTAL AMT</Text>
+                      <Text style={[styles.refCardFieldVal, styles.refCardTotalVal]} numberOfLines={1}>
+                        ₹{Number(entry.total_amount || 0).toLocaleString('en-IN')}
+                      </Text>
+                    </View>
+                    <View style={styles.refCardGridCol}>
+                      <Text style={styles.refCardFieldLabel}>DIRECT DESTINATION</Text>
+                      <View style={styles.refDestinationPill}>
+                        <Text style={styles.refDestinationPillText} numberOfLines={1}>
+                          {entry.saved_in || 'hr_loading'}
+                        </Text>
+                      </View>
                     </View>
                   </View>
                 </View>
 
-                {/* 2. Prominent Party / Buyer Name */}
-                <View style={styles.cardPartyRow}>
-                  <View style={styles.cardPartyIconSquircle}>
-                    <Ionicons name="business" size={14} color="#0284c7" />
-                  </View>
-                  <View style={{ flex: 1 }}>
-                    <Text style={styles.cardPartyLabel}>PARTY / BUYER</Text>
-                    <Text style={styles.cardPartyName} numberOfLines={2}>
-                      {entry.party_name || 'N/A'}
+                {/* 5. Footer Row: Truck Icon Badge on Left | Source Badge on Right */}
+                <View style={styles.refCardFooterRow}>
+                  <View style={styles.refTruckBadge}>
+                    <Ionicons name="bus" size={13} color="#7c3aed" style={{ marginRight: 5 }} />
+                    <Text style={styles.refTruckBadgeText} numberOfLines={1}>
+                      {entry.saved_in || 'hr_loading'}
                     </Text>
                   </View>
-                </View>
-
-                {/* 3. Vehicle, Transport, & Material Chips Row */}
-                <View style={styles.cardChipsRow}>
-                  <View style={styles.cardChipItem}>
-                    <Ionicons name="car-outline" size={13} color="#475569" style={{ marginRight: 4 }} />
-                    <Text style={styles.cardChipText}>{entry.vehicle_no || 'N/A'}</Text>
-                  </View>
-                  <View style={styles.cardChipItem}>
-                    <Ionicons name="bus-outline" size={13} color="#475569" style={{ marginRight: 4 }} />
-                    <Text style={styles.cardChipText}>{entry.transport_type || 'N/A'}</Text>
-                  </View>
-                  <View style={[styles.cardChipItem, { backgroundColor: '#f0fdf4', borderColor: '#bbf7d0' }]}>
-                    <Ionicons name="cube-outline" size={13} color="#16a34a" style={{ marginRight: 4 }} />
-                    <Text style={[styles.cardChipText, { color: '#166534', fontWeight: '700' }]}>
-                      {entry.material_name || 'N/A'}
-                    </Text>
-                  </View>
-                </View>
-
-                {/* 4. 4-Column Structured Metric Box (Gross, Tare, Net, Rate) */}
-                <View style={styles.cardMetricsBox}>
-                  <View style={styles.metricCol}>
-                    <Text style={styles.metricColLabel}>GROSS WT</Text>
-                    <Text style={styles.metricColVal}>{formatINR(entry.g_wt)}</Text>
-                  </View>
-                  <View style={styles.metricDivider} />
-                  <View style={styles.metricCol}>
-                    <Text style={styles.metricColLabel}>TARE WT</Text>
-                    <Text style={styles.metricColVal}>{formatINR(entry.t_wt)}</Text>
-                  </View>
-                  <View style={styles.metricDivider} />
-                  <View style={styles.metricCol}>
-                    <Text style={[styles.metricColLabel, { color: '#0284c7' }]}>NET WT</Text>
-                    <Text style={[styles.metricColVal, { color: '#0284c7', fontWeight: '800' }]}>
-                      {formatINR(entry.net_wt)}
-                    </Text>
-                  </View>
-                  <View style={styles.metricDivider} />
-                  <View style={styles.metricCol}>
-                    <Text style={styles.metricColLabel}>RATE</Text>
-                    <Text style={styles.metricColVal}>₹{entry.rate || 0}</Text>
-                  </View>
-                </View>
-
-                {/* 5. Footer: Mode, ETP, and Grand Total */}
-                <View style={styles.cardFooter}>
-                  <View style={{ flex: 1, marginRight: 8 }}>
-                    <Text style={styles.cardModeText} numberOfLines={1}>
-                      Mode: <Text style={{ color: '#0f172a', fontWeight: '700' }}>{entry.type_mode || 'N/A'}</Text>
-                      {entry.payment_mode ? ` (${entry.payment_mode})` : ''}
-                    </Text>
-                    {entry.etp_no ? (
-                      <Text style={styles.cardEtpText} numberOfLines={1}>
-                        ETP: {entry.etp_no}
-                      </Text>
-                    ) : null}
-                  </View>
-                  <View style={styles.totalBox}>
-                    <Text style={styles.totalLabel}>TOTAL AMOUNT</Text>
-                    <Text style={styles.totalAmountText}>
-                      ₹ {formatINR(entry.total_amount)}
+                  <View style={[styles.refSourcePill, entry.entry_source === 'manual' ? styles.refSourcePillManual : styles.refSourcePillExcel]}>
+                    <Text style={[styles.refSourcePillText, entry.entry_source === 'manual' ? styles.refSourcePillTextManual : styles.refSourcePillTextExcel]}>
+                      {entry.entry_source === 'manual' ? 'Manual' : 'Excel'}
                     </Text>
                   </View>
                 </View>
@@ -1645,5 +1950,394 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: '#64748b',
     textDecorationLine: 'underline',
+  },
+
+  /* Exact Mobile Layout Styles (Matching reference screenshot media_1792651587761.png) */
+  mobileHeaderWrap: {
+    paddingHorizontal: 12,
+    paddingTop: 12,
+    paddingBottom: 8,
+    backgroundColor: '#ffffff',
+    borderBottomWidth: 1,
+    borderBottomColor: '#e2e8f0',
+    gap: 10,
+  },
+  mobileTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    width: '100%',
+  },
+  mobileTitleText: {
+    fontSize: 20,
+    fontWeight: '800',
+    color: '#0f172a',
+    letterSpacing: -0.3,
+  },
+  mobileCountBadge: {
+    marginLeft: 8,
+    backgroundColor: '#e0f2fe',
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 12,
+  },
+  mobileCountBadgeFiltered: {
+    backgroundColor: '#bae6fd',
+  },
+  mobileCountBadgeText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#0284c7',
+  },
+  mobileCountBadgeTextFiltered: {
+    color: '#0369a1',
+  },
+  mobileToggleGroup: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  mobileToggleBtn: {
+    width: 34,
+    height: 34,
+    borderRadius: 8,
+    backgroundColor: '#ffffff',
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  mobileToggleBtnActive: {
+    backgroundColor: '#e0f2fe',
+    borderColor: '#bae6fd',
+  },
+  mobileSourceRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  mobileSourceTab: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 6,
+    paddingHorizontal: 12,
+    borderRadius: 8,
+    backgroundColor: '#f1f5f9',
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+  },
+  mobileSourceTabActive: {
+    backgroundColor: '#0284c7',
+    borderColor: '#0284c7',
+  },
+  mobileSourceTabText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#334155',
+  },
+  mobileSourceTabTextActive: {
+    color: '#ffffff',
+    fontWeight: '700',
+  },
+  mobileFiltersActionsRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 8,
+    width: '100%',
+    paddingTop: 2,
+  },
+  mobileFiltersCol: {
+    flex: 1,
+    minWidth: 0,
+    gap: 6,
+  },
+  mobileFiltersHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  mobileFiltersPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#ffffff',
+    borderWidth: 1,
+    borderColor: '#cbd5e1',
+    borderRadius: 6,
+    paddingHorizontal: 8,
+    paddingVertical: 3.5,
+    alignSelf: 'flex-start',
+  },
+  mobileFiltersPillText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#0f172a',
+  },
+  mobileResetPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#fef2f2',
+    borderWidth: 1,
+    borderColor: '#fecaca',
+    borderRadius: 6,
+    paddingHorizontal: 7,
+    paddingVertical: 3.5,
+  },
+  mobileResetPillText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#ef4444',
+  },
+  mobileFiltersGrid: {
+    gap: 6,
+  },
+  mobileFilterRow: {
+    flexDirection: 'row',
+    gap: 6,
+  },
+  mobileFilterCard: {
+    flex: 1,
+    minWidth: 0,
+    backgroundColor: '#ffffff',
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+    borderRadius: 10,
+    paddingHorizontal: 8,
+    paddingVertical: 6,
+    position: 'relative',
+  },
+  mobileFilterCardLabel: {
+    fontSize: 9,
+    fontWeight: '700',
+    color: '#64748b',
+    letterSpacing: 0.3,
+    marginBottom: 2,
+  },
+  mobileFilterCardValRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 4,
+  },
+  mobileFilterCardVal: {
+    fontSize: 11.5,
+    fontWeight: '600',
+    color: '#0f172a',
+    flex: 1,
+  },
+  mobileHiddenSelect: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    width: '100%',
+    height: '100%',
+    opacity: 0,
+    cursor: 'pointer',
+  },
+  mobileActionsCol: {
+    width: 100,
+    flexShrink: 0,
+    gap: 6,
+    paddingTop: 23,
+  },
+  mobileAddBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#0284c7',
+    borderRadius: 8,
+    height: 36,
+    paddingHorizontal: 8,
+  },
+  mobileAddBtnText: {
+    fontSize: 11.5,
+    fontWeight: '700',
+    color: '#ffffff',
+  },
+  mobileImportBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#ffffff',
+    borderWidth: 1,
+    borderColor: '#10b981',
+    borderRadius: 8,
+    height: 36,
+    paddingHorizontal: 6,
+  },
+  mobileImportBtnText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#059669',
+  },
+  mobileDeleteBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#dc2626',
+    borderRadius: 8,
+    height: 32,
+    paddingHorizontal: 6,
+  },
+  mobileDeleteBtnText: {
+    fontSize: 10.5,
+    fontWeight: '700',
+    color: '#ffffff',
+  },
+
+  /* Reference Entry Card Styles */
+  refEntryCard: {
+    backgroundColor: '#ffffff',
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+    marginBottom: 12,
+    overflow: 'hidden',
+    shadowColor: '#0f172a',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.04,
+    shadowRadius: 3,
+    elevation: 1,
+  },
+  refEntryCardSelected: {
+    borderColor: '#0284c7',
+    backgroundColor: '#f8fafc',
+  },
+  refCardHeaderStrip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#f8fafc',
+    paddingVertical: 9,
+    paddingHorizontal: 8,
+    borderBottomWidth: 1,
+    borderBottomColor: '#f1f5f9',
+  },
+  refCardHeaderCol: {
+    fontSize: 10,
+    fontWeight: '700',
+    color: '#475569',
+    letterSpacing: 0.3,
+  },
+  refCardSubHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#ffffff',
+    paddingVertical: 10,
+    paddingHorizontal: 8,
+  },
+  refCardCheckboxWrap: {
+    width: 28,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  refCardSubVal: {
+    fontSize: 11.5,
+    color: '#1e293b',
+    fontWeight: '500',
+  },
+  refCardSubValBold: {
+    fontSize: 12,
+    color: '#0f172a',
+    fontWeight: '800',
+  },
+  refCardDivider: {
+    height: 1,
+    backgroundColor: '#f1f5f9',
+  },
+  refCardGridBody: {
+    paddingHorizontal: 12,
+    paddingVertical: 4,
+  },
+  refCardGridRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 5.5,
+    borderBottomWidth: 1,
+    borderBottomColor: '#f8fafc',
+  },
+  refCardGridCol: {
+    flex: 1,
+  },
+  refCardFieldLabel: {
+    fontSize: 9.5,
+    fontWeight: '700',
+    color: '#64748b',
+    letterSpacing: 0.4,
+    marginBottom: 1,
+  },
+  refCardFieldVal: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#0f172a',
+  },
+  refCardNetWtVal: {
+    color: '#0284c7',
+    fontWeight: '800',
+  },
+  refCardAmountVal: {
+    color: '#16a34a',
+    fontWeight: '800',
+  },
+  refCardTotalVal: {
+    color: '#16a34a',
+    fontWeight: '800',
+  },
+  refDestinationPill: {
+    backgroundColor: '#f3e8ff',
+    paddingHorizontal: 8,
+    paddingVertical: 2.5,
+    borderRadius: 6,
+    alignSelf: 'flex-start',
+  },
+  refDestinationPillText: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: '#7c3aed',
+  },
+  refCardFooterRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    backgroundColor: '#ffffff',
+    borderTopWidth: 1,
+    borderTopColor: '#f8fafc',
+  },
+  refTruckBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#f3e8ff',
+    paddingHorizontal: 8,
+    paddingVertical: 3.5,
+    borderRadius: 6,
+  },
+  refTruckBadgeText: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: '#7c3aed',
+  },
+  refSourcePill: {
+    paddingHorizontal: 10,
+    paddingVertical: 3,
+    borderRadius: 6,
+    borderWidth: 1,
+  },
+  refSourcePillManual: {
+    backgroundColor: '#f0f9ff',
+    borderColor: '#bae6fd',
+  },
+  refSourcePillExcel: {
+    backgroundColor: '#f0fdf4',
+    borderColor: '#bbf7d0',
+  },
+  refSourcePillText: {
+    fontSize: 11,
+    fontWeight: '600',
+  },
+  refSourcePillTextManual: {
+    color: '#0284c7',
+  },
+  refSourcePillTextExcel: {
+    color: '#16a34a',
   },
 });
