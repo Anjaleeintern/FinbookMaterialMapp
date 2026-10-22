@@ -17,6 +17,15 @@
         "EXPO_PUBLIC_API_URL": "https://finbookmaterialmapp.onrender.com"
       }
     },
+    "preview-simulator": {
+      "distribution": "internal",
+      "ios": {
+        "simulator": true
+      },
+      "env": {
+        "EXPO_PUBLIC_API_URL": "https://finbookmaterialmapp.onrender.com"
+      }
+    },
     "production": {
       "autoIncrement": true,
       "env": {
