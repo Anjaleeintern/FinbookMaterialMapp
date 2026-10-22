@@ -558,8 +558,35 @@ export const MastersView = React.memo(({ masters, onRefresh }) => {
     if (e.target) e.target.value = '';
   };
 
+  // Render individual category metric card
+  const renderCategoryCard = (cat) => {
+    const isSelected = activeCategory === cat.id;
+    const count = categoryCounts[cat.id] || 0;
+    return (
+      <TouchableOpacity
+        key={cat.id}
+        style={[styles.smallCard, isSelected && styles.smallCardActive]}
+        onPress={() => setActiveCategory(cat.id)}
+        activeOpacity={0.8}
+      >
+        <View style={[styles.smallIconWrap, isSelected && styles.smallIconWrapActive]}>
+          <Ionicons name={cat.icon} size={17} color={isSelected ? '#0284c7' : '#64748b'} />
+        </View>
+        <View style={styles.smallCardInfo}>
+          <Text style={[styles.smallCardTitle, isSelected && styles.smallCardTitleActive]} numberOfLines={1}>
+            {cat.label}
+          </Text>
+          <View style={styles.smallCardNumRow}>
+            <Text style={styles.smallCardCount}>{count}</Text>
+            <Text style={[styles.smallCardView, isSelected && styles.smallCardViewActive]}>View →</Text>
+          </View>
+        </View>
+      </TouchableOpacity>
+    );
+  };
+
   return (
-    <View style={[styles.pageContainer, isMobile && { padding: 10, paddingBottom: 72 }]}>
+    <View style={[styles.pageContainer, isMobile && { padding: 12, paddingBottom: 72 }]}>
       {/* Hidden file input for web upload (Excel & CSV) */}
       {Platform.OS === 'web' && (
         <input
@@ -571,7 +598,7 @@ export const MastersView = React.memo(({ masters, onRefresh }) => {
         />
       )}
 
-      {/* TOP HEADER: Compact Title, Subtitle, Add New Master & Import */}
+      {/* TOP HEADER: Title, Subtitle, Add New Master (Mobile matching reference screenshot) */}
       <View style={styles.pageHeader}>
         <View style={styles.titleArea}>
           <Text style={styles.pageTitle}>Masters Management</Text>
@@ -590,88 +617,78 @@ export const MastersView = React.memo(({ masters, onRefresh }) => {
             <Text style={styles.btnPrimaryText}>Add New Master</Text>
           </TouchableOpacity>
 
-          <TouchableOpacity
-            style={styles.btnOutline}
-            onPress={() => handleOpenImport(activeCategory)}
-            activeOpacity={0.8}
-          >
-            <Ionicons name="cloud-upload-outline" size={15} color="#0284c7" style={{ marginRight: 4 }} />
-            <Text style={styles.btnOutlineText}>Import</Text>
-          </TouchableOpacity>
+          {!isMobile && (
+            <>
+              <TouchableOpacity
+                style={styles.btnOutline}
+                onPress={() => handleOpenImport(activeCategory)}
+                activeOpacity={0.8}
+              >
+                <Ionicons name="cloud-upload-outline" size={15} color="#0284c7" style={{ marginRight: 4 }} />
+                <Text style={styles.btnOutlineText}>Import</Text>
+              </TouchableOpacity>
 
-          <TouchableOpacity
-            style={styles.btnOutline}
-            onPress={() => handleDownloadTemplate('xlsx')}
-            activeOpacity={0.8}
-          >
-            <Ionicons name="download-outline" size={15} color="#0284c7" style={{ marginRight: 4 }} />
-            <Text style={styles.btnOutlineText}>Template</Text>
-          </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.btnOutline}
+                onPress={() => handleDownloadTemplate('xlsx')}
+                activeOpacity={0.8}
+              >
+                <Ionicons name="download-outline" size={15} color="#0284c7" style={{ marginRight: 4 }} />
+                <Text style={styles.btnOutlineText}>Template</Text>
+              </TouchableOpacity>
 
-          <TouchableOpacity style={styles.btnIconOnly} onPress={handleSync} title="Refresh">
-            <Ionicons name="sync-outline" size={16} color="#475569" />
-          </TouchableOpacity>
+              <TouchableOpacity style={styles.btnIconOnly} onPress={handleSync} title="Refresh">
+                <Ionicons name="sync-outline" size={16} color="#475569" />
+              </TouchableOpacity>
+            </>
+          )}
         </View>
       </View>
 
-      {/* COMPACT CATEGORY METRIC CARDS: Small, sleek, balanced height */}
+      {/* COMPACT CATEGORY METRIC CARDS: 2-column grid on mobile (matching screenshot media_1792653246813.png) */}
       <View style={styles.metricCardsContainer}>
         {isDesktop ? (
           <View style={styles.metricRowDesktop}>
-            {CATEGORIES.map((cat) => {
-              const isSelected = activeCategory === cat.id;
-              const count = categoryCounts[cat.id] || 0;
-              return (
-                <TouchableOpacity
-                  key={cat.id}
-                  style={[styles.smallCard, isSelected && styles.smallCardActive]}
-                  onPress={() => setActiveCategory(cat.id)}
-                  activeOpacity={0.8}
-                >
-                  <View style={[styles.smallIconWrap, isSelected && styles.smallIconWrapActive]}>
-                    <Ionicons name={cat.icon} size={16} color={isSelected ? '#0284c7' : '#64748b'} />
-                  </View>
-                  <View style={styles.smallCardInfo}>
-                    <Text style={[styles.smallCardTitle, isSelected && styles.smallCardTitleActive]} numberOfLines={1}>
-                      {cat.label}
-                    </Text>
-                    <View style={styles.smallCardNumRow}>
-                      <Text style={styles.smallCardCount}>{count}</Text>
-                      <Text style={[styles.smallCardView, isSelected && styles.smallCardViewActive]}>View →</Text>
-                    </View>
-                  </View>
-                </TouchableOpacity>
-              );
-            })}
+            {CATEGORIES.map((cat) => renderCategoryCard(cat))}
           </View>
         ) : (
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.metricScrollContent}>
-            {CATEGORIES.map((cat) => {
-              const isSelected = activeCategory === cat.id;
-              const count = categoryCounts[cat.id] || 0;
-              return (
+          <View style={styles.mobileCardsGrid}>
+            {/* Row 1: Vehicle No & Transport */}
+            <View style={styles.mobileCardsRow}>
+              {renderCategoryCard(CATEGORIES[0])}
+              {renderCategoryCard(CATEGORIES[1])}
+            </View>
+
+            {/* Row 2: Material & Party Name */}
+            <View style={styles.mobileCardsRow}>
+              {renderCategoryCard(CATEGORIES[2])}
+              {renderCategoryCard(CATEGORIES[3])}
+            </View>
+
+            {/* Row 3: Type / Mode & Action Buttons (Import Excel + Template) */}
+            <View style={styles.mobileCardsRow}>
+              {renderCategoryCard(CATEGORIES[4])}
+              <View style={styles.mobileActionBox}>
                 <TouchableOpacity
-                  key={cat.id}
-                  style={[styles.smallCardMobile, isSelected && styles.smallCardActive]}
-                  onPress={() => setActiveCategory(cat.id)}
+                  style={styles.mobileImportBtn}
+                  onPress={() => handleOpenImport(activeCategory)}
                   activeOpacity={0.8}
                 >
-                  <View style={[styles.smallIconWrap, isSelected && styles.smallIconWrapActive]}>
-                    <Ionicons name={cat.icon} size={16} color={isSelected ? '#0284c7' : '#64748b'} />
-                  </View>
-                  <View style={styles.smallCardInfo}>
-                    <Text style={[styles.smallCardTitle, isSelected && styles.smallCardTitleActive]} numberOfLines={1}>
-                      {cat.label}
-                    </Text>
-                    <View style={styles.smallCardNumRow}>
-                      <Text style={styles.smallCardCount}>{count}</Text>
-                      <Text style={[styles.smallCardView, isSelected && styles.smallCardViewActive]}>View →</Text>
-                    </View>
-                  </View>
+                  <Ionicons name="cloud-upload-outline" size={15} color="#059669" style={{ marginRight: 4 }} />
+                  <Text style={styles.mobileImportBtnText} numberOfLines={1}>Import Excel</Text>
                 </TouchableOpacity>
-              );
-            })}
-          </ScrollView>
+
+                <TouchableOpacity
+                  style={styles.mobileTemplateBtn}
+                  onPress={() => handleDownloadTemplate('xlsx')}
+                  activeOpacity={0.8}
+                >
+                  <Ionicons name="download-outline" size={15} color="#0284c7" style={{ marginRight: 4 }} />
+                  <Text style={styles.mobileTemplateBtnText} numberOfLines={1}>Template</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          </View>
         )}
       </View>
 
@@ -702,7 +719,7 @@ export const MastersView = React.memo(({ masters, onRefresh }) => {
           {/* Action & Filter Bar: Search, Status Filter, Bulk Actions */}
           <View style={styles.filterActionBar}>
             <View style={styles.searchBox}>
-              <Ionicons name="search-outline" size={16} color="#94a3b8" style={{ marginRight: 6 }} />
+              <Ionicons name="search-outline" size={16} color="#0284c7" style={{ marginRight: 6 }} />
               <TextInput
                 style={styles.searchInput}
                 placeholder={`Search ${currentCatConfig.label}...`}
@@ -717,83 +734,85 @@ export const MastersView = React.memo(({ masters, onRefresh }) => {
               ) : null}
             </View>
 
-            {/* Status Pills */}
-            <View style={styles.statusFilterGroup}>
-              {['All', 'Active', 'Inactive'].map((st) => {
-                const isSelected = statusFilter === st;
-                const count =
-                  st === 'All'
-                    ? statusCounts.all
-                    : st === 'Active'
-                      ? statusCounts.active
-                      : statusCounts.inactive;
-                return (
-                  <TouchableOpacity
-                    key={st}
-                    style={[styles.statusPill, isSelected && styles.statusPillActive]}
-                    onPress={() => setStatusFilter(st)}
-                  >
-                    <Text style={[styles.statusPillText, isSelected && styles.statusPillTextActive]}>
-                      {st} ({count})
-                    </Text>
-                  </TouchableOpacity>
-                );
-              })}
-            </View>
+            <View style={styles.filterPillsRow}>
+              {/* Status Pills */}
+              <View style={styles.statusFilterGroup}>
+                {['All', 'Active', 'Inactive'].map((st) => {
+                  const isSelected = statusFilter === st;
+                  const count =
+                    st === 'All'
+                      ? statusCounts.all
+                      : st === 'Active'
+                        ? statusCounts.active
+                        : statusCounts.inactive;
+                  return (
+                    <TouchableOpacity
+                      key={st}
+                      style={[styles.statusPill, isSelected && styles.statusPillActive]}
+                      onPress={() => setStatusFilter(st)}
+                    >
+                      <Text style={[styles.statusPillText, isSelected && styles.statusPillTextActive]}>
+                        {st} ({count})
+                      </Text>
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
 
-            {/* Bulk Actions Button with Dropdown */}
-            <View style={{ position: 'relative' }}>
-              <TouchableOpacity
-                style={[
-                  styles.bulkActionBtn,
-                  selectedIds.size > 0 && styles.bulkActionBtnActive,
-                ]}
-                onPress={() => setBulkMenuVisible(!bulkMenuVisible)}
-                activeOpacity={0.8}
-              >
-                <Ionicons
-                  name="layers-outline"
-                  size={14}
-                  color={selectedIds.size > 0 ? '#0284c7' : '#475569'}
-                  style={{ marginRight: 4 }}
-                />
-                <Text
+              {/* Bulk Actions Button with Dropdown */}
+              <View style={{ position: 'relative' }}>
+                <TouchableOpacity
                   style={[
-                    styles.bulkActionBtnText,
-                    selectedIds.size > 0 && { color: '#0284c7' },
+                    styles.bulkActionBtn,
+                    selectedIds.size > 0 && styles.bulkActionBtnActive,
                   ]}
+                  onPress={() => setBulkMenuVisible(!bulkMenuVisible)}
+                  activeOpacity={0.8}
                 >
-                  Bulk Actions {selectedIds.size > 0 ? `(${selectedIds.size})` : ''}
-                </Text>
-                <Ionicons name="chevron-down" size={12} color="#64748b" style={{ marginLeft: 3 }} />
-              </TouchableOpacity>
+                  <Ionicons
+                    name="layers-outline"
+                    size={14}
+                    color={selectedIds.size > 0 ? '#0284c7' : '#0f172a'}
+                    style={{ marginRight: 4 }}
+                  />
+                  <Text
+                    style={[
+                      styles.bulkActionBtnText,
+                      selectedIds.size > 0 && { color: '#0284c7' },
+                    ]}
+                  >
+                    Bulk Actions {selectedIds.size > 0 ? `(${selectedIds.size})` : ''}
+                  </Text>
+                  <Ionicons name="chevron-down" size={12} color="#64748b" style={{ marginLeft: 3 }} />
+                </TouchableOpacity>
 
-              {bulkMenuVisible && (
-                <View style={styles.bulkDropdownMenu}>
-                  <TouchableOpacity
-                    style={styles.bulkMenuItem}
-                    onPress={() => handleBulkAction('activate')}
-                  >
-                    <Ionicons name="checkmark-circle-outline" size={15} color="#16a34a" />
-                    <Text style={styles.bulkMenuText}>Set as Active</Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity
-                    style={styles.bulkMenuItem}
-                    onPress={() => handleBulkAction('deactivate')}
-                  >
-                    <Ionicons name="pause-circle-outline" size={15} color="#eab308" />
-                    <Text style={styles.bulkMenuText}>Set as Inactive</Text>
-                  </TouchableOpacity>
-                  <View style={styles.menuDivider} />
-                  <TouchableOpacity
-                    style={styles.bulkMenuItem}
-                    onPress={() => handleBulkAction('delete')}
-                  >
-                    <Ionicons name="trash-outline" size={15} color="#ef4444" />
-                    <Text style={[styles.bulkMenuText, { color: '#ef4444' }]}>Delete Selected</Text>
-                  </TouchableOpacity>
-                </View>
-              )}
+                {bulkMenuVisible && (
+                  <View style={styles.bulkDropdownMenu}>
+                    <TouchableOpacity
+                      style={styles.bulkMenuItem}
+                      onPress={() => handleBulkAction('activate')}
+                    >
+                      <Ionicons name="checkmark-circle-outline" size={15} color="#16a34a" />
+                      <Text style={styles.bulkMenuText}>Set as Active</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      style={styles.bulkMenuItem}
+                      onPress={() => handleBulkAction('deactivate')}
+                    >
+                      <Ionicons name="pause-circle-outline" size={15} color="#eab308" />
+                      <Text style={styles.bulkMenuText}>Set as Inactive</Text>
+                    </TouchableOpacity>
+                    <View style={styles.menuDivider} />
+                    <TouchableOpacity
+                      style={styles.bulkMenuItem}
+                      onPress={() => handleBulkAction('delete')}
+                    >
+                      <Ionicons name="trash-outline" size={15} color="#ef4444" />
+                      <Text style={[styles.bulkMenuText, { color: '#ef4444' }]}>Delete Selected</Text>
+                    </TouchableOpacity>
+                  </View>
+                )}
+              </View>
             </View>
           </View>
 
@@ -834,11 +853,11 @@ export const MastersView = React.memo(({ masters, onRefresh }) => {
                   />
                 </TouchableOpacity>
 
-                <Text style={[styles.thCell, { width: isMobile ? 66 : 110, textAlign: 'center', paddingHorizontal: 1, fontSize: isMobile ? 10 : 11 }]}>
+                <Text style={[styles.thCell, { width: isMobile ? 74 : 110, textAlign: 'center', paddingHorizontal: 1, fontSize: isMobile ? 10.5 : 11 }]}>
                   Status
                 </Text>
 
-                <Text style={[styles.thCell, { width: isMobile ? 62 : 110, textAlign: 'center', paddingHorizontal: 1, fontSize: isMobile ? 10 : 11 }]}>
+                <Text style={[styles.thCell, { width: isMobile ? 86 : 110, textAlign: 'center', paddingHorizontal: 1, fontSize: isMobile ? 10.5 : 11 }]}>
                   Actions
                 </Text>
               </View>
@@ -912,12 +931,12 @@ export const MastersView = React.memo(({ masters, onRefresh }) => {
                         </Text>
 
                         {/* Status Badge */}
-                        <View style={[styles.tdCell, { width: isMobile ? 66 : 110, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 1 }]}>
+                        <View style={[styles.tdCell, { width: isMobile ? 74 : 110, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 1 }]}>
                           <TouchableOpacity
                             style={[
                               styles.statusBadge,
                               isActive ? styles.badgeActive : styles.badgeInactive,
-                              isMobile && { paddingHorizontal: 5, paddingVertical: 2, height: 21, borderRadius: 10 },
+                              isMobile && { paddingHorizontal: 6, paddingVertical: 2.5, height: 21, borderRadius: 10 },
                             ]}
                             onPress={() => handleToggleStatus(item)}
                             title="Click to toggle status"
@@ -933,7 +952,7 @@ export const MastersView = React.memo(({ masters, onRefresh }) => {
                               style={[
                                 styles.statusBadgeText,
                                 isActive ? styles.badgeTextActive : styles.badgeTextInactive,
-                                isMobile && { fontSize: 9, fontWeight: '700' },
+                                isMobile && { fontSize: 9.5, fontWeight: '700' },
                               ]}
                             >
                               {item.status}
@@ -942,34 +961,32 @@ export const MastersView = React.memo(({ masters, onRefresh }) => {
                         </View>
 
                         {/* Actions */}
-                        <View style={[styles.tdCell, { width: isMobile ? 62 : 110, flexDirection: 'row', justifyContent: 'center', alignItems: 'center', paddingHorizontal: 1 }]}>
+                        <View style={[styles.tdCell, { width: isMobile ? 86 : 110, flexDirection: 'row', justifyContent: 'center', alignItems: 'center', paddingHorizontal: 1 }]}>
                           <TouchableOpacity
-                            style={[styles.actionIconBtn, isMobile && { width: 26, height: 26, marginHorizontal: 1, padding: 3, alignItems: 'center', justifyContent: 'center' }]}
+                            style={[styles.actionIconBtn, isMobile && { width: 24, height: 24, marginHorizontal: 1, padding: 2, alignItems: 'center', justifyContent: 'center' }]}
                             onPress={() => handleOpenEdit(item)}
                             title="Edit"
                           >
-                            <Ionicons name="pencil-outline" size={isMobile ? 13 : 15} color="#0284c7" />
+                            <Ionicons name="pencil-outline" size={isMobile ? 14 : 15} color="#0284c7" />
                           </TouchableOpacity>
 
                           {!isStatic && (
                             <TouchableOpacity
-                              style={[styles.actionIconBtn, isMobile && { width: 26, height: 26, marginHorizontal: 1, padding: 3, alignItems: 'center', justifyContent: 'center' }]}
+                              style={[styles.actionIconBtn, isMobile && { width: 24, height: 24, marginHorizontal: 1, padding: 2, alignItems: 'center', justifyContent: 'center' }]}
                               onPress={() => handleDeleteItem(item)}
                               title="Delete"
                             >
-                              <Ionicons name="trash-outline" size={isMobile ? 13 : 15} color="#ef4444" />
+                              <Ionicons name="trash-outline" size={isMobile ? 14 : 15} color="#ef4444" />
                             </TouchableOpacity>
                           )}
 
-                          {!isMobile && (
-                            <TouchableOpacity
-                              style={styles.actionIconBtn}
-                              onPress={() => handleToggleStatus(item)}
-                              title={isActive ? 'Deactivate' : 'Activate'}
-                            >
-                              <Ionicons name="ellipsis-horizontal" size={15} color="#64748b" />
-                            </TouchableOpacity>
-                          )}
+                          <TouchableOpacity
+                            style={[styles.actionIconBtn, isMobile && { width: 24, height: 24, marginHorizontal: 1, padding: 2, alignItems: 'center', justifyContent: 'center' }]}
+                            onPress={() => handleToggleStatus(item)}
+                            title={isActive ? 'Deactivate' : 'Activate'}
+                          >
+                            <Ionicons name="ellipsis-horizontal" size={isMobile ? 14 : 15} color="#64748b" />
+                          </TouchableOpacity>
                         </View>
                       </View>
 
@@ -1025,14 +1042,14 @@ export const MastersView = React.memo(({ masters, onRefresh }) => {
             </View>
           </View>
 
-          {/* TABLE FOOTER & RECORD COUNT */}
+          {/* TABLE FOOTER & RECORD COUNT (Centered matching screenshot) */}
           <View style={styles.paginationBar}>
             <Text style={styles.paginationInfo}>
               Showing all {activeRecords.length} {currentCatConfig.label} records &bull; Scroll to view all
             </Text>
 
             {selectedIds.size > 0 && (
-              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 4 }}>
                 <Ionicons name="checkmark-done" size={14} color="#0284c7" />
                 <Text style={[styles.paginationInfo, { color: '#0284c7', fontWeight: '700' }]}>
                   {selectedIds.size} of {activeRecords.length} selected
@@ -1496,10 +1513,55 @@ const styles = StyleSheet.create({
     gap: 10,
     width: '100%',
   },
-  metricScrollContent: {
+  mobileCardsGrid: {
+    gap: 8,
+  },
+  mobileCardsRow: {
     flexDirection: 'row',
-    gap: 10,
-    paddingVertical: 2,
+    gap: 8,
+    alignItems: 'stretch',
+  },
+  mobileActionBox: {
+    flex: 1,
+    flexDirection: 'row',
+    gap: 6,
+    alignItems: 'center',
+  },
+  mobileImportBtn: {
+    flex: 1,
+    height: '100%',
+    minHeight: 52,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#ffffff',
+    borderWidth: 1,
+    borderColor: '#6ee7b7',
+    borderRadius: 9,
+    paddingHorizontal: 4,
+  },
+  mobileImportBtnText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#059669',
+  },
+  mobileTemplateBtn: {
+    flex: 1,
+    height: '100%',
+    minHeight: 52,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#ffffff',
+    borderWidth: 1,
+    borderColor: '#93c5fd',
+    borderRadius: 9,
+    paddingHorizontal: 4,
+  },
+  mobileTemplateBtnText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#0284c7',
   },
   smallCard: {
     flex: 1,
@@ -1511,22 +1573,12 @@ const styles = StyleSheet.create({
     borderColor: '#e2e8f0',
     paddingVertical: 8,
     paddingHorizontal: 10,
+    minHeight: 52,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.03,
     shadowRadius: 2,
     elevation: 1,
-  },
-  smallCardMobile: {
-    width: 140,
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#ffffff',
-    borderRadius: 9,
-    borderWidth: 1,
-    borderColor: '#e2e8f0',
-    paddingVertical: 8,
-    paddingHorizontal: 10,
   },
   smallCardActive: {
     borderColor: '#0284c7',
@@ -1638,63 +1690,68 @@ const styles = StyleSheet.create({
 
   // Action and Filter Bar
   filterActionBar: {
-    flexDirection: 'row',
-    alignItems: 'center',
     padding: 10,
-    gap: 8,
-    flexWrap: 'wrap',
     borderBottomWidth: 1,
     borderBottomColor: '#f1f5f9',
     backgroundColor: '#ffffff',
   },
   searchBox: {
-    flex: 1,
-    minWidth: 160,
+    width: '100%',
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#f8fafc',
+    backgroundColor: '#ffffff',
     borderWidth: 1,
     borderColor: '#e2e8f0',
-    borderRadius: 7,
-    paddingHorizontal: 9,
-    height: 34,
+    borderRadius: 8,
+    paddingHorizontal: 10,
+    height: 38,
+    marginBottom: 8,
   },
   searchInput: {
     flex: 1,
-    fontSize: 12,
+    fontSize: 12.5,
     color: '#0f172a',
+  },
+  filterPillsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    width: '100%',
+    flexWrap: 'wrap',
+    gap: 6,
   },
   statusFilterGroup: {
     flexDirection: 'row',
-    gap: 4,
+    gap: 6,
+    alignItems: 'center',
   },
   statusPill: {
-    paddingHorizontal: 8,
-    paddingVertical: 5,
-    borderRadius: 5,
-    backgroundColor: '#f8fafc',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 8,
+    backgroundColor: '#ffffff',
     borderWidth: 1,
     borderColor: '#e2e8f0',
   },
   statusPillActive: {
-    backgroundColor: '#e0f2fe',
+    backgroundColor: '#0284c7',
     borderColor: '#0284c7',
   },
   statusPillText: {
-    fontSize: 11,
-    color: '#64748b',
+    fontSize: 11.5,
+    color: '#475569',
     fontWeight: '600',
   },
   statusPillTextActive: {
-    color: '#0284c7',
+    color: '#ffffff',
     fontWeight: '700',
   },
   bulkActionBtn: {
     flexDirection: 'row',
     alignItems: 'center',
-    height: 34,
+    height: 32,
     paddingHorizontal: 10,
-    borderRadius: 7,
+    borderRadius: 8,
     borderWidth: 1,
     borderColor: '#cbd5e1',
     backgroundColor: '#ffffff',
