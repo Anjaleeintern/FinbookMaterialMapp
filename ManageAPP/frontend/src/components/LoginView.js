@@ -7,23 +7,31 @@ import {
   StyleSheet,
   ActivityIndicator,
   ScrollView,
+  Image,
   Animated,
   Platform,
   Modal,
   KeyboardAvoidingView,
   SafeAreaView,
   StatusBar,
+  Dimensions,
+  useWindowDimensions,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import Svg, { Path, Defs, LinearGradient, Stop } from 'react-native-svg';
 import { useAuth } from '../context/AuthContext';
 import { api } from '../api/client';
 
+const weighbridgeHero = require('../../assets/weighbridge_hero.jpg');
+const operationsHero = require('../../assets/operations_hero.jpg');
+
 export const LoginView = () => {
   const { login } = useAuth();
+  const { width: screenWidth, height: screenHeight } = useWindowDimensions();
 
-  // Active view: 'login' (Screen 3: Welcome Back) | 'register' (Screen 4: Create Your Account)
-  const [activeTab, setActiveTab] = useState('login');
+  // Screen flow: 'onboard1' -> 'onboard2' -> 'login' -> 'register'
+  // Default starts at onboarding slide 1 (Screen 1 from reference)
+  const [activeScreen, setActiveScreen] = useState('onboard1');
 
   // Form Fields
   const [name, setName] = useState('');
@@ -35,7 +43,7 @@ export const LoginView = () => {
   const [successMsg, setSuccessMsg] = useState('');
   const [focusedInput, setFocusedInput] = useState(null);
 
-  // OTP Modal State
+  // OTP Modal
   const [otpModalVisible, setOtpModalVisible] = useState(false);
   const [otpPhone, setOtpPhone] = useState('');
   const [otpCode, setOtpCode] = useState('');
@@ -47,54 +55,37 @@ export const LoginView = () => {
   const fadeAnim = useRef(new Animated.Value(1)).current;
   const slideAnim = useRef(new Animated.Value(0)).current;
   const logoPulse = useRef(new Animated.Value(1)).current;
+  const floatAnim = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
-    // Gentle pulse animation for the M logo badge
+    // Logo pulse
     Animated.loop(
       Animated.sequence([
-        Animated.timing(logoPulse, {
-          toValue: 1.05,
-          duration: 1500,
-          useNativeDriver: true,
-        }),
-        Animated.timing(logoPulse, {
-          toValue: 1,
-          duration: 1500,
-          useNativeDriver: true,
-        }),
+        Animated.timing(logoPulse, { toValue: 1.06, duration: 1400, useNativeDriver: true }),
+        Animated.timing(logoPulse, { toValue: 1, duration: 1400, useNativeDriver: true }),
+      ])
+    ).start();
+    // Float for hero images
+    Animated.loop(
+      Animated.sequence([
+        Animated.timing(floatAnim, { toValue: -6, duration: 1800, useNativeDriver: true }),
+        Animated.timing(floatAnim, { toValue: 0, duration: 1800, useNativeDriver: true }),
       ])
     ).start();
   }, []);
 
-  // Smooth transition between Login and Register
-  const transitionTo = (newTab, direction = 'next') => {
+  const navigateTo = (screen, direction = 'next') => {
     setErrorMsg('');
     setSuccessMsg('');
     Animated.parallel([
-      Animated.timing(fadeAnim, {
-        toValue: 0,
-        duration: 130,
-        useNativeDriver: true,
-      }),
-      Animated.timing(slideAnim, {
-        toValue: direction === 'next' ? -20 : 20,
-        duration: 130,
-        useNativeDriver: true,
-      }),
+      Animated.timing(fadeAnim, { toValue: 0, duration: 120, useNativeDriver: true }),
+      Animated.timing(slideAnim, { toValue: direction === 'next' ? -30 : 30, duration: 120, useNativeDriver: true }),
     ]).start(() => {
-      setActiveTab(newTab);
-      slideAnim.setValue(direction === 'next' ? 20 : -20);
+      setActiveScreen(screen);
+      slideAnim.setValue(direction === 'next' ? 30 : -30);
       Animated.parallel([
-        Animated.timing(fadeAnim, {
-          toValue: 1,
-          duration: 180,
-          useNativeDriver: true,
-        }),
-        Animated.timing(slideAnim, {
-          toValue: 0,
-          duration: 180,
-          useNativeDriver: true,
-        }),
+        Animated.timing(fadeAnim, { toValue: 1, duration: 180, useNativeDriver: true }),
+        Animated.timing(slideAnim, { toValue: 0, duration: 180, useNativeDriver: true }),
       ]).start();
     });
   };
@@ -116,193 +107,279 @@ export const LoginView = () => {
   };
 
   const handleRegister = async () => {
-    if (!name.trim()) {
-      setErrorMsg('Please enter your full name.');
-      return;
-    }
-    if (!email.trim() || !password.trim()) {
-      setErrorMsg('Please enter both email and password.');
-      return;
-    }
-    if (password.length < 4) {
-      setErrorMsg('Password must be at least 4 characters.');
-      return;
-    }
+    if (!name.trim()) { setErrorMsg('Please enter your full name.'); return; }
+    if (!email.trim() || !password.trim()) { setErrorMsg('Please enter both email and password.'); return; }
+    if (password.length < 4) { setErrorMsg('Password must be at least 4 characters.'); return; }
     setLoading(true);
     setErrorMsg('');
     setSuccessMsg('');
     try {
       await api.register(email.trim(), password.trim(), name.trim());
-      setSuccessMsg('Account created successfully! Signing in...');
+      setSuccessMsg('Account created! Signing in...');
       await login(email.trim(), password.trim());
     } catch (err) {
-      setErrorMsg(err.message || 'Registration failed. Please try again.');
+      setErrorMsg(err.message || 'Registration failed.');
     } finally {
       setLoading(false);
     }
   };
 
   const handleSendOtp = () => {
-    if (!otpPhone.trim()) {
-      setOtpMsg('Please enter your mobile number or email.');
-      return;
-    }
+    if (!otpPhone.trim()) { setOtpMsg('Please enter your mobile number or email.'); return; }
     setOtpLoading(true);
     setOtpMsg('');
-    setTimeout(() => {
-      setOtpLoading(false);
-      setOtpSent(true);
-      setOtpMsg(`OTP sent to ${otpPhone.trim()}. (Demo code: 123456)`);
-    }, 700);
+    setTimeout(() => { setOtpLoading(false); setOtpSent(true); setOtpMsg(`OTP sent to ${otpPhone.trim()}. (Demo: 123456)`); }, 700);
   };
 
   const handleVerifyOtp = async () => {
-    if (!otpCode.trim()) {
-      setOtpMsg('Please enter the 6-digit OTP code.');
-      return;
-    }
+    if (!otpCode.trim()) { setOtpMsg('Please enter the 6-digit OTP.'); return; }
     setOtpLoading(true);
     try {
       await login('admin@materialmapp.com', 'admin123');
       setOtpModalVisible(false);
-    } catch (err) {
-      setOtpMsg('OTP verification failed. Please try password login.');
-    } finally {
-      setOtpLoading(false);
-    }
+    } catch (err) { setOtpMsg('OTP verification failed.'); }
+    finally { setOtpLoading(false); }
   };
 
+  // ─────────────────────────────────────────────────
+  // RENDER
+  // ─────────────────────────────────────────────────
   return (
-    <SafeAreaView style={styles.safeArea}>
+    <SafeAreaView style={s.safe}>
       <StatusBar barStyle="dark-content" backgroundColor="#ffffff" />
       <KeyboardAvoidingView
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-        style={styles.keyboardContainer}
+        style={s.kav}
       >
         <ScrollView
-          contentContainerStyle={styles.scrollContent}
+          contentContainerStyle={s.scroll}
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}
           bounces={false}
         >
-          {/* Full-Screen Phone Canvas */}
-          <View style={styles.phoneCanvas}>
-            {/* Top Bar Row */}
-            <View style={styles.topBarRow}>
-              {activeTab === 'register' ? (
+          {/* ═══ FULL SCREEN CANVAS ═══ */}
+          <View style={[s.canvas, { minHeight: screenHeight }]}>
+
+            {/* ─── TOP BAR (conditionally rendered per screen) ─── */}
+            {activeScreen === 'login' && (
+              <View style={s.topBar}>
+                <View style={{ width: 40 }} />
+                <View style={s.topBarRight}>
+                  <TouchableOpacity style={s.loginPillOutline} activeOpacity={0.8}>
+                    <Text style={s.loginPillOutlineText}>Login</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={s.signUpPill}
+                    onPress={() => navigateTo('register', 'next')}
+                    activeOpacity={0.85}
+                  >
+                    <Text style={s.signUpPillText}>Sign Up</Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
+            )}
+
+            {activeScreen === 'register' && (
+              <View style={s.topBar}>
                 <TouchableOpacity
-                  style={styles.topBackArrowBtn}
-                  onPress={() => transitionTo('login', 'back')}
+                  style={s.backBtn}
+                  onPress={() => navigateTo('login', 'back')}
                   activeOpacity={0.7}
                   hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
                 >
-                  <Ionicons name="chevron-back" size={24} color="#0f172a" />
+                  <Ionicons name="chevron-back" size={26} color="#0f172a" />
                 </TouchableOpacity>
-              ) : (
-                <View style={styles.topBarPlaceholder} />
-              )}
-
-              {/* Top Right: Login & Sign Up buttons */}
-              <View style={styles.topAuthButtonGroup}>
-                {activeTab === 'register' ? (
+                <View style={s.topBarRight}>
                   <TouchableOpacity
-                    style={styles.topLoginOutlineBtn}
-                    onPress={() => transitionTo('login', 'back')}
-                    activeOpacity={0.7}
+                    style={s.loginPillOutline}
+                    onPress={() => navigateTo('login', 'back')}
+                    activeOpacity={0.8}
                   >
-                    <Text style={styles.topLoginOutlineBtnText}>Login</Text>
+                    <Text style={s.loginPillOutlineText}>Login</Text>
                   </TouchableOpacity>
-                ) : (
-                  <>
-                    <TouchableOpacity
-                      style={styles.topTabBtn}
-                      onPress={() => {}}
-                      activeOpacity={0.8}
-                    >
-                      <Text style={styles.topTabBtnTextActive}>Login</Text>
-                    </TouchableOpacity>
-
-                    <TouchableOpacity
-                      style={styles.topSignUpPillBtn}
-                      onPress={() => transitionTo('register', 'next')}
-                      activeOpacity={0.85}
-                    >
-                      <Text style={styles.topSignUpPillBtnText}>Sign Up</Text>
-                    </TouchableOpacity>
-                  </>
-                )}
+                </View>
               </View>
-            </View>
+            )}
 
-            {/* Brand Header */}
-            <View style={styles.brandHeaderCenter}>
-              <Animated.View style={[styles.logoBadge, { transform: [{ scale: logoPulse }] }]}>
-                <Text style={styles.logoLetter}>M</Text>
-              </Animated.View>
-              <Text style={styles.brandTitle}>MaterialMApp</Text>
-              <View style={styles.tagBadge}>
-                <Text style={styles.tagBadgeText}>Quarry &amp; Weighbridge Dispatch</Text>
+            {(activeScreen === 'onboard1' || activeScreen === 'onboard2') && (
+              <View style={s.topBar}>
+                <View style={{ width: 40 }} />
+                <View style={{ width: 40 }} />
               </View>
-            </View>
+            )}
 
-            {/* Animated Form Content */}
+            {/* ─── ANIMATED CONTENT AREA ─── */}
             <Animated.View
               style={[
-                styles.animatedPane,
-                {
-                  opacity: fadeAnim,
-                  transform: [{ translateX: slideAnim }],
-                },
+                s.contentArea,
+                { opacity: fadeAnim, transform: [{ translateX: slideAnim }] },
               ]}
             >
-              {activeTab === 'login' ? (
-                /* SCREEN 3: WELCOME BACK! */
-                <View style={styles.formContainer}>
-                  <View style={styles.formHeaderBlock}>
-                    <Text style={styles.mainHeading}>Welcome Back!</Text>
-                    <Text style={styles.subHeading}>Sign in to continue to your account</Text>
+
+              {/* ═══════════════════════════════════════════════ */}
+              {/* SCREEN 1: ONBOARDING SLIDE 1                   */}
+              {/* ═══════════════════════════════════════════════ */}
+              {activeScreen === 'onboard1' && (
+                <View style={s.screenInner}>
+                  {/* Brand */}
+                  <View style={s.brandCenter}>
+                    <Animated.View style={[s.logoBadge, { transform: [{ scale: logoPulse }] }]}>
+                      <Text style={s.logoLetter}>M</Text>
+                    </Animated.View>
+                    <Text style={s.brandName}>MaterialMApp</Text>
+                    <Text style={s.brandTagline}>Quarry & Weighbridge Dispatch</Text>
+                  </View>
+
+                  {/* Description */}
+                  <Text style={s.onboardDesc}>
+                    Fast vehicle entries, automated delivery challans, and live sales reports.
+                  </Text>
+
+                  {/* Hero Image */}
+                  <Animated.View style={[s.heroWrap, { transform: [{ translateY: floatAnim }] }]}>
+                    <Image source={weighbridgeHero} style={s.heroImg} resizeMode="cover" />
+                  </Animated.View>
+
+                  {/* Bottom: Dots + Skip */}
+                  <View style={s.onboardBottom}>
+                    <View style={s.dotsRow}>
+                      <View style={[s.dot, s.dotActive]} />
+                      <View style={s.dot} />
+                    </View>
+                    <TouchableOpacity
+                      style={s.skipBtn}
+                      onPress={() => navigateTo('login', 'next')}
+                      activeOpacity={0.7}
+                    >
+                      <Text style={s.skipBtnText}>Skip {'>'}</Text>
+                    </TouchableOpacity>
+                  </View>
+                </View>
+              )}
+
+              {/* ═══════════════════════════════════════════════ */}
+              {/* SCREEN 2: ONBOARDING SLIDE 2                   */}
+              {/* ═══════════════════════════════════════════════ */}
+              {activeScreen === 'onboard2' && (
+                <View style={s.screenInner}>
+                  {/* Hero Image */}
+                  <Animated.View style={[s.heroWrap2, { transform: [{ translateY: floatAnim }] }]}>
+                    <Image source={operationsHero} style={s.heroImg} resizeMode="cover" />
+                  </Animated.View>
+
+                  {/* Title */}
+                  <Text style={s.slide2Title}>Simplify Your{'\n'}Material Operations</Text>
+
+                  {/* Feature Cards */}
+                  <View style={s.featuresCol}>
+                    <View style={s.featureRow}>
+                      <View style={[s.featureIcon, { backgroundColor: '#e0f2fe' }]}>
+                        <Ionicons name="git-branch-outline" size={20} color="#0284c7" />
+                      </View>
+                      <View style={s.featureTextCol}>
+                        <Text style={s.featureTitle}>Quick Vehicle Entries</Text>
+                        <Text style={s.featureSub}>Capture vehicle details in seconds</Text>
+                      </View>
+                    </View>
+
+                    <View style={s.featureRow}>
+                      <View style={[s.featureIcon, { backgroundColor: '#dcfce7' }]}>
+                        <Ionicons name="document-text-outline" size={20} color="#16a34a" />
+                      </View>
+                      <View style={s.featureTextCol}>
+                        <Text style={s.featureTitle}>Automated Challans</Text>
+                        <Text style={s.featureSub}>Generate delivery challans instantly</Text>
+                      </View>
+                    </View>
+
+                    <View style={s.featureRow}>
+                      <View style={[s.featureIcon, { backgroundColor: '#f3e8ff' }]}>
+                        <Ionicons name="bar-chart-outline" size={20} color="#7c3aed" />
+                      </View>
+                      <View style={s.featureTextCol}>
+                        <Text style={s.featureTitle}>Live Sales Reports</Text>
+                        <Text style={s.featureSub}>Track your business in real-time</Text>
+                      </View>
+                    </View>
+                  </View>
+
+                  {/* Bottom: Back + Dots + Next */}
+                  <View style={s.onboardBottom2}>
+                    <TouchableOpacity
+                      style={s.backTextBtn}
+                      onPress={() => navigateTo('onboard1', 'back')}
+                      activeOpacity={0.7}
+                    >
+                      <Text style={s.backTextBtnLabel}>Back</Text>
+                    </TouchableOpacity>
+
+                    <View style={s.dotsRow}>
+                      <View style={s.dot} />
+                      <View style={[s.dot, s.dotActive]} />
+                    </View>
+
+                    <TouchableOpacity
+                      style={s.nextPill}
+                      onPress={() => navigateTo('login', 'next')}
+                      activeOpacity={0.85}
+                    >
+                      <Text style={s.nextPillText}>Next {'>'}</Text>
+                    </TouchableOpacity>
+                  </View>
+                </View>
+              )}
+
+              {/* ═══════════════════════════════════════════════ */}
+              {/* SCREEN 3: LOGIN (WELCOME BACK!)                */}
+              {/* ═══════════════════════════════════════════════ */}
+              {activeScreen === 'login' && (
+                <View style={s.screenInner}>
+                  {/* Brand */}
+                  <View style={s.brandCenter}>
+                    <Animated.View style={[s.logoBadge, { transform: [{ scale: logoPulse }] }]}>
+                      <Text style={s.logoLetter}>M</Text>
+                    </Animated.View>
+                    <Text style={s.brandName}>MaterialMApp</Text>
+                    <Text style={s.brandTagline}>Quarry & Weighbridge Dispatch</Text>
+                  </View>
+
+                  {/* Form */}
+                  <View style={s.formBlock}>
+                    <Text style={s.formTitle}>Welcome Back!</Text>
+                    <Text style={s.formSubtitle}>Sign in to continue to your account</Text>
                   </View>
 
                   {errorMsg ? (
-                    <View style={styles.errorBanner}>
+                    <View style={s.errorBanner}>
                       <Ionicons name="alert-circle" size={16} color="#ef4444" />
-                      <Text style={styles.errorBannerText}>{errorMsg}</Text>
+                      <Text style={s.errorText}>{errorMsg}</Text>
                     </View>
                   ) : null}
-
                   {successMsg ? (
-                    <View style={styles.successBanner}>
+                    <View style={s.successBanner}>
                       <Ionicons name="checkmark-circle" size={16} color="#16a34a" />
-                      <Text style={styles.successBannerText}>{successMsg}</Text>
+                      <Text style={s.successText}>{successMsg}</Text>
                     </View>
                   ) : null}
 
                   {/* Email */}
-                  <View style={styles.inputFieldGroup}>
-                    <Text style={styles.fieldLabel}>Email Address</Text>
-                    <View
-                      style={[
-                        styles.inputBox,
-                        focusedInput === 'loginEmail' && styles.inputBoxFocused,
-                      ]}
-                    >
-                      <Ionicons name="mail-outline" size={18} color="#64748b" style={styles.inputLeadingIcon} />
+                  <View style={s.fieldGroup}>
+                    <Text style={s.fieldLabel}>Email Address</Text>
+                    <View style={[s.inputBox, focusedInput === 'le' && s.inputBoxFocus]}>
+                      <Ionicons name="mail-outline" size={18} color="#64748b" style={s.inputIcon} />
                       <TextInput
-                        style={styles.textInput}
+                        style={s.textInput}
                         placeholder="Enter your email address"
                         placeholderTextColor="#94a3b8"
                         value={email}
                         onChangeText={setEmail}
                         keyboardType="email-address"
                         autoCapitalize="none"
-                        onFocus={() => setFocusedInput('loginEmail')}
+                        onFocus={() => setFocusedInput('le')}
                         onBlur={() => setFocusedInput(null)}
                       />
                       {email ? (
-                        <TouchableOpacity
-                          onPress={() => setEmail('')}
-                          hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-                        >
+                        <TouchableOpacity onPress={() => setEmail('')} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
                           <Ionicons name="close-circle" size={16} color="#94a3b8" />
                         </TouchableOpacity>
                       ) : null}
@@ -310,134 +387,107 @@ export const LoginView = () => {
                   </View>
 
                   {/* Password */}
-                  <View style={styles.inputFieldGroup}>
-                    <Text style={styles.fieldLabel}>Password</Text>
-                    <View
-                      style={[
-                        styles.inputBox,
-                        focusedInput === 'loginPassword' && styles.inputBoxFocused,
-                      ]}
-                    >
-                      <Ionicons name="lock-closed-outline" size={18} color="#64748b" style={styles.inputLeadingIcon} />
+                  <View style={s.fieldGroup}>
+                    <Text style={s.fieldLabel}>Password</Text>
+                    <View style={[s.inputBox, focusedInput === 'lp' && s.inputBoxFocus]}>
+                      <Ionicons name="lock-closed-outline" size={18} color="#64748b" style={s.inputIcon} />
                       <TextInput
-                        style={styles.textInput}
+                        style={s.textInput}
                         placeholder="Enter your password"
                         placeholderTextColor="#94a3b8"
                         value={password}
                         onChangeText={setPassword}
                         secureTextEntry={!showPassword}
                         autoCapitalize="none"
-                        onFocus={() => setFocusedInput('loginPassword')}
+                        onFocus={() => setFocusedInput('lp')}
                         onBlur={() => setFocusedInput(null)}
                       />
-                      <TouchableOpacity
-                        onPress={() => setShowPassword((prev) => !prev)}
-                        hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-                      >
-                        <Ionicons
-                          name={showPassword ? 'eye-off-outline' : 'eye-outline'}
-                          size={19}
-                          color="#64748b"
-                        />
+                      <TouchableOpacity onPress={() => setShowPassword(v => !v)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+                        <Ionicons name={showPassword ? 'eye-off-outline' : 'eye-outline'} size={19} color="#64748b" />
                       </TouchableOpacity>
                     </View>
                   </View>
 
-                  {/* Sign In Button */}
+                  {/* Sign In */}
                   <TouchableOpacity
-                    style={[styles.primaryActionBtn, loading && { opacity: 0.75 }]}
+                    style={[s.primaryBtn, loading && { opacity: 0.7 }]}
                     onPress={handleLogin}
                     disabled={loading}
                     activeOpacity={0.85}
                   >
-                    {loading ? (
-                      <ActivityIndicator size="small" color="#ffffff" />
-                    ) : (
-                      <Text style={styles.primaryActionBtnText}>Sign In</Text>
-                    )}
+                    {loading ? <ActivityIndicator size="small" color="#fff" /> : <Text style={s.primaryBtnText}>Sign In</Text>}
                   </TouchableOpacity>
 
-                  {/* OR Divider */}
-                  <View style={styles.orDividerRow}>
-                    <View style={styles.orLine} />
-                    <Text style={styles.orText}>OR</Text>
-                    <View style={styles.orLine} />
+                  {/* OR */}
+                  <View style={s.orRow}>
+                    <View style={s.orLine} />
+                    <Text style={s.orText}>OR</Text>
+                    <View style={s.orLine} />
                   </View>
 
-                  {/* Continue with OTP Button */}
+                  {/* OTP */}
                   <TouchableOpacity
-                    style={styles.secondaryOtpBtn}
-                    onPress={() => {
-                      setOtpMsg('');
-                      setOtpSent(false);
-                      setOtpCode('');
-                      setOtpModalVisible(true);
-                    }}
+                    style={s.otpBtn}
+                    onPress={() => { setOtpMsg(''); setOtpSent(false); setOtpCode(''); setOtpModalVisible(true); }}
                     activeOpacity={0.8}
                   >
                     <Ionicons name="phone-portrait-outline" size={18} color="#0284c7" style={{ marginRight: 8 }} />
-                    <Text style={styles.secondaryOtpBtnText}>Continue with OTP</Text>
+                    <Text style={s.otpBtnText}>Continue with OTP</Text>
                   </TouchableOpacity>
 
-                  {/* Bottom link: Don't have an account? Sign Up */}
-                  <View style={styles.bottomLinkRow}>
-                    <Text style={styles.bottomLinkMuted}>Don't have an account? </Text>
-                    <TouchableOpacity
-                      onPress={() => transitionTo('register', 'next')}
-                      activeOpacity={0.7}
-                      hitSlop={{ top: 8, bottom: 8, left: 4, right: 8 }}
-                    >
-                      <Text style={styles.bottomLinkAction}>Sign Up</Text>
+                  {/* Bottom link */}
+                  <View style={s.bottomLink}>
+                    <Text style={s.bottomLinkMuted}>Don't have an account? </Text>
+                    <TouchableOpacity onPress={() => navigateTo('register', 'next')} hitSlop={{ top: 8, bottom: 8, left: 4, right: 8 }}>
+                      <Text style={s.bottomLinkAction}>Sign Up</Text>
                     </TouchableOpacity>
                   </View>
                 </View>
-              ) : (
-                /* SCREEN 4: CREATE YOUR ACCOUNT */
-                <View style={styles.formContainer}>
-                  <View style={styles.formHeaderBlock}>
-                    <Text style={styles.mainHeading}>Create Your Account</Text>
-                    <Text style={styles.subHeading}>Get started with your business account</Text>
+              )}
+
+              {/* ═══════════════════════════════════════════════ */}
+              {/* SCREEN 4: REGISTER (CREATE YOUR ACCOUNT)       */}
+              {/* ═══════════════════════════════════════════════ */}
+              {activeScreen === 'register' && (
+                <View style={s.screenInner}>
+                  {/* Brand */}
+                  <View style={s.brandCenter}>
+                    <Animated.View style={[s.logoBadge, { transform: [{ scale: logoPulse }] }]}>
+                      <Text style={s.logoLetter}>M</Text>
+                    </Animated.View>
+                    <Text style={s.brandName}>MaterialMApp</Text>
+                    <Text style={s.brandTagline}>Quarry & Weighbridge Dispatch</Text>
+                  </View>
+
+                  <View style={s.formBlock}>
+                    <Text style={s.formTitle}>Create Your Account</Text>
+                    <Text style={s.formSubtitle}>Get started with your business account</Text>
                   </View>
 
                   {errorMsg ? (
-                    <View style={styles.errorBanner}>
+                    <View style={s.errorBanner}>
                       <Ionicons name="alert-circle" size={16} color="#ef4444" />
-                      <Text style={styles.errorBannerText}>{errorMsg}</Text>
-                    </View>
-                  ) : null}
-
-                  {successMsg ? (
-                    <View style={styles.successBanner}>
-                      <Ionicons name="checkmark-circle" size={16} color="#16a34a" />
-                      <Text style={styles.successBannerText}>{successMsg}</Text>
+                      <Text style={s.errorText}>{errorMsg}</Text>
                     </View>
                   ) : null}
 
                   {/* Full Name */}
-                  <View style={styles.inputFieldGroup}>
-                    <Text style={styles.fieldLabel}>Full Name</Text>
-                    <View
-                      style={[
-                        styles.inputBox,
-                        focusedInput === 'regName' && styles.inputBoxFocused,
-                      ]}
-                    >
-                      <Ionicons name="person-outline" size={18} color="#64748b" style={styles.inputLeadingIcon} />
+                  <View style={s.fieldGroup}>
+                    <Text style={s.fieldLabel}>Full Name</Text>
+                    <View style={[s.inputBox, focusedInput === 'rn' && s.inputBoxFocus]}>
+                      <Ionicons name="person-outline" size={18} color="#64748b" style={s.inputIcon} />
                       <TextInput
-                        style={styles.textInput}
+                        style={s.textInput}
                         placeholder="Enter your name"
                         placeholderTextColor="#94a3b8"
                         value={name}
                         onChangeText={setName}
                         autoCapitalize="words"
-                        onFocus={() => setFocusedInput('regName')}
+                        onFocus={() => setFocusedInput('rn')}
                         onBlur={() => setFocusedInput(null)}
                       />
                       {name ? (
-                        <TouchableOpacity
-                          onPress={() => setName('')}
-                          hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-                        >
+                        <TouchableOpacity onPress={() => setName('')} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
                           <Ionicons name="close-circle" size={16} color="#94a3b8" />
                         </TouchableOpacity>
                       ) : null}
@@ -445,31 +495,23 @@ export const LoginView = () => {
                   </View>
 
                   {/* Email */}
-                  <View style={styles.inputFieldGroup}>
-                    <Text style={styles.fieldLabel}>Email Address</Text>
-                    <View
-                      style={[
-                        styles.inputBox,
-                        focusedInput === 'regEmail' && styles.inputBoxFocused,
-                      ]}
-                    >
-                      <Ionicons name="mail-outline" size={18} color="#64748b" style={styles.inputLeadingIcon} />
+                  <View style={s.fieldGroup}>
+                    <Text style={s.fieldLabel}>Email Address</Text>
+                    <View style={[s.inputBox, focusedInput === 're' && s.inputBoxFocus]}>
+                      <Ionicons name="mail-outline" size={18} color="#64748b" style={s.inputIcon} />
                       <TextInput
-                        style={styles.textInput}
+                        style={s.textInput}
                         placeholder="Enter your email"
                         placeholderTextColor="#94a3b8"
                         value={email}
                         onChangeText={setEmail}
                         keyboardType="email-address"
                         autoCapitalize="none"
-                        onFocus={() => setFocusedInput('regEmail')}
+                        onFocus={() => setFocusedInput('re')}
                         onBlur={() => setFocusedInput(null)}
                       />
                       {email ? (
-                        <TouchableOpacity
-                          onPress={() => setEmail('')}
-                          hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-                        >
+                        <TouchableOpacity onPress={() => setEmail('')} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
                           <Ionicons name="close-circle" size={16} color="#94a3b8" />
                         </TouchableOpacity>
                       ) : null}
@@ -477,172 +519,106 @@ export const LoginView = () => {
                   </View>
 
                   {/* Password */}
-                  <View style={styles.inputFieldGroup}>
-                    <Text style={styles.fieldLabel}>Password</Text>
-                    <View
-                      style={[
-                        styles.inputBox,
-                        focusedInput === 'regPassword' && styles.inputBoxFocused,
-                      ]}
-                    >
-                      <Ionicons name="lock-closed-outline" size={18} color="#64748b" style={styles.inputLeadingIcon} />
+                  <View style={s.fieldGroup}>
+                    <Text style={s.fieldLabel}>Password</Text>
+                    <View style={[s.inputBox, focusedInput === 'rp' && s.inputBoxFocus]}>
+                      <Ionicons name="lock-closed-outline" size={18} color="#64748b" style={s.inputIcon} />
                       <TextInput
-                        style={styles.textInput}
+                        style={s.textInput}
                         placeholder="Create a password"
                         placeholderTextColor="#94a3b8"
                         value={password}
                         onChangeText={setPassword}
                         secureTextEntry={!showPassword}
                         autoCapitalize="none"
-                        onFocus={() => setFocusedInput('regPassword')}
+                        onFocus={() => setFocusedInput('rp')}
                         onBlur={() => setFocusedInput(null)}
                       />
-                      <TouchableOpacity
-                        onPress={() => setShowPassword((prev) => !prev)}
-                        hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-                      >
-                        <Ionicons
-                          name={showPassword ? 'eye-off-outline' : 'eye-outline'}
-                          size={19}
-                          color="#64748b"
-                        />
+                      <TouchableOpacity onPress={() => setShowPassword(v => !v)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+                        <Ionicons name={showPassword ? 'eye-off-outline' : 'eye-outline'} size={19} color="#64748b" />
                       </TouchableOpacity>
                     </View>
                   </View>
 
-                  {/* Sign Up Button */}
+                  {/* Sign Up */}
                   <TouchableOpacity
-                    style={[styles.primaryActionBtn, loading && { opacity: 0.75 }]}
+                    style={[s.primaryBtn, loading && { opacity: 0.7 }]}
                     onPress={handleRegister}
                     disabled={loading}
                     activeOpacity={0.85}
                   >
-                    {loading ? (
-                      <ActivityIndicator size="small" color="#ffffff" />
-                    ) : (
-                      <Text style={styles.primaryActionBtnText}>Sign Up</Text>
-                    )}
+                    {loading ? <ActivityIndicator size="small" color="#fff" /> : <Text style={s.primaryBtnText}>Sign Up</Text>}
                   </TouchableOpacity>
 
-                  {/* Terms Note */}
-                  <View style={styles.termsNoteWrap}>
-                    <Text style={styles.termsNoteText}>
+                  {/* Terms */}
+                  <View style={s.termsWrap}>
+                    <Text style={s.termsText}>
                       By continuing, you agree to our{' '}
-                      <Text style={styles.termsNoteLink}>Terms &amp; Conditions</Text> and{' '}
-                      <Text style={styles.termsNoteLink}>Privacy Policy</Text>
+                      <Text style={s.termsLink}>Terms &amp; Conditions</Text> and{' '}
+                      <Text style={s.termsLink}>Privacy Policy</Text>
                     </Text>
                   </View>
                 </View>
               )}
             </Animated.View>
 
-            {/* Decorative Curved Wave at bottom edge */}
-            <View style={styles.waveContainer} pointerEvents="none">
-              <Svg width="100%" height="80" viewBox="0 0 375 80" preserveAspectRatio="none">
+            {/* ─── DECORATIVE WAVE AT BOTTOM ─── */}
+            <View style={s.waveWrap} pointerEvents="none">
+              <Svg width="100%" height="90" viewBox="0 0 375 90" preserveAspectRatio="none">
                 <Defs>
-                  <LinearGradient id="waveGrad1" x1="0" y1="0" x2="1" y2="1">
+                  <LinearGradient id="w1" x1="0" y1="0" x2="1" y2="1">
                     <Stop offset="0" stopColor="#e0f2fe" stopOpacity="0.7" />
                     <Stop offset="1" stopColor="#ccfbf1" stopOpacity="0.7" />
                   </LinearGradient>
-                  <LinearGradient id="waveGrad2" x1="0" y1="0" x2="1" y2="0">
+                  <LinearGradient id="w2" x1="0" y1="0" x2="1" y2="0">
                     <Stop offset="0" stopColor="#ccfbf1" stopOpacity="0.5" />
                     <Stop offset="1" stopColor="#f0fdfa" stopOpacity="0.9" />
                   </LinearGradient>
                 </Defs>
-                <Path
-                  d="M0,25 C90,52 190,10 285,36 C330,50 355,38 375,32 L375,80 L0,80 Z"
-                  fill="url(#waveGrad1)"
-                />
-                <Path
-                  d="M0,42 C80,18 185,62 275,34 C325,16 355,28 375,35 L375,80 L0,80 Z"
-                  fill="url(#waveGrad2)"
-                />
+                <Path d="M0,30 C90,58 190,12 285,40 C330,54 355,42 375,36 L375,90 L0,90 Z" fill="url(#w1)" />
+                <Path d="M0,48 C80,22 185,66 275,38 C325,20 355,32 375,40 L375,90 L0,90 Z" fill="url(#w2)" />
               </Svg>
             </View>
           </View>
         </ScrollView>
 
-        {/* OTP Modal Dialog */}
-        <Modal
-          visible={otpModalVisible}
-          transparent={true}
-          animationType="fade"
-          onRequestClose={() => setOtpModalVisible(false)}
-        >
-          <TouchableOpacity
-            style={styles.modalBackdrop}
-            activeOpacity={1}
-            onPress={() => setOtpModalVisible(false)}
-          >
-            <TouchableOpacity
-              style={styles.modalBox}
-              activeOpacity={1}
-              onPress={(e) => Platform.OS === 'web' && e?.stopPropagation && e.stopPropagation()}
-            >
-              <View style={styles.modalHeaderRow}>
+        {/* ─── OTP MODAL ─── */}
+        <Modal visible={otpModalVisible} transparent animationType="fade" onRequestClose={() => setOtpModalVisible(false)}>
+          <TouchableOpacity style={s.modalBg} activeOpacity={1} onPress={() => setOtpModalVisible(false)}>
+            <TouchableOpacity style={s.modalBox} activeOpacity={1} onPress={e => Platform.OS === 'web' && e?.stopPropagation?.()}>
+              <View style={s.modalHeader}>
                 <View>
-                  <Text style={styles.modalTitle}>Continue with OTP</Text>
-                  <Text style={styles.modalSubtitle}>Quick login via one-time verification</Text>
+                  <Text style={s.modalTitle}>Continue with OTP</Text>
+                  <Text style={s.modalSub}>Quick login via one-time verification</Text>
                 </View>
-                <TouchableOpacity
-                  style={styles.modalCloseBtn}
-                  onPress={() => setOtpModalVisible(false)}
-                >
+                <TouchableOpacity style={s.modalClose} onPress={() => setOtpModalVisible(false)}>
                   <Ionicons name="close" size={18} color="#64748b" />
                 </TouchableOpacity>
               </View>
-
               {otpMsg ? (
-                <View style={[styles.errorBanner, { backgroundColor: '#f0fdf4', borderColor: '#bbf7d0' }]}>
+                <View style={[s.errorBanner, { backgroundColor: '#f0fdf4', borderColor: '#bbf7d0' }]}>
                   <Ionicons name="information-circle" size={16} color="#15803d" />
-                  <Text style={[styles.errorBannerText, { color: '#15803d' }]}>{otpMsg}</Text>
+                  <Text style={[s.errorText, { color: '#15803d' }]}>{otpMsg}</Text>
                 </View>
               ) : null}
-
-              <View style={styles.inputFieldGroup}>
-                <Text style={styles.fieldLabel}>Mobile Number or Email</Text>
-                <View style={styles.inputBox}>
-                  <Ionicons name="call-outline" size={17} color="#64748b" style={styles.inputLeadingIcon} />
-                  <TextInput
-                    style={styles.textInput}
-                    placeholder="+91 98765 43210 or email"
-                    placeholderTextColor="#94a3b8"
-                    value={otpPhone}
-                    onChangeText={setOtpPhone}
-                    autoCapitalize="none"
-                  />
+              <View style={s.fieldGroup}>
+                <Text style={s.fieldLabel}>Mobile Number or Email</Text>
+                <View style={s.inputBox}>
+                  <Ionicons name="call-outline" size={17} color="#64748b" style={s.inputIcon} />
+                  <TextInput style={s.textInput} placeholder="+91 98765 43210 or email" placeholderTextColor="#94a3b8" value={otpPhone} onChangeText={setOtpPhone} autoCapitalize="none" />
                 </View>
               </View>
-
               {otpSent && (
-                <View style={styles.inputFieldGroup}>
-                  <Text style={styles.fieldLabel}>6-Digit OTP</Text>
-                  <View style={styles.inputBox}>
-                    <Ionicons name="key-outline" size={17} color="#64748b" style={styles.inputLeadingIcon} />
-                    <TextInput
-                      style={styles.textInput}
-                      placeholder="Enter 6-digit code (e.g. 123456)"
-                      placeholderTextColor="#94a3b8"
-                      value={otpCode}
-                      onChangeText={setOtpCode}
-                      keyboardType="number-pad"
-                    />
+                <View style={s.fieldGroup}>
+                  <Text style={s.fieldLabel}>6-Digit OTP</Text>
+                  <View style={s.inputBox}>
+                    <Ionicons name="key-outline" size={17} color="#64748b" style={s.inputIcon} />
+                    <TextInput style={s.textInput} placeholder="Enter 6-digit code" placeholderTextColor="#94a3b8" value={otpCode} onChangeText={setOtpCode} keyboardType="number-pad" />
                   </View>
                 </View>
               )}
-
-              <TouchableOpacity
-                style={[styles.primaryActionBtn, otpLoading && { opacity: 0.75 }]}
-                onPress={otpSent ? handleVerifyOtp : handleSendOtp}
-                disabled={otpLoading}
-              >
-                {otpLoading ? (
-                  <ActivityIndicator size="small" color="#ffffff" />
-                ) : (
-                  <Text style={styles.primaryActionBtnText}>
-                    {otpSent ? 'Verify & Sign In' : 'Send OTP'}
-                  </Text>
-                )}
+              <TouchableOpacity style={[s.primaryBtn, otpLoading && { opacity: 0.7 }]} onPress={otpSent ? handleVerifyOtp : handleSendOtp} disabled={otpLoading}>
+                {otpLoading ? <ActivityIndicator size="small" color="#fff" /> : <Text style={s.primaryBtnText}>{otpSent ? 'Verify & Sign In' : 'Send OTP'}</Text>}
               </TouchableOpacity>
             </TouchableOpacity>
           </TouchableOpacity>
@@ -652,175 +628,299 @@ export const LoginView = () => {
   );
 };
 
-const styles = StyleSheet.create({
-  safeArea: {
+// ─────────────────────────────────────────────────
+// STYLES
+// ─────────────────────────────────────────────────
+const s = StyleSheet.create({
+  safe: {
     flex: 1,
     backgroundColor: '#ffffff',
-    ...(Platform.OS === 'web' ? { minHeight: '100vh', height: '100%' } : {}),
-  },
-  keyboardContainer: {
-    flex: 1,
-    backgroundColor: '#ffffff',
-    ...(Platform.OS === 'web' ? { minHeight: '100vh', height: '100%' } : {}),
-  },
-  scrollContent: {
-    flexGrow: 1,
-    backgroundColor: '#ffffff',
-    alignItems: 'center',
-    justifyContent: 'flex-start',
-  },
-
-  /* Full screen phone canvas - fills 100% on phone, max 440px on large desktop screen */
-  phoneCanvas: {
-    width: '100%',
-    maxWidth: 440,
-    flex: 1,
-    minHeight: '100%',
-    backgroundColor: '#ffffff',
-    justifyContent: 'flex-start',
-    paddingBottom: 24,
-    position: 'relative',
     ...(Platform.OS === 'web' ? { minHeight: '100vh' } : {}),
   },
+  kav: {
+    flex: 1,
+  },
+  scroll: {
+    flexGrow: 1,
+  },
 
-  /* Top Navigation Bar */
-  topBarRow: {
+  /* Full-screen canvas */
+  canvas: {
+    flex: 1,
+    width: '100%',
+    backgroundColor: '#ffffff',
+    position: 'relative',
+  },
+
+  /* Top Bar */
+  topBar: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: 20,
-    paddingTop: Platform.OS === 'web' ? 14 : 8,
+    paddingHorizontal: 16,
+    paddingTop: Platform.OS === 'web' ? 16 : 8,
     paddingBottom: 4,
-    minHeight: 48,
+    minHeight: 50,
     zIndex: 10,
   },
-  topBarPlaceholder: {
-    width: 38,
-    height: 38,
-  },
-  topBackArrowBtn: {
-    width: 38,
-    height: 38,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  topAuthButtonGroup: {
+  topBarRight: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 10,
   },
-  topTabBtn: {
-    paddingHorizontal: 12,
-    paddingVertical: 7,
+  backBtn: {
+    width: 40,
+    height: 40,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
-  topTabBtnTextActive: {
+  loginPillOutline: {
+    borderWidth: 1.5,
+    borderColor: '#0284c7',
+    backgroundColor: '#ffffff',
+    paddingHorizontal: 18,
+    paddingVertical: 7,
+    borderRadius: 20,
+  },
+  loginPillOutlineText: {
     color: '#0284c7',
-    fontSize: 14,
+    fontSize: 13.5,
     fontWeight: '700',
   },
-  topSignUpPillBtn: {
+  signUpPill: {
     backgroundColor: '#0284c7',
     paddingHorizontal: 18,
     paddingVertical: 7,
-    borderRadius: 8,
+    borderRadius: 20,
     shadowColor: '#0284c7',
     shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.25,
+    shadowOpacity: 0.3,
     shadowRadius: 4,
-    elevation: 2,
+    elevation: 3,
   },
-  topSignUpPillBtnText: {
+  signUpPillText: {
     color: '#ffffff',
-    fontSize: 13,
-    fontWeight: '700',
-  },
-  topLoginOutlineBtn: {
-    borderWidth: 1.5,
-    borderColor: '#cbd5e1',
-    backgroundColor: '#ffffff',
-    paddingHorizontal: 18,
-    paddingVertical: 6,
-    borderRadius: 8,
-  },
-  topLoginOutlineBtnText: {
-    color: '#0284c7',
-    fontSize: 13,
+    fontSize: 13.5,
     fontWeight: '700',
   },
 
-  /* Brand Header */
-  brandHeaderCenter: {
+  /* Animated content */
+  contentArea: {
+    flex: 1,
+    width: '100%',
+  },
+  screenInner: {
+    flex: 1,
+    paddingHorizontal: 24,
+    paddingTop: 8,
+    paddingBottom: 100,
+  },
+
+  /* Brand */
+  brandCenter: {
     alignItems: 'center',
-    marginTop: 10,
-    marginBottom: 16,
-    paddingHorizontal: 20,
+    marginBottom: 12,
   },
   logoBadge: {
-    width: 50,
-    height: 50,
-    borderRadius: 14,
+    width: 52,
+    height: 52,
+    borderRadius: 15,
     backgroundColor: '#0d9488',
     alignItems: 'center',
     justifyContent: 'center',
     marginBottom: 8,
     shadowColor: '#0d9488',
     shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.25,
+    shadowOpacity: 0.3,
     shadowRadius: 10,
-    elevation: 4,
+    elevation: 5,
   },
   logoLetter: {
     color: '#ffffff',
     fontSize: 28,
     fontWeight: '900',
   },
-  brandTitle: {
-    fontSize: 23,
+  brandName: {
+    fontSize: 24,
     fontWeight: '800',
     color: '#0f172a',
     letterSpacing: -0.4,
   },
-  tagBadge: {
-    backgroundColor: '#f0fdfa',
-    borderWidth: 1,
-    borderColor: '#ccfbf1',
-    paddingHorizontal: 12,
-    paddingVertical: 3.5,
-    borderRadius: 16,
-    marginTop: 5,
-  },
-  tagBadgeText: {
-    fontSize: 11.5,
+  brandTagline: {
+    fontSize: 13,
     fontWeight: '700',
-    color: '#0f766e',
+    color: '#0d9488',
+    marginTop: 3,
   },
 
-  /* Animated Form Pane */
-  animatedPane: {
+  /* Onboarding Screen 1 */
+  onboardDesc: {
+    fontSize: 14,
+    color: '#64748b',
+    textAlign: 'center',
+    lineHeight: 20,
+    marginBottom: 16,
+    paddingHorizontal: 8,
+  },
+  heroWrap: {
     width: '100%',
+    height: 240,
+    borderRadius: 18,
+    overflow: 'hidden',
+    backgroundColor: '#f8fafc',
+    marginBottom: 20,
+    shadowColor: '#0d9488',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.15,
+    shadowRadius: 16,
+    elevation: 4,
   },
-  formContainer: {
-    paddingHorizontal: 22,
-    paddingTop: 4,
-    paddingBottom: 20,
+  heroImg: {
+    width: '100%',
+    height: '100%',
   },
-  formHeaderBlock: {
+  onboardBottom: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: 8,
+  },
+  dotsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  dot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: '#cbd5e1',
+  },
+  dotActive: {
+    width: 20,
+    backgroundColor: '#0d9488',
+    borderRadius: 4,
+  },
+  skipBtn: {
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+  },
+  skipBtnText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#64748b',
+  },
+
+  /* Onboarding Screen 2 */
+  heroWrap2: {
+    width: '100%',
+    height: 200,
+    borderRadius: 18,
+    overflow: 'hidden',
+    backgroundColor: '#f8fafc',
+    marginBottom: 16,
+    shadowColor: '#0284c7',
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.12,
+    shadowRadius: 14,
+    elevation: 4,
+  },
+  slide2Title: {
+    fontSize: 22,
+    fontWeight: '800',
+    color: '#0f172a',
+    letterSpacing: -0.3,
     marginBottom: 16,
   },
-  mainHeading: {
+  featuresCol: {
+    gap: 12,
+    marginBottom: 20,
+  },
+  featureRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#ffffff',
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: '#f1f5f9',
+    padding: 12,
+    gap: 14,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.04,
+    shadowRadius: 3,
+    elevation: 1,
+  },
+  featureIcon: {
+    width: 42,
+    height: 42,
+    borderRadius: 21,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  featureTextCol: {
+    flex: 1,
+  },
+  featureTitle: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#0f172a',
+  },
+  featureSub: {
+    fontSize: 12,
+    color: '#64748b',
+    marginTop: 2,
+  },
+  onboardBottom2: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: 8,
+  },
+  backTextBtn: {
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+  },
+  backTextBtnLabel: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#64748b',
+  },
+  nextPill: {
+    backgroundColor: '#0284c7',
+    paddingHorizontal: 22,
+    paddingVertical: 10,
+    borderRadius: 22,
+    shadowColor: '#0284c7',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.3,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  nextPillText: {
+    color: '#ffffff',
+    fontSize: 13.5,
+    fontWeight: '700',
+  },
+
+  /* Form (Login & Register) */
+  formBlock: {
+    marginBottom: 16,
+  },
+  formTitle: {
     fontSize: 22,
     fontWeight: '800',
     color: '#0f172a',
     letterSpacing: -0.3,
   },
-  subHeading: {
+  formSubtitle: {
     fontSize: 13.5,
     color: '#64748b',
     marginTop: 3,
   },
 
   /* Input Fields */
-  inputFieldGroup: {
+  fieldGroup: {
     marginBottom: 14,
   },
   fieldLabel: {
@@ -834,50 +934,50 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     backgroundColor: '#ffffff',
     borderWidth: 1,
-    borderColor: '#cbd5e1',
+    borderColor: '#e2e8f0',
     borderRadius: 12,
     paddingHorizontal: 14,
-    height: 48,
+    height: 50,
   },
-  inputBoxFocused: {
+  inputBoxFocus: {
     borderColor: '#0284c7',
     borderWidth: 1.5,
     backgroundColor: '#f0f9ff',
   },
-  inputLeadingIcon: {
+  inputIcon: {
     marginRight: 10,
   },
   textInput: {
     flex: 1,
-    height: 48,
+    height: 50,
     fontSize: 14,
     color: '#0f172a',
-    outlineWidth: 0,
+    ...(Platform.OS === 'web' ? { outlineWidth: 0 } : {}),
   },
 
   /* Buttons */
-  primaryActionBtn: {
+  primaryBtn: {
     backgroundColor: '#0284c7',
-    height: 48,
+    height: 50,
     borderRadius: 12,
     alignItems: 'center',
     justifyContent: 'center',
-    marginTop: 8,
+    marginTop: 6,
     shadowColor: '#0284c7',
     shadowOffset: { width: 0, height: 3 },
-    shadowOpacity: 0.28,
+    shadowOpacity: 0.3,
     shadowRadius: 6,
     elevation: 3,
   },
-  primaryActionBtnText: {
+  primaryBtnText: {
     color: '#ffffff',
-    fontSize: 15,
+    fontSize: 15.5,
     fontWeight: '700',
   },
-  orDividerRow: {
+  orRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginVertical: 14,
+    marginVertical: 16,
     gap: 12,
   },
   orLine: {
@@ -891,53 +991,53 @@ const styles = StyleSheet.create({
     color: '#94a3b8',
     letterSpacing: 0.5,
   },
-  secondaryOtpBtn: {
+  otpBtn: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    height: 48,
+    height: 50,
     borderRadius: 12,
     borderWidth: 1.5,
     borderColor: '#0284c7',
     backgroundColor: '#ffffff',
   },
-  secondaryOtpBtnText: {
+  otpBtnText: {
     color: '#0284c7',
     fontSize: 14,
     fontWeight: '700',
   },
-  bottomLinkRow: {
+  bottomLink: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    marginTop: 18,
+    marginTop: 20,
   },
   bottomLinkMuted: {
-    fontSize: 13.5,
+    fontSize: 14,
     color: '#64748b',
   },
   bottomLinkAction: {
-    fontSize: 13.5,
+    fontSize: 14,
     fontWeight: '700',
     color: '#0284c7',
   },
-  termsNoteWrap: {
-    marginTop: 16,
+  termsWrap: {
+    marginTop: 18,
     alignItems: 'center',
     paddingHorizontal: 10,
   },
-  termsNoteText: {
+  termsText: {
     fontSize: 12,
     color: '#94a3b8',
     textAlign: 'center',
     lineHeight: 18,
   },
-  termsNoteLink: {
+  termsLink: {
     color: '#0284c7',
     fontWeight: '600',
   },
 
-  /* Alert Banners */
+  /* Banners */
   errorBanner: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -950,7 +1050,7 @@ const styles = StyleSheet.create({
     marginBottom: 12,
     gap: 8,
   },
-  errorBannerText: {
+  errorText: {
     fontSize: 12.5,
     color: '#b91c1c',
     fontWeight: '600',
@@ -968,15 +1068,15 @@ const styles = StyleSheet.create({
     marginBottom: 12,
     gap: 8,
   },
-  successBannerText: {
+  successText: {
     fontSize: 12.5,
     color: '#15803d',
     fontWeight: '600',
     flex: 1,
   },
 
-  /* Curved Wave at bottom */
-  waveContainer: {
+  /* Wave */
+  waveWrap: {
     position: 'absolute',
     bottom: 0,
     left: 0,
@@ -984,8 +1084,8 @@ const styles = StyleSheet.create({
     zIndex: -1,
   },
 
-  /* OTP Modal */
-  modalBackdrop: {
+  /* Modal */
+  modalBg: {
     flex: 1,
     backgroundColor: 'rgba(15, 23, 42, 0.55)',
     alignItems: 'center',
@@ -995,7 +1095,7 @@ const styles = StyleSheet.create({
   modalBox: {
     width: '100%',
     maxWidth: 360,
-    backgroundColor: '#ffffff',
+    backgroundColor: '#fff',
     borderRadius: 16,
     padding: 20,
     shadowColor: '#0f172a',
@@ -1004,7 +1104,7 @@ const styles = StyleSheet.create({
     shadowRadius: 20,
     elevation: 8,
   },
-  modalHeaderRow: {
+  modalHeader: {
     flexDirection: 'row',
     alignItems: 'flex-start',
     justifyContent: 'space-between',
@@ -1015,12 +1115,12 @@ const styles = StyleSheet.create({
     fontWeight: '800',
     color: '#0f172a',
   },
-  modalSubtitle: {
+  modalSub: {
     fontSize: 12,
     color: '#64748b',
     marginTop: 2,
   },
-  modalCloseBtn: {
+  modalClose: {
     width: 28,
     height: 28,
     borderRadius: 14,
