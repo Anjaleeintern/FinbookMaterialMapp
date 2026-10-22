@@ -241,7 +241,7 @@ export const DeliveryEntriesFormModal = ({ visible, onClose, onSuccess, masters 
   const numGstRate = parseFloat(gstRate) || 0;
 
   const netWt = Math.max(0, Number((numGWt - numTWt).toFixed(2)));
-  const amount = netWt > 0 ? Number((netWt * numRate).toFixed(2)) : Number((numCum * numRate).toFixed(2));
+  const amount = netWt > 0 ? Number(((netWt / 1000) * numRate).toFixed(2)) : Number((numCum * numRate).toFixed(2));
 
   const isGstVisible =
     typeMode === 'Royalty Sale' ||

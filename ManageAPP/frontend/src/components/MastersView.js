@@ -9,8 +9,10 @@ import {
   ActivityIndicator,
   Modal,
   Platform,
+  Linking,
   useWindowDimensions,
 } from 'react-native';
+import * as DocumentPicker from 'expo-document-picker';
 import { Ionicons } from '@expo/vector-icons';
 import { api } from '../api/client';
 
@@ -66,6 +68,18 @@ export const MastersView = React.memo(({ masters, onRefresh }) => {
   const isDesktop = width >= 1024;
 
   const [activeCategory, setActiveCategory] = useState('VehicleNo');
+  const [mobileDetailCategory, setMobileDetailCategory] = useState(null);
+
+  // Switch category and reset filters cleanly
+  const handleSelectCategory = (catId) => {
+    setActiveCategory(catId);
+    setStatusFilter('All');
+    setSearchQuery('');
+    setSelectedIds(new Set());
+    if (isMobile) {
+      setMobileDetailCategory(catId);
+    }
+  };
 
   // Master items from /api/masters/all
   const [masterList, setMasterList] = useState([]);
@@ -413,17 +427,20 @@ export const MastersView = React.memo(({ masters, onRefresh }) => {
   };
 
   // Download Unified Master Template (Excel .xlsx or CSV .csv with all master columns)
-  const handleDownloadTemplate = (format = 'xlsx') => {
-    if (Platform.OS === 'web' && typeof window !== 'undefined') {
-      const url = api.getMasterTemplateUrl(format);
-      const link = document.createElement('a');
-      link.href = url;
-      link.setAttribute('download', `Master_Data_Template.${format}`);
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-    } else {
-      alert(`Master Template URL:\n${api.getMasterTemplateUrl(format)}`);
+  const handleDownloadTemplate = async (format = 'xlsx') => {
+    const url = api.getMasterTemplateUrl(format);
+    try {
+      if (Platform.OS === 'web' && typeof window !== 'undefined') {
+        window.open(url, '_blank');
+      } else {
+        await Linking.openURL(url);
+      }
+    } catch (err) {
+      if (Platform.OS === 'web' && typeof window !== 'undefined') {
+        window.open(url, '_blank');
+      } else {
+        alert(`Master Template URL:\n${url}`);
+      }
     }
   };
 
@@ -465,6 +482,43 @@ export const MastersView = React.memo(({ masters, onRefresh }) => {
       setImportError(err.message || 'Failed to read file');
     } finally {
       setImporting(false);
+    }
+  };
+
+  const handlePickMasterFile = async () => {
+    setImportError('');
+    if (Platform.OS === 'web') {
+      fileInputRef.current?.click();
+      return;
+    }
+
+    try {
+      const result = await DocumentPicker.getDocumentAsync({
+        type: [
+          'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+          'application/vnd.ms-excel',
+          'text/csv',
+          'application/csv',
+          'text/plain',
+          '*/*',
+        ],
+        copyToCacheDirectory: true,
+      });
+
+      if (result.canceled || !result.assets || result.assets.length === 0) {
+        return;
+      }
+
+      const asset = result.assets[0];
+      const pickedFile = {
+        uri: asset.uri,
+        name: asset.name,
+        size: asset.size || 0,
+        mimeType: asset.mimeType,
+      };
+      await handleProcessFile(pickedFile);
+    } catch (err) {
+      setImportError('Failed to select file: ' + (err.message || ''));
     }
   };
 
@@ -566,7 +620,7 @@ export const MastersView = React.memo(({ masters, onRefresh }) => {
       <TouchableOpacity
         key={cat.id}
         style={[styles.smallCard, isSelected && styles.smallCardActive]}
-        onPress={() => setActiveCategory(cat.id)}
+        onPress={() => handleSelectCategory(cat.id)}
         activeOpacity={0.8}
       >
         <View style={[styles.smallIconWrap, isSelected && styles.smallIconWrapActive]}>
@@ -578,15 +632,908 @@ export const MastersView = React.memo(({ masters, onRefresh }) => {
           </Text>
           <View style={styles.smallCardNumRow}>
             <Text style={styles.smallCardCount}>{count}</Text>
-            <Text style={[styles.smallCardView, isSelected && styles.smallCardViewActive]}>View →</Text>
+            <Text style={[styles.smallCardView, isSelected && styles.smallCardViewActive]}>
+              {isMobile ? 'Open →' : 'View →'}
+            </Text>
           </View>
         </View>
       </TouchableOpacity>
     );
   };
 
+  // ==========================================
+  // MOBILE VIEW 1: DEDICATED FULL-SCREEN LIST PAGE
+  // ==========================================
+  const renderMobileDetailPage = () => {
+    return (
+      <View style={styles.mobileDetailContainer}>
+        {/* Sticky Top Header with Back Button */}
+        <View style={styles.mobileDetailHeader}>
+          <TouchableOpacity
+            style={styles.mobileBackBtn}
+            onPress={() => setMobileDetailCategory(null)}
+            activeOpacity={0.7}
+          >
+            <Ionicons name="chevron-back" size={20} color="#0284c7" />
+            <Text style={styles.mobileBackBtnText}>Masters</Text>
+          </TouchableOpacity>
+
+          <View style={styles.mobileDetailHeaderCenter}>
+            <Ionicons name={currentCatConfig.icon} size={17} color="#0f172a" style={{ marginRight: 5 }} />
+            <Text style={styles.mobileDetailHeaderTitle} numberOfLines={1}>
+              {currentCatConfig.label}
+            </Text>
+            <View style={styles.mobileDetailCountBadge}>
+              <Text style={styles.mobileDetailCountBadgeText}>
+                {categoryCounts[activeCategory] || 0}
+              </Text>
+            </View>
+          </View>
+
+          <TouchableOpacity
+            style={styles.mobileAddBtnSmall}
+            onPress={() => handleOpenAdd(activeCategory)}
+            activeOpacity={0.8}
+          >
+            <Ionicons name="add" size={16} color="#ffffff" style={{ marginRight: 2 }} />
+            <Text style={styles.mobileAddBtnSmallText}>Add</Text>
+          </TouchableOpacity>
+        </View>
+
+        {/* Quick Category Switcher Tabs */}
+        <View style={styles.mobileCategoryPillsScrollWrap}>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.mobileCategoryPillsRow}>
+            {CATEGORIES.map((cat) => {
+              const isCatActive = activeCategory === cat.id;
+              const count = categoryCounts[cat.id] || 0;
+              return (
+                <TouchableOpacity
+                  key={cat.id}
+                  style={[styles.mobileCatPill, isCatActive && styles.mobileCatPillActive]}
+                  onPress={() => handleSelectCategory(cat.id)}
+                  activeOpacity={0.75}
+                >
+                  <Ionicons
+                    name={cat.icon}
+                    size={13}
+                    color={isCatActive ? '#ffffff' : '#64748b'}
+                    style={{ marginRight: 4 }}
+                  />
+                  <Text style={[styles.mobileCatPillText, isCatActive && styles.mobileCatPillTextActive]}>
+                    {cat.label} ({count})
+                  </Text>
+                </TouchableOpacity>
+              );
+            })}
+          </ScrollView>
+        </View>
+
+        {/* Search Bar */}
+        <View style={styles.mobileSearchBoxWrap}>
+          <View style={styles.mobileSearchBox}>
+            <Ionicons name="search-outline" size={16} color="#0284c7" style={{ marginRight: 8 }} />
+            <TextInput
+              style={styles.mobileSearchInput}
+              placeholder={`Search ${currentCatConfig.label}...`}
+              placeholderTextColor="#94a3b8"
+              value={searchQuery}
+              onChangeText={setSearchQuery}
+            />
+            {searchQuery ? (
+              <TouchableOpacity onPress={() => setSearchQuery('')} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+                <Ionicons name="close-circle" size={16} color="#94a3b8" />
+              </TouchableOpacity>
+            ) : null}
+          </View>
+        </View>
+
+        {/* Filter Pills & Bulk Actions */}
+        <View style={styles.mobileFilterPillBar}>
+          <View style={styles.mobileStatusGroup}>
+            {['All', 'Active', 'Inactive'].map((st) => {
+              const isSelected = statusFilter === st;
+              const count =
+                st === 'All'
+                  ? statusCounts.all
+                  : st === 'Active'
+                    ? statusCounts.active
+                    : statusCounts.inactive;
+              return (
+                <TouchableOpacity
+                  key={st}
+                  style={[styles.mobileFilterPill, isSelected && styles.mobileFilterPillActive]}
+                  onPress={() => setStatusFilter(st)}
+                >
+                  <Text style={[styles.mobileFilterPillText, isSelected && styles.mobileFilterPillTextActive]}>
+                    {st} ({count})
+                  </Text>
+                </TouchableOpacity>
+              );
+            })}
+          </View>
+
+          {selectedIds.size > 0 && (
+            <View style={{ position: 'relative' }}>
+              <TouchableOpacity
+                style={styles.mobileBulkBtn}
+                onPress={() => setBulkMenuVisible(!bulkMenuVisible)}
+                activeOpacity={0.8}
+              >
+                <Ionicons name="layers-outline" size={13} color="#0284c7" style={{ marginRight: 4 }} />
+                <Text style={styles.mobileBulkBtnText}>Bulk ({selectedIds.size})</Text>
+                <Ionicons name="chevron-down" size={11} color="#0284c7" style={{ marginLeft: 3 }} />
+              </TouchableOpacity>
+
+              {bulkMenuVisible && (
+                <View style={styles.bulkDropdownMenu}>
+                  <TouchableOpacity style={styles.bulkMenuItem} onPress={() => handleBulkAction('activate')}>
+                    <Ionicons name="checkmark-circle-outline" size={15} color="#16a34a" />
+                    <Text style={styles.bulkMenuText}>Set as Active</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity style={styles.bulkMenuItem} onPress={() => handleBulkAction('deactivate')}>
+                    <Ionicons name="pause-circle-outline" size={15} color="#eab308" />
+                    <Text style={styles.bulkMenuText}>Set as Inactive</Text>
+                  </TouchableOpacity>
+                  <View style={styles.menuDivider} />
+                  <TouchableOpacity style={styles.bulkMenuItem} onPress={() => handleBulkAction('delete')}>
+                    <Ionicons name="trash-outline" size={15} color="#ef4444" />
+                    <Text style={[styles.bulkMenuText, { color: '#ef4444' }]}>Delete Selected</Text>
+                  </TouchableOpacity>
+                </View>
+              )}
+            </View>
+          )}
+        </View>
+
+        {/* List Controls: Select All & Sort */}
+        <View style={styles.mobileListMetaRow}>
+          <TouchableOpacity
+            style={styles.mobileSelectAllBtn}
+            onPress={toggleSelectAll}
+            activeOpacity={0.7}
+          >
+            <Ionicons
+              name={
+                selectedIds.size === activeRecords.length && activeRecords.length > 0
+                  ? 'checkbox'
+                  : 'square-outline'
+              }
+              size={18}
+              color={selectedIds.size > 0 ? '#0284c7' : '#94a3b8'}
+            />
+            <Text style={styles.mobileSelectAllText}>
+              {selectedIds.size > 0 ? `${selectedIds.size} Selected` : 'Select All'}
+            </Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={styles.mobileSortToggle}
+            onPress={() => setSortAsc(!sortAsc)}
+            activeOpacity={0.7}
+          >
+            <Text style={styles.mobileSortToggleText}>{sortAsc ? 'A → Z' : 'Z → A'}</Text>
+            <Ionicons name={sortAsc ? 'arrow-up' : 'arrow-down'} size={12} color="#64748b" style={{ marginLeft: 3 }} />
+          </TouchableOpacity>
+        </View>
+
+        {/* Native Scrollable Card List */}
+        <ScrollView
+          style={styles.mobileDetailScroll}
+          contentContainerStyle={styles.mobileDetailScrollContent}
+          showsVerticalScrollIndicator={true}
+        >
+          {loading ? (
+            <View style={styles.loadingArea}>
+              <ActivityIndicator size="small" color="#0284c7" />
+              <Text style={styles.loadingText}>Loading master data...</Text>
+            </View>
+          ) : activeRecords.length === 0 ? (
+            <View style={styles.mobileEmptyState}>
+              <Ionicons name="folder-open-outline" size={44} color="#cbd5e1" />
+              <Text style={styles.mobileEmptyTitle}>No {currentCatConfig.label} Found</Text>
+              <Text style={styles.mobileEmptySubtitle}>
+                {searchQuery || statusFilter !== 'All'
+                  ? 'No records match your current filter or search.'
+                  : `No records yet in ${currentCatConfig.label}. Tap "+ Add" to create one.`}
+              </Text>
+              {(searchQuery || statusFilter !== 'All') ? (
+                <TouchableOpacity
+                  style={styles.mobileResetFilterBtn}
+                  onPress={() => {
+                    setSearchQuery('');
+                    setStatusFilter('All');
+                  }}
+                >
+                  <Text style={styles.mobileResetFilterBtnText}>Show All Records</Text>
+                </TouchableOpacity>
+              ) : (
+                <TouchableOpacity
+                  style={styles.mobileResetFilterBtn}
+                  onPress={() => handleOpenAdd(activeCategory)}
+                >
+                  <Text style={styles.mobileResetFilterBtnText}>+ Add {currentCatConfig.singular}</Text>
+                </TouchableOpacity>
+              )}
+            </View>
+          ) : (
+            <>
+              {activeRecords.map((item, idx) => {
+                const rowNumber = idx + 1;
+                const isSelected = selectedIds.has(item.id);
+                const isActive = item.status === 'Active';
+                const isStatic = isItemStatic(item);
+                const hasSubTypes = item.sub_types && item.sub_types.length > 0;
+
+                return (
+                  <View
+                    key={item.id}
+                    style={[
+                      styles.mobileItemCard,
+                      isSelected && styles.mobileItemCardSelected,
+                    ]}
+                  >
+                    {/* Top Row: Checkbox, Index, Value, Status Badge */}
+                    <View style={styles.mobileItemCardTop}>
+                      <TouchableOpacity
+                        style={styles.mobileItemCheckbox}
+                        onPress={() => toggleSelectOne(item.id)}
+                        hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                      >
+                        <Ionicons
+                          name={isSelected ? 'checkbox' : 'square-outline'}
+                          size={18}
+                          color={isSelected ? '#0284c7' : '#94a3b8'}
+                        />
+                      </TouchableOpacity>
+
+                      <View style={styles.mobileItemIndexBadge}>
+                        <Text style={styles.mobileItemIndexText}>#{rowNumber}</Text>
+                      </View>
+
+                      <View style={styles.mobileItemValueWrap}>
+                        <Text style={styles.mobileItemValueText} numberOfLines={2}>
+                          {item.value}
+                        </Text>
+                        {item.created_at ? (
+                          <Text style={styles.mobileItemDateText}>
+                            Added {formatDate(item.created_at)}
+                          </Text>
+                        ) : null}
+                      </View>
+
+                      {/* Status Badge (Tap to toggle status) */}
+                      <TouchableOpacity
+                        style={[
+                          styles.statusBadge,
+                          isActive ? styles.badgeActive : styles.badgeInactive,
+                          styles.mobileStatusBadgeTouch,
+                        ]}
+                        onPress={() => handleToggleStatus(item)}
+                        activeOpacity={0.7}
+                      >
+                        <View style={[styles.statusDot, isActive ? styles.dotActive : styles.dotInactive]} />
+                        <Text style={[styles.statusBadgeText, isActive ? styles.badgeTextActive : styles.badgeTextInactive]}>
+                          {item.status}
+                        </Text>
+                      </TouchableOpacity>
+                    </View>
+
+                    {/* If HR Loading sub-types */}
+                    {hasSubTypes && (
+                      <View style={styles.mobileSubTypesBox}>
+                        <Text style={styles.mobileSubTypesTitle}>Sub-types / Options:</Text>
+                        {item.sub_types.map((sub, sIdx) => (
+                          <View key={`${item.id}_sub_${sIdx}`} style={styles.mobileSubTypeRowItem}>
+                            <Ionicons name="return-down-forward-outline" size={13} color="#0284c7" />
+                            <Text style={styles.mobileSubTypeLabel}>{sub.label || sub.value}</Text>
+                            <View style={[styles.statusBadge, styles.badgeActive, { marginLeft: 'auto', paddingVertical: 1, paddingHorizontal: 5 }]}>
+                              <View style={[styles.statusDot, styles.dotActive, { width: 4, height: 4 }]} />
+                              <Text style={[styles.statusBadgeText, styles.badgeTextActive, { fontSize: 8.5 }]}>Active</Text>
+                            </View>
+                          </View>
+                        ))}
+                      </View>
+                    )}
+
+                    {/* Bottom Row: Quick Actions */}
+                    <View style={styles.mobileItemCardBottom}>
+                      <TouchableOpacity
+                        style={styles.mobileActionBtn}
+                        onPress={() => handleToggleStatus(item)}
+                        activeOpacity={0.7}
+                      >
+                        <Ionicons
+                          name={isActive ? 'pause-circle-outline' : 'checkmark-circle-outline'}
+                          size={14}
+                          color={isActive ? '#ca8a04' : '#16a34a'}
+                        />
+                        <Text style={[styles.mobileActionBtnText, { color: isActive ? '#ca8a04' : '#16a34a' }]}>
+                          {isActive ? 'Deactivate' : 'Activate'}
+                        </Text>
+                      </TouchableOpacity>
+
+                      <TouchableOpacity
+                        style={styles.mobileActionBtn}
+                        onPress={() => handleOpenEdit(item)}
+                        activeOpacity={0.7}
+                      >
+                        <Ionicons name="pencil-outline" size={13} color="#0284c7" />
+                        <Text style={[styles.mobileActionBtnText, { color: '#0284c7' }]}>Edit</Text>
+                      </TouchableOpacity>
+
+                      {!isStatic && (
+                        <TouchableOpacity
+                          style={[styles.mobileActionBtn, styles.mobileActionBtnDelete]}
+                          onPress={() => handleDeleteItem(item)}
+                          activeOpacity={0.7}
+                        >
+                          <Ionicons name="trash-outline" size={13} color="#ef4444" />
+                          <Text style={[styles.mobileActionBtnText, { color: '#ef4444' }]}>Delete</Text>
+                        </TouchableOpacity>
+                      )}
+                    </View>
+                  </View>
+                );
+              })}
+
+              {/* End of list footer */}
+              <View style={styles.mobileListFooter}>
+                <Text style={styles.mobileListFooterText}>
+                  Showing all {activeRecords.length} {currentCatConfig.label} records
+                </Text>
+              </View>
+            </>
+          )}
+        </ScrollView>
+      </View>
+    );
+  };
+
+  // ==========================================
+  // MOBILE VIEW 2: APP-BASED MASTERS OVERVIEW HUB
+  // ==========================================
+  const renderMobileHubPage = () => {
+    return (
+      <ScrollView
+        style={styles.mobileHubScroll}
+        contentContainerStyle={styles.mobileHubScrollContent}
+        showsVerticalScrollIndicator={false}
+      >
+        {/* Hub Header */}
+        <View style={styles.mobileHubHeader}>
+          <View style={{ flex: 1, paddingRight: 8 }}>
+            <Text style={styles.pageTitle}>Masters Management</Text>
+            <Text style={styles.pageSubtitle}>
+              Tap any master directory to open its full list.
+            </Text>
+          </View>
+
+          <TouchableOpacity
+            style={styles.btnPrimary}
+            onPress={() => handleOpenAdd(activeCategory)}
+            activeOpacity={0.8}
+          >
+            <Ionicons name="add" size={16} color="#ffffff" style={{ marginRight: 4 }} />
+            <Text style={styles.btnPrimaryText}>Add Master</Text>
+          </TouchableOpacity>
+        </View>
+
+        {/* Master Categories List */}
+        <View style={styles.mobileHubSection}>
+          <Text style={styles.mobileSectionHeading}>MASTER DIRECTORIES</Text>
+
+          <View style={styles.mobileHubCardsCol}>
+            {CATEGORIES.map((cat) => {
+              const count = categoryCounts[cat.id] || 0;
+              return (
+                <TouchableOpacity
+                  key={cat.id}
+                  style={styles.mobileHubCatCard}
+                  onPress={() => handleSelectCategory(cat.id)}
+                  activeOpacity={0.75}
+                >
+                  <View style={styles.mobileHubCatIconWrap}>
+                    <Ionicons name={cat.icon} size={22} color="#0284c7" />
+                  </View>
+
+                  <View style={styles.mobileHubCatContent}>
+                    <Text style={styles.mobileHubCatTitle}>{cat.label}</Text>
+                    <Text style={styles.mobileHubCatSub} numberOfLines={1}>
+                      {cat.id === 'VehicleNo' && 'Truck & transport plate numbers'}
+                      {cat.id === 'TransportName' && 'Logistics & transport agencies'}
+                      {cat.id === 'MaterialName' && 'Aggregates, stones & raw materials'}
+                      {cat.id === 'PartyName' && 'Registered buyers & customers'}
+                      {cat.id === 'Type/Mode' && 'Sale types & loading modes'}
+                    </Text>
+                  </View>
+
+                  <View style={styles.mobileHubCatRight}>
+                    <View style={styles.mobileHubCountBadge}>
+                      <Text style={styles.mobileHubCountText}>{count}</Text>
+                    </View>
+                    <View style={styles.mobileHubOpenRow}>
+                      <Text style={styles.mobileHubOpenText}>Open list</Text>
+                      <Ionicons name="chevron-forward" size={13} color="#0284c7" />
+                    </View>
+                  </View>
+                </TouchableOpacity>
+              );
+            })}
+          </View>
+        </View>
+
+        {/* Batch Operations & Tools */}
+        <View style={styles.mobileHubSection}>
+          <Text style={styles.mobileSectionHeading}>BATCH OPERATIONS & TOOLS</Text>
+
+          <View style={styles.mobileToolsGrid}>
+            {/* Import Excel */}
+            <TouchableOpacity
+              style={styles.mobileToolCard}
+              onPress={() => handleOpenImport(activeCategory)}
+              activeOpacity={0.8}
+            >
+              <View style={[styles.mobileToolIconWrap, { backgroundColor: '#ecfdf5' }]}>
+                <Ionicons name="cloud-upload-outline" size={22} color="#059669" />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.mobileToolTitle}>Import from Excel / CSV</Text>
+                <Text style={styles.mobileToolSub}>
+                  Upload spreadsheets with automatic multi-column master detection.
+                </Text>
+              </View>
+              <Ionicons name="chevron-forward" size={16} color="#94a3b8" />
+            </TouchableOpacity>
+
+            {/* Download Template */}
+            <TouchableOpacity
+              style={styles.mobileToolCard}
+              onPress={() => handleDownloadTemplate('xlsx')}
+              activeOpacity={0.8}
+            >
+              <View style={[styles.mobileToolIconWrap, { backgroundColor: '#eff6ff' }]}>
+                <Ionicons name="download-outline" size={22} color="#0284c7" />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.mobileToolTitle}>Download Sample Template</Text>
+                <Text style={styles.mobileToolSub}>
+                  Pre-formatted .xlsx file with VehicleNo, Transport, Material & Party.
+                </Text>
+              </View>
+              <Ionicons name="chevron-forward" size={16} color="#94a3b8" />
+            </TouchableOpacity>
+
+            {/* Sync Database */}
+            <TouchableOpacity
+              style={styles.mobileToolCard}
+              onPress={handleSync}
+              activeOpacity={0.8}
+            >
+              <View style={[styles.mobileToolIconWrap, { backgroundColor: '#f8fafc' }]}>
+                <Ionicons name="sync-outline" size={22} color="#475569" />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.mobileToolTitle}>Sync & Refresh Data</Text>
+                <Text style={styles.mobileToolSub}>
+                  Pull fresh master list directly from database.
+                </Text>
+              </View>
+              <Ionicons name="chevron-forward" size={16} color="#94a3b8" />
+            </TouchableOpacity>
+          </View>
+        </View>
+      </ScrollView>
+    );
+  };
+
+  // ==========================================
+  // DESKTOP VIEW: FULL SPREADSHEET DASHBOARD
+  // ==========================================
+  const renderDesktopView = () => {
+    return (
+      <>
+        {/* Desktop Header */}
+        <View style={styles.pageHeader}>
+          <View style={styles.titleArea}>
+            <Text style={styles.pageTitle}>Masters Management</Text>
+            <Text style={styles.pageSubtitle}>
+              Manage your master data for smooth and accurate transactions.
+            </Text>
+          </View>
+
+          <View style={styles.headerActionButtons}>
+            <TouchableOpacity
+              style={styles.btnPrimary}
+              onPress={() => handleOpenAdd(activeCategory)}
+              activeOpacity={0.8}
+            >
+              <Ionicons name="add" size={16} color="#ffffff" style={{ marginRight: 4 }} />
+              <Text style={styles.btnPrimaryText}>Add New Master</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={styles.btnOutline}
+              onPress={() => handleOpenImport(activeCategory)}
+              activeOpacity={0.8}
+            >
+              <Ionicons name="cloud-upload-outline" size={15} color="#0284c7" style={{ marginRight: 4 }} />
+              <Text style={styles.btnOutlineText}>Import</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={styles.btnOutline}
+              onPress={() => handleDownloadTemplate('xlsx')}
+              activeOpacity={0.8}
+            >
+              <Ionicons name="download-outline" size={15} color="#0284c7" style={{ marginRight: 4 }} />
+              <Text style={styles.btnOutlineText}>Template</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity style={styles.btnIconOnly} onPress={handleSync} title="Refresh">
+              <Ionicons name="sync-outline" size={16} color="#475569" />
+            </TouchableOpacity>
+          </View>
+        </View>
+
+        {/* Desktop Metric Cards */}
+        <View style={styles.metricCardsContainer}>
+          <View style={styles.metricRowDesktop}>
+            {CATEGORIES.map((cat) => renderCategoryCard(cat))}
+          </View>
+        </View>
+
+        {/* Main Work Area: Spreadsheet Table */}
+        <View style={styles.mainLayoutGrid}>
+          <View style={styles.tableContainerCard}>
+            {/* Horizontal Tabs */}
+            <View style={styles.horizontalTabsContainer}>
+              <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+                {CATEGORIES.map((cat) => {
+                  const isActive = activeCategory === cat.id;
+                  return (
+                    <TouchableOpacity
+                      key={cat.id}
+                      style={[styles.tabButton, isActive && styles.tabButtonActive]}
+                      onPress={() => handleSelectCategory(cat.id)}
+                    >
+                      <Text style={[styles.tabText, isActive && styles.tabTextActive]}>
+                        {cat.label}
+                      </Text>
+                      {isActive && <View style={styles.tabIndicator} />}
+                    </TouchableOpacity>
+                  );
+                })}
+              </ScrollView>
+            </View>
+
+            {/* Filter & Action Bar */}
+            <View style={styles.filterActionBar}>
+              <View style={styles.searchBox}>
+                <Ionicons name="search-outline" size={16} color="#0284c7" style={{ marginRight: 6 }} />
+                <TextInput
+                  style={styles.searchInput}
+                  placeholder={`Search ${currentCatConfig.label}...`}
+                  placeholderTextColor="#94a3b8"
+                  value={searchQuery}
+                  onChangeText={setSearchQuery}
+                />
+                {searchQuery ? (
+                  <TouchableOpacity onPress={() => setSearchQuery('')}>
+                    <Ionicons name="close-circle" size={15} color="#94a3b8" />
+                  </TouchableOpacity>
+                ) : null}
+              </View>
+
+              <View style={styles.filterPillsRow}>
+                <View style={styles.statusFilterGroup}>
+                  {['All', 'Active', 'Inactive'].map((st) => {
+                    const isSelected = statusFilter === st;
+                    const count =
+                      st === 'All'
+                        ? statusCounts.all
+                        : st === 'Active'
+                          ? statusCounts.active
+                          : statusCounts.inactive;
+                    return (
+                      <TouchableOpacity
+                        key={st}
+                        style={[styles.statusPill, isSelected && styles.statusPillActive]}
+                        onPress={() => setStatusFilter(st)}
+                      >
+                        <Text style={[styles.statusPillText, isSelected && styles.statusPillTextActive]}>
+                          {st} ({count})
+                        </Text>
+                      </TouchableOpacity>
+                    );
+                  })}
+                </View>
+
+                {/* Bulk Actions */}
+                <View style={{ position: 'relative' }}>
+                  <TouchableOpacity
+                    style={[
+                      styles.bulkActionBtn,
+                      selectedIds.size > 0 && styles.bulkActionBtnActive,
+                    ]}
+                    onPress={() => setBulkMenuVisible(!bulkMenuVisible)}
+                    activeOpacity={0.8}
+                  >
+                    <Ionicons
+                      name="layers-outline"
+                      size={14}
+                      color={selectedIds.size > 0 ? '#0284c7' : '#0f172a'}
+                      style={{ marginRight: 4 }}
+                    />
+                    <Text
+                      style={[
+                        styles.bulkActionBtnText,
+                        selectedIds.size > 0 && { color: '#0284c7' },
+                      ]}
+                    >
+                      Bulk Actions {selectedIds.size > 0 ? `(${selectedIds.size})` : ''}
+                    </Text>
+                    <Ionicons name="chevron-down" size={12} color="#64748b" style={{ marginLeft: 3 }} />
+                  </TouchableOpacity>
+
+                  {bulkMenuVisible && (
+                    <View style={styles.bulkDropdownMenu}>
+                      <TouchableOpacity
+                        style={styles.bulkMenuItem}
+                        onPress={() => handleBulkAction('activate')}
+                      >
+                        <Ionicons name="checkmark-circle-outline" size={15} color="#16a34a" />
+                        <Text style={styles.bulkMenuText}>Set as Active</Text>
+                      </TouchableOpacity>
+                      <TouchableOpacity
+                        style={styles.bulkMenuItem}
+                        onPress={() => handleBulkAction('deactivate')}
+                      >
+                        <Ionicons name="pause-circle-outline" size={15} color="#eab308" />
+                        <Text style={styles.bulkMenuText}>Set as Inactive</Text>
+                      </TouchableOpacity>
+                      <View style={styles.menuDivider} />
+                      <TouchableOpacity
+                        style={styles.bulkMenuItem}
+                        onPress={() => handleBulkAction('delete')}
+                      >
+                        <Ionicons name="trash-outline" size={15} color="#ef4444" />
+                        <Text style={[styles.bulkMenuText, { color: '#ef4444' }]}>Delete Selected</Text>
+                      </TouchableOpacity>
+                    </View>
+                  )}
+                </View>
+              </View>
+            </View>
+
+            {/* Desktop Table View */}
+            <View style={styles.tableResponsiveWrapper}>
+              <View style={styles.fullTable}>
+                {/* Table Header */}
+                <View style={styles.tableHeaderRow}>
+                  <TouchableOpacity
+                    style={[styles.thCell, { width: 40, alignItems: 'center', paddingHorizontal: 0 }]}
+                    onPress={toggleSelectAll}
+                  >
+                    <Ionicons
+                      name={
+                        selectedIds.size === activeRecords.length && activeRecords.length > 0
+                          ? 'checkbox'
+                          : 'square-outline'
+                      }
+                      size={16}
+                      color={selectedIds.size > 0 ? '#0284c7' : '#94a3b8'}
+                    />
+                  </TouchableOpacity>
+
+                  <Text style={[styles.thCell, { width: 46, textAlign: 'center', paddingHorizontal: 1, fontSize: 11 }]}>#</Text>
+
+                  <TouchableOpacity
+                    style={[styles.thCell, { flex: 1, minWidth: 180, flexDirection: 'row', alignItems: 'center', paddingHorizontal: 6 }]}
+                    onPress={() => setSortAsc(!sortAsc)}
+                  >
+                    <Text style={styles.thCellText} numberOfLines={1}>
+                      {currentCatConfig.label}
+                    </Text>
+                    <Ionicons
+                      name={sortAsc ? 'arrow-up' : 'arrow-down'}
+                      size={13}
+                      color="#64748b"
+                      style={{ marginLeft: 2 }}
+                    />
+                  </TouchableOpacity>
+
+                  <Text style={[styles.thCell, { width: 110, textAlign: 'center', paddingHorizontal: 1, fontSize: 11 }]}>
+                    Status
+                  </Text>
+
+                  <Text style={[styles.thCell, { width: 110, textAlign: 'center', paddingHorizontal: 1, fontSize: 11 }]}>
+                    Actions
+                  </Text>
+                </View>
+
+                {/* Table Body */}
+                <ScrollView
+                  style={styles.tableBodyScrollView}
+                  contentContainerStyle={styles.tableBodyScrollContent}
+                  showsVerticalScrollIndicator={true}
+                >
+                  {loading ? (
+                    <View style={styles.loadingArea}>
+                      <ActivityIndicator size="small" color="#0284c7" />
+                      <Text style={styles.loadingText}>Loading master data...</Text>
+                    </View>
+                  ) : activeRecords.length === 0 ? (
+                    <View style={styles.emptyTableArea}>
+                      <Ionicons name="folder-open-outline" size={38} color="#cbd5e1" />
+                      <Text style={styles.emptyTitle}>No {currentCatConfig.label} found.</Text>
+                      <Text style={styles.emptySubtitle}>
+                        {searchQuery
+                          ? 'Try adjusting your search or filters.'
+                          : `Click "+ Add New Master" or "Import" to add records.`}
+                      </Text>
+                    </View>
+                  ) : (
+                    activeRecords.map((item, idx) => {
+                      const rowNumber = idx + 1;
+                      const isSelected = selectedIds.has(item.id);
+                      const isActive = item.status === 'Active';
+                      const isStatic = isItemStatic(item);
+                      const hasSubTypes = item.sub_types && item.sub_types.length > 0;
+
+                      return (
+                        <React.Fragment key={item.id}>
+                          <View
+                            style={[
+                              styles.tableRow,
+                              idx % 2 === 1 && styles.tableRowEven,
+                              isSelected && styles.tableRowSelected,
+                            ]}
+                          >
+                            <TouchableOpacity
+                              style={[styles.tdCell, { width: 40, alignItems: 'center', paddingHorizontal: 0 }]}
+                              onPress={() => toggleSelectOne(item.id)}
+                            >
+                              <Ionicons
+                                name={isSelected ? 'checkbox' : 'square-outline'}
+                                size={16}
+                                color={isSelected ? '#0284c7' : '#94a3b8'}
+                              />
+                            </TouchableOpacity>
+
+                            <Text style={[styles.tdCell, { width: 46, textAlign: 'center', paddingHorizontal: 1, color: '#64748b', fontSize: 12 }]}>
+                              {rowNumber}
+                            </Text>
+
+                            <Text
+                              style={[
+                                styles.tdCell,
+                                styles.boldCell,
+                                { flex: 1, minWidth: 180, paddingHorizontal: 6, fontSize: 13 },
+                              ]}
+                              numberOfLines={1}
+                            >
+                              {item.value}
+                            </Text>
+
+                            <View style={[styles.tdCell, { width: 110, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 1 }]}>
+                              <TouchableOpacity
+                                style={[
+                                  styles.statusBadge,
+                                  isActive ? styles.badgeActive : styles.badgeInactive,
+                                ]}
+                                onPress={() => handleToggleStatus(item)}
+                                title="Click to toggle status"
+                              >
+                                <View
+                                  style={[
+                                    styles.statusDot,
+                                    isActive ? styles.dotActive : styles.dotInactive,
+                                  ]}
+                                />
+                                <Text
+                                  style={[
+                                    styles.statusBadgeText,
+                                    isActive ? styles.badgeTextActive : styles.badgeTextInactive,
+                                  ]}
+                                >
+                                  {item.status}
+                                </Text>
+                              </TouchableOpacity>
+                            </View>
+
+                            <View style={[styles.tdCell, { width: 110, flexDirection: 'row', justifyContent: 'center', alignItems: 'center', paddingHorizontal: 1 }]}>
+                              <TouchableOpacity
+                                style={styles.actionIconBtn}
+                                onPress={() => handleOpenEdit(item)}
+                                title="Edit"
+                              >
+                                <Ionicons name="pencil-outline" size={15} color="#0284c7" />
+                              </TouchableOpacity>
+
+                              {!isStatic && (
+                                <TouchableOpacity
+                                  style={styles.actionIconBtn}
+                                  onPress={() => handleDeleteItem(item)}
+                                  title="Delete"
+                                >
+                                  <Ionicons name="trash-outline" size={15} color="#ef4444" />
+                                </TouchableOpacity>
+                              )}
+
+                              <TouchableOpacity
+                                style={styles.actionIconBtn}
+                                onPress={() => handleToggleStatus(item)}
+                                title={isActive ? 'Deactivate' : 'Activate'}
+                              >
+                                <Ionicons name="ellipsis-horizontal" size={15} color="#64748b" />
+                              </TouchableOpacity>
+                            </View>
+                          </View>
+
+                          {hasSubTypes && item.sub_types.map((sub, sIdx) => {
+                            const isLast = sIdx === item.sub_types.length - 1;
+                            const branchChar = isLast ? '└─ ' : '├─ ';
+                            return (
+                              <View
+                                key={`${item.id}_sub_${sIdx}`}
+                                style={[
+                                  styles.tableRow,
+                                  styles.subTypeRow,
+                                ]}
+                              >
+                                <View style={[styles.tdCell, { width: 40, alignItems: 'center', paddingHorizontal: 0 }]} />
+                                <Text style={[styles.tdCell, { width: 46, textAlign: 'center', paddingHorizontal: 1, color: '#94a3b8', fontSize: 11 }]}>
+                                  {`${rowNumber}.${sIdx + 1}`}
+                                </Text>
+                                <View style={[styles.tdCell, { flex: 1, minWidth: 180, flexDirection: 'row', alignItems: 'center', paddingHorizontal: 6, gap: 6 }]}>
+                                  <Text style={styles.subTypeBranchText}>{branchChar}</Text>
+                                  <Text style={styles.subTypeValueText}>
+                                    {sub.label || sub.value}
+                                  </Text>
+                                </View>
+                                <View style={[styles.tdCell, { width: 110, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 1 }]}>
+                                  <View style={[styles.statusBadge, styles.badgeActive]}>
+                                    <View style={[styles.statusDot, styles.dotActive]} />
+                                    <Text style={[styles.statusBadgeText, styles.badgeTextActive]}>
+                                      Active
+                                    </Text>
+                                  </View>
+                                </View>
+                                <View style={[styles.tdCell, { width: 110, flexDirection: 'row', justifyContent: 'center', alignItems: 'center', paddingHorizontal: 1 }]} />
+                              </View>
+                            );
+                          })}
+                        </React.Fragment>
+                      );
+                    })
+                  )}
+                </ScrollView>
+              </View>
+            </View>
+
+            {/* Desktop Table Footer */}
+            <View style={styles.paginationBar}>
+              <Text style={styles.paginationInfo}>
+                Showing all {activeRecords.length} {currentCatConfig.label} records &bull; Scroll to view all
+              </Text>
+
+              {selectedIds.size > 0 && (
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 4 }}>
+                  <Ionicons name="checkmark-done" size={14} color="#0284c7" />
+                  <Text style={[styles.paginationInfo, { color: '#0284c7', fontWeight: '700' }]}>
+                    {selectedIds.size} of {activeRecords.length} selected
+                  </Text>
+                </View>
+              )}
+            </View>
+          </View>
+        </View>
+      </>
+    );
+  };
+
   return (
-    <View style={[styles.pageContainer, isMobile && { padding: 12, paddingBottom: 72 }]}>
+    <View style={[styles.pageContainer, isMobile && styles.mobilePageContainer]}>
       {/* Hidden file input for web upload (Excel & CSV) */}
       {Platform.OS === 'web' && (
         <input
@@ -598,467 +1545,15 @@ export const MastersView = React.memo(({ masters, onRefresh }) => {
         />
       )}
 
-      {/* TOP HEADER: Title, Subtitle, Add New Master (Mobile matching reference screenshot) */}
-      <View style={styles.pageHeader}>
-        <View style={styles.titleArea}>
-          <Text style={styles.pageTitle}>Masters Management</Text>
-          <Text style={styles.pageSubtitle}>
-            Manage your master data for smooth and accurate transactions.
-          </Text>
-        </View>
-
-        <View style={styles.headerActionButtons}>
-          <TouchableOpacity
-            style={styles.btnPrimary}
-            onPress={() => handleOpenAdd(activeCategory)}
-            activeOpacity={0.8}
-          >
-            <Ionicons name="add" size={16} color="#ffffff" style={{ marginRight: 4 }} />
-            <Text style={styles.btnPrimaryText}>Add New Master</Text>
-          </TouchableOpacity>
-
-          {!isMobile && (
-            <>
-              <TouchableOpacity
-                style={styles.btnOutline}
-                onPress={() => handleOpenImport(activeCategory)}
-                activeOpacity={0.8}
-              >
-                <Ionicons name="cloud-upload-outline" size={15} color="#0284c7" style={{ marginRight: 4 }} />
-                <Text style={styles.btnOutlineText}>Import</Text>
-              </TouchableOpacity>
-
-              <TouchableOpacity
-                style={styles.btnOutline}
-                onPress={() => handleDownloadTemplate('xlsx')}
-                activeOpacity={0.8}
-              >
-                <Ionicons name="download-outline" size={15} color="#0284c7" style={{ marginRight: 4 }} />
-                <Text style={styles.btnOutlineText}>Template</Text>
-              </TouchableOpacity>
-
-              <TouchableOpacity style={styles.btnIconOnly} onPress={handleSync} title="Refresh">
-                <Ionicons name="sync-outline" size={16} color="#475569" />
-              </TouchableOpacity>
-            </>
-          )}
-        </View>
-      </View>
-
-      {/* COMPACT CATEGORY METRIC CARDS: 2-column grid on mobile (matching screenshot media_1792653246813.png) */}
-      <View style={styles.metricCardsContainer}>
-        {isDesktop ? (
-          <View style={styles.metricRowDesktop}>
-            {CATEGORIES.map((cat) => renderCategoryCard(cat))}
-          </View>
+      {isMobile ? (
+        mobileDetailCategory !== null ? (
+          renderMobileDetailPage()
         ) : (
-          <View style={styles.mobileCardsGrid}>
-            {/* Row 1: Vehicle No & Transport */}
-            <View style={styles.mobileCardsRow}>
-              {renderCategoryCard(CATEGORIES[0])}
-              {renderCategoryCard(CATEGORIES[1])}
-            </View>
-
-            {/* Row 2: Material & Party Name */}
-            <View style={styles.mobileCardsRow}>
-              {renderCategoryCard(CATEGORIES[2])}
-              {renderCategoryCard(CATEGORIES[3])}
-            </View>
-
-            {/* Row 3: Type / Mode & Action Buttons (Import Excel + Template) */}
-            <View style={styles.mobileCardsRow}>
-              {renderCategoryCard(CATEGORIES[4])}
-              <View style={styles.mobileActionBox}>
-                <TouchableOpacity
-                  style={styles.mobileImportBtn}
-                  onPress={() => handleOpenImport(activeCategory)}
-                  activeOpacity={0.8}
-                >
-                  <Ionicons name="cloud-upload-outline" size={17} color="#059669" />
-                  <Text style={styles.mobileImportBtnText} numberOfLines={2}>Import Excel</Text>
-                </TouchableOpacity>
-
-                <TouchableOpacity
-                  style={styles.mobileTemplateBtn}
-                  onPress={() => handleDownloadTemplate('xlsx')}
-                  activeOpacity={0.8}
-                >
-                  <Ionicons name="download-outline" size={17} color="#0284c7" />
-                  <Text style={styles.mobileTemplateBtnText} numberOfLines={1}>Template</Text>
-                </TouchableOpacity>
-              </View>
-            </View>
-          </View>
-        )}
-      </View>
-
-      {/* MAIN WORK AREA: Full-width Table Card */}
-      <View style={styles.mainLayoutGrid}>
-        <View style={styles.tableContainerCard}>
-          {/* Horizontal Category Navigation Tabs */}
-          <View style={styles.horizontalTabsContainer}>
-            <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-              {CATEGORIES.map((cat) => {
-                const isActive = activeCategory === cat.id;
-                return (
-                  <TouchableOpacity
-                    key={cat.id}
-                    style={[styles.tabButton, isActive && styles.tabButtonActive]}
-                    onPress={() => setActiveCategory(cat.id)}
-                  >
-                    <Text style={[styles.tabText, isActive && styles.tabTextActive]}>
-                      {cat.label}
-                    </Text>
-                    {isActive && <View style={styles.tabIndicator} />}
-                  </TouchableOpacity>
-                );
-              })}
-            </ScrollView>
-          </View>
-
-          {/* Action & Filter Bar: Search, Status Filter, Bulk Actions */}
-          <View style={styles.filterActionBar}>
-            <View style={styles.searchBox}>
-              <Ionicons name="search-outline" size={16} color="#0284c7" style={{ marginRight: 6 }} />
-              <TextInput
-                style={styles.searchInput}
-                placeholder={`Search ${currentCatConfig.label}...`}
-                placeholderTextColor="#94a3b8"
-                value={searchQuery}
-                onChangeText={setSearchQuery}
-              />
-              {searchQuery ? (
-                <TouchableOpacity onPress={() => setSearchQuery('')}>
-                  <Ionicons name="close-circle" size={15} color="#94a3b8" />
-                </TouchableOpacity>
-              ) : null}
-            </View>
-
-            <View style={styles.filterPillsRow}>
-              {/* Status Pills */}
-              <View style={styles.statusFilterGroup}>
-                {['All', 'Active', 'Inactive'].map((st) => {
-                  const isSelected = statusFilter === st;
-                  const count =
-                    st === 'All'
-                      ? statusCounts.all
-                      : st === 'Active'
-                        ? statusCounts.active
-                        : statusCounts.inactive;
-                  return (
-                    <TouchableOpacity
-                      key={st}
-                      style={[styles.statusPill, isSelected && styles.statusPillActive]}
-                      onPress={() => setStatusFilter(st)}
-                    >
-                      <Text style={[styles.statusPillText, isSelected && styles.statusPillTextActive]}>
-                        {st} ({count})
-                      </Text>
-                    </TouchableOpacity>
-                  );
-                })}
-              </View>
-
-              {/* Bulk Actions Button with Dropdown */}
-              <View style={{ position: 'relative' }}>
-                <TouchableOpacity
-                  style={[
-                    styles.bulkActionBtn,
-                    selectedIds.size > 0 && styles.bulkActionBtnActive,
-                  ]}
-                  onPress={() => setBulkMenuVisible(!bulkMenuVisible)}
-                  activeOpacity={0.8}
-                >
-                  <Ionicons
-                    name="layers-outline"
-                    size={14}
-                    color={selectedIds.size > 0 ? '#0284c7' : '#0f172a'}
-                    style={{ marginRight: 4 }}
-                  />
-                  <Text
-                    style={[
-                      styles.bulkActionBtnText,
-                      selectedIds.size > 0 && { color: '#0284c7' },
-                    ]}
-                  >
-                    Bulk Actions {selectedIds.size > 0 ? `(${selectedIds.size})` : ''}
-                  </Text>
-                  <Ionicons name="chevron-down" size={12} color="#64748b" style={{ marginLeft: 3 }} />
-                </TouchableOpacity>
-
-                {bulkMenuVisible && (
-                  <View style={styles.bulkDropdownMenu}>
-                    <TouchableOpacity
-                      style={styles.bulkMenuItem}
-                      onPress={() => handleBulkAction('activate')}
-                    >
-                      <Ionicons name="checkmark-circle-outline" size={15} color="#16a34a" />
-                      <Text style={styles.bulkMenuText}>Set as Active</Text>
-                    </TouchableOpacity>
-                    <TouchableOpacity
-                      style={styles.bulkMenuItem}
-                      onPress={() => handleBulkAction('deactivate')}
-                    >
-                      <Ionicons name="pause-circle-outline" size={15} color="#eab308" />
-                      <Text style={styles.bulkMenuText}>Set as Inactive</Text>
-                    </TouchableOpacity>
-                    <View style={styles.menuDivider} />
-                    <TouchableOpacity
-                      style={styles.bulkMenuItem}
-                      onPress={() => handleBulkAction('delete')}
-                    >
-                      <Ionicons name="trash-outline" size={15} color="#ef4444" />
-                      <Text style={[styles.bulkMenuText, { color: '#ef4444' }]}>Delete Selected</Text>
-                    </TouchableOpacity>
-                  </View>
-                )}
-              </View>
-            </View>
-          </View>
-
-          {/* SPREADSHEET TABLE: Perfectly fitted for both mobile (no horizontal scroll) and desktop */}
-          <View style={styles.tableResponsiveWrapper}>
-            <View style={styles.fullTable}>
-              {/* Table Header */}
-              <View style={[styles.tableHeaderRow, isMobile && { paddingHorizontal: 4 }]}>
-                <TouchableOpacity
-                  style={[styles.thCell, { width: isMobile ? 28 : 40, alignItems: 'center', paddingHorizontal: 0 }]}
-                  onPress={toggleSelectAll}
-                >
-                  <Ionicons
-                    name={
-                      selectedIds.size === activeRecords.length && activeRecords.length > 0
-                        ? 'checkbox'
-                        : 'square-outline'
-                    }
-                    size={isMobile ? 15 : 16}
-                    color={selectedIds.size > 0 ? '#0284c7' : '#94a3b8'}
-                  />
-                </TouchableOpacity>
-
-                <Text style={[styles.thCell, { width: isMobile ? 24 : 46, textAlign: 'center', paddingHorizontal: 1, fontSize: isMobile ? 10 : 11 }]}>#</Text>
-
-                <TouchableOpacity
-                  style={[styles.thCell, { flex: 1, minWidth: isMobile ? 60 : 180, flexDirection: 'row', alignItems: 'center', paddingHorizontal: isMobile ? 3 : 6 }]}
-                  onPress={() => setSortAsc(!sortAsc)}
-                >
-                  <Text style={[styles.thCellText, isMobile && { fontSize: 10 }]} numberOfLines={1}>
-                    {currentCatConfig.label}
-                  </Text>
-                  <Ionicons
-                    name={sortAsc ? 'arrow-up' : 'arrow-down'}
-                    size={isMobile ? 11 : 13}
-                    color="#64748b"
-                    style={{ marginLeft: 2 }}
-                  />
-                </TouchableOpacity>
-
-                <Text style={[styles.thCell, { width: isMobile ? 74 : 110, textAlign: 'center', paddingHorizontal: 1, fontSize: isMobile ? 10.5 : 11 }]}>
-                  Status
-                </Text>
-
-                <Text style={[styles.thCell, { width: isMobile ? 86 : 110, textAlign: 'center', paddingHorizontal: 1, fontSize: isMobile ? 10.5 : 11 }]}>
-                  Actions
-                </Text>
-              </View>
-
-              {/* Table Body Scrollable */}
-              <ScrollView
-                style={styles.tableBodyScrollView}
-                contentContainerStyle={styles.tableBodyScrollContent}
-                showsVerticalScrollIndicator={true}
-              >
-                {loading ? (
-                  <View style={styles.loadingArea}>
-                    <ActivityIndicator size="small" color="#0284c7" />
-                    <Text style={styles.loadingText}>Loading master data...</Text>
-                  </View>
-                ) : activeRecords.length === 0 ? (
-                  <View style={styles.emptyTableArea}>
-                    <Ionicons name="folder-open-outline" size={38} color="#cbd5e1" />
-                    <Text style={styles.emptyTitle}>No {currentCatConfig.label} found.</Text>
-                    <Text style={styles.emptySubtitle}>
-                      {searchQuery
-                        ? 'Try adjusting your search or filters.'
-                        : `Click "+ Add New Master" or "Import" to add records.`}
-                    </Text>
-                  </View>
-                ) : (
-                  activeRecords.map((item, idx) => {
-                    const rowNumber = idx + 1;
-                    const isSelected = selectedIds.has(item.id);
-                    const isActive = item.status === 'Active';
-                    const isStatic = isItemStatic(item);
-                    const hasSubTypes = item.sub_types && item.sub_types.length > 0;
-
-                    return (
-                      <React.Fragment key={item.id}>
-                        <View
-                          style={[
-                            styles.tableRow,
-                            idx % 2 === 1 && styles.tableRowEven,
-                            isSelected && styles.tableRowSelected,
-                            isMobile && { paddingHorizontal: 4, paddingVertical: 8 },
-                          ]}
-                        >
-                        {/* Checkbox */}
-                        <TouchableOpacity
-                          style={[styles.tdCell, { width: isMobile ? 28 : 40, alignItems: 'center', paddingHorizontal: 0 }]}
-                          onPress={() => toggleSelectOne(item.id)}
-                        >
-                          <Ionicons
-                            name={isSelected ? 'checkbox' : 'square-outline'}
-                            size={isMobile ? 15 : 16}
-                            color={isSelected ? '#0284c7' : '#94a3b8'}
-                          />
-                        </TouchableOpacity>
-
-                        {/* Index */}
-                        <Text style={[styles.tdCell, { width: isMobile ? 24 : 46, textAlign: 'center', paddingHorizontal: 1, color: '#64748b', fontSize: isMobile ? 10 : 12 }]}>
-                          {rowNumber}
-                        </Text>
-
-                        {/* Value */}
-                        <Text
-                          style={[
-                            styles.tdCell,
-                            styles.boldCell,
-                            { flex: 1, minWidth: isMobile ? 60 : 180, paddingHorizontal: isMobile ? 3 : 6, fontSize: isMobile ? 12 : 13 },
-                          ]}
-                          numberOfLines={1}
-                        >
-                          {item.value}
-                        </Text>
-
-                        {/* Status Badge */}
-                        <View style={[styles.tdCell, { width: isMobile ? 74 : 110, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 1 }]}>
-                          <TouchableOpacity
-                            style={[
-                              styles.statusBadge,
-                              isActive ? styles.badgeActive : styles.badgeInactive,
-                              isMobile && { paddingHorizontal: 6, paddingVertical: 2.5, height: 21, borderRadius: 10 },
-                            ]}
-                            onPress={() => handleToggleStatus(item)}
-                            title="Click to toggle status"
-                          >
-                            <View
-                              style={[
-                                styles.statusDot,
-                                isActive ? styles.dotActive : styles.dotInactive,
-                                isMobile && { width: 5, height: 5, marginRight: 3 },
-                              ]}
-                            />
-                            <Text
-                              style={[
-                                styles.statusBadgeText,
-                                isActive ? styles.badgeTextActive : styles.badgeTextInactive,
-                                isMobile && { fontSize: 9.5, fontWeight: '700' },
-                              ]}
-                            >
-                              {item.status}
-                            </Text>
-                          </TouchableOpacity>
-                        </View>
-
-                        {/* Actions */}
-                        <View style={[styles.tdCell, { width: isMobile ? 86 : 110, flexDirection: 'row', justifyContent: 'center', alignItems: 'center', paddingHorizontal: 1 }]}>
-                          <TouchableOpacity
-                            style={[styles.actionIconBtn, isMobile && { width: 24, height: 24, marginHorizontal: 1, padding: 2, alignItems: 'center', justifyContent: 'center' }]}
-                            onPress={() => handleOpenEdit(item)}
-                            title="Edit"
-                          >
-                            <Ionicons name="pencil-outline" size={isMobile ? 14 : 15} color="#0284c7" />
-                          </TouchableOpacity>
-
-                          {!isStatic && (
-                            <TouchableOpacity
-                              style={[styles.actionIconBtn, isMobile && { width: 24, height: 24, marginHorizontal: 1, padding: 2, alignItems: 'center', justifyContent: 'center' }]}
-                              onPress={() => handleDeleteItem(item)}
-                              title="Delete"
-                            >
-                              <Ionicons name="trash-outline" size={isMobile ? 14 : 15} color="#ef4444" />
-                            </TouchableOpacity>
-                          )}
-
-                          <TouchableOpacity
-                            style={[styles.actionIconBtn, isMobile && { width: 24, height: 24, marginHorizontal: 1, padding: 2, alignItems: 'center', justifyContent: 'center' }]}
-                            onPress={() => handleToggleStatus(item)}
-                            title={isActive ? 'Deactivate' : 'Activate'}
-                          >
-                            <Ionicons name="ellipsis-horizontal" size={isMobile ? 14 : 15} color="#64748b" />
-                          </TouchableOpacity>
-                        </View>
-                      </View>
-
-                      {/* RENDER HR LOADING SUB-TYPES DIRECTLY UNDER HR LOADING */}
-                      {hasSubTypes && item.sub_types.map((sub, sIdx) => {
-                        const isLast = sIdx === item.sub_types.length - 1;
-                        const branchChar = isLast ? '└─ ' : '├─ ';
-                        return (
-                          <View
-                            key={`${item.id}_sub_${sIdx}`}
-                            style={[
-                              styles.tableRow,
-                              styles.subTypeRow,
-                              isMobile && { paddingHorizontal: 4, paddingVertical: 6 },
-                            ]}
-                          >
-                            {/* Sub Branch icon */}
-                            <View style={[styles.tdCell, { width: isMobile ? 28 : 40, alignItems: 'center', paddingHorizontal: 0 }]} />
-
-                            {/* Sub Index */}
-                            <Text style={[styles.tdCell, { width: isMobile ? 24 : 46, textAlign: 'center', paddingHorizontal: 1, color: '#94a3b8', fontSize: isMobile ? 9 : 11 }]}>
-                              {`${rowNumber}.${sIdx + 1}`}
-                            </Text>
-
-                            {/* Sub Value */}
-                            <View style={[styles.tdCell, { flex: 1, minWidth: isMobile ? 60 : 180, flexDirection: 'row', alignItems: 'center', paddingHorizontal: isMobile ? 3 : 6, gap: 6 }]}>
-                              <Text style={styles.subTypeBranchText}>{branchChar}</Text>
-                              <Text style={[styles.subTypeValueText, isMobile && { fontSize: 11 }]}>
-                                {sub.label || sub.value}
-                              </Text>
-                            </View>
-
-                            {/* Status Badge */}
-                            <View style={[styles.tdCell, { width: isMobile ? 66 : 110, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 1 }]}>
-                              <View style={[styles.statusBadge, styles.badgeActive, isMobile && { paddingHorizontal: 5, paddingVertical: 2, height: 21, borderRadius: 10 }]}>
-                                <View style={[styles.statusDot, styles.dotActive, isMobile && { width: 5, height: 5, marginRight: 3 }]} />
-                                <Text style={[styles.statusBadgeText, styles.badgeTextActive, isMobile && { fontSize: 9, fontWeight: '700' }]}>
-                                  Active
-                                </Text>
-                              </View>
-                            </View>
-
-                            {/* Sub Action */}
-                            <View style={[styles.tdCell, { width: isMobile ? 62 : 110, flexDirection: 'row', justifyContent: 'center', alignItems: 'center', paddingHorizontal: 1 }]} />
-                          </View>
-                        );
-                      })}
-                      </React.Fragment>
-                    );
-                  })
-                )}
-              </ScrollView>
-            </View>
-          </View>
-
-          {/* TABLE FOOTER & RECORD COUNT (Centered matching screenshot) */}
-          <View style={styles.paginationBar}>
-            <Text style={styles.paginationInfo}>
-              Showing all {activeRecords.length} {currentCatConfig.label} records &bull; Scroll to view all
-            </Text>
-
-            {selectedIds.size > 0 && (
-              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 4 }}>
-                <Ionicons name="checkmark-done" size={14} color="#0284c7" />
-                <Text style={[styles.paginationInfo, { color: '#0284c7', fontWeight: '700' }]}>
-                  {selectedIds.size} of {activeRecords.length} selected
-                </Text>
-              </View>
-            )}
-          </View>
-        </View>
-      </View>
+          renderMobileHubPage()
+        )
+      ) : (
+        renderDesktopView()
+      )}
 
       {/* MODAL 1: ADD / EDIT MASTER ITEM */}
       <Modal visible={editModalVisible} transparent animationType="slide" onRequestClose={() => setEditModalVisible(false)}>
@@ -1084,19 +1579,54 @@ export const MastersView = React.memo(({ masters, onRefresh }) => {
               {/* Category selector */}
               <View style={styles.formGroup}>
                 <Text style={styles.formLabel}>Category</Text>
-                <View style={[styles.formInput, { justifyContent: 'center', backgroundColor: '#f8fafc' }]}>
-                  <Text style={{ color: '#334155', fontWeight: '600', fontSize: 13 }}>{currentCatConfig.label}</Text>
-                </View>
+                {editingItem ? (
+                  <View style={[styles.formInput, { justifyContent: 'center', backgroundColor: '#f8fafc' }]}>
+                    <Text style={{ color: '#334155', fontWeight: '600', fontSize: 13 }}>
+                      {(CATEGORIES.find((c) => c.id === formCategory) || currentCatConfig).label}
+                    </Text>
+                  </View>
+                ) : (
+                  <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 6, paddingVertical: 2 }}>
+                    {CATEGORIES.map((c) => {
+                      const isCatActive = formCategory === c.id;
+                      return (
+                        <TouchableOpacity
+                          key={c.id}
+                          style={[
+                            styles.catSelectChip,
+                            isCatActive && styles.catSelectChipActive,
+                          ]}
+                          onPress={() => setFormCategory(c.id)}
+                        >
+                          <Ionicons
+                            name={c.icon}
+                            size={13}
+                            color={isCatActive ? '#ffffff' : '#475569'}
+                            style={{ marginRight: 4 }}
+                          />
+                          <Text
+                            style={[
+                              styles.catSelectChipText,
+                              isCatActive && styles.catSelectChipTextActive,
+                            ]}
+                          >
+                            {c.label}
+                          </Text>
+                        </TouchableOpacity>
+                      );
+                    })}
+                  </ScrollView>
+                )}
               </View>
 
               {/* Value input */}
               <View style={styles.formGroup}>
                 <Text style={styles.formLabel}>
-                  {currentCatConfig.singular} <Text style={{ color: '#ef4444' }}>*</Text>
+                  {(CATEGORIES.find((c) => c.id === formCategory) || currentCatConfig).singular} <Text style={{ color: '#ef4444' }}>*</Text>
                 </Text>
                 <TextInput
                   style={styles.formInput}
-                  placeholder={`Enter ${currentCatConfig.singular.toLowerCase()} (e.g. ${currentCatConfig.sample})`}
+                  placeholder={`Enter ${(CATEGORIES.find((c) => c.id === formCategory) || currentCatConfig).singular.toLowerCase()} (e.g. ${(CATEGORIES.find((c) => c.id === formCategory) || currentCatConfig).sample})`}
                   placeholderTextColor="#94a3b8"
                   value={formValue}
                   onChangeText={setFormValue}
@@ -1245,51 +1775,62 @@ export const MastersView = React.memo(({ masters, onRefresh }) => {
                   </View>
                   <TouchableOpacity
                     style={styles.browseFileBtn}
-                    onPress={() => fileInputRef.current?.click()}
+                    onPress={handlePickMasterFile}
                   >
                     <Text style={styles.browseFileBtnText}>Change File</Text>
                   </TouchableOpacity>
                 </View>
               ) : (
-                <View
-                  style={[
-                    styles.uploadZone,
-                    isDraggingOver && { borderColor: '#0284c7', backgroundColor: '#f0f9ff' },
-                  ]}
-                  {...(Platform.OS === 'web'
-                    ? {
-                        onDragOver: (e) => {
-                          e.preventDefault();
-                          setIsDraggingOver(true);
-                        },
-                        onDragLeave: (e) => {
-                          e.preventDefault();
-                          setIsDraggingOver(false);
-                        },
-                        onDrop: (e) => {
-                          e.preventDefault();
-                          setIsDraggingOver(false);
-                          const f = e.dataTransfer?.files?.[0];
-                          if (f) handleProcessFile(f);
-                        },
-                      }
-                    : {})}
-                >
-                  <Ionicons name="cloud-upload-outline" size={34} color="#0284c7" />
-                  <Text style={styles.uploadZoneTitle}>Choose file or drag and drop</Text>
-                  <Text style={styles.uploadZoneSub}>
-                    Excel (.xlsx, .xls) / CSV (Max 10MB) &bull; All master columns auto-mapped
-                  </Text>
-
+                <>
                   {Platform.OS === 'web' && (
-                    <TouchableOpacity
-                      style={styles.browseFileBtn}
-                      onPress={() => fileInputRef.current?.click()}
-                    >
-                      <Text style={styles.browseFileBtnText}>Browse Excel / CSV File</Text>
-                    </TouchableOpacity>
+                    <input
+                      type="file"
+                      ref={fileInputRef}
+                      style={{ display: 'none' }}
+                      accept=".xlsx,.xls,.csv,.txt"
+                      onChange={(e) => {
+                        const f = e.target.files?.[0];
+                        if (f) handleProcessFile(f);
+                      }}
+                    />
                   )}
-                </View>
+                  <TouchableOpacity
+                    style={[
+                      styles.uploadZone,
+                      isDraggingOver && { borderColor: '#0284c7', backgroundColor: '#f0f9ff' },
+                    ]}
+                    onPress={handlePickMasterFile}
+                    activeOpacity={0.8}
+                    {...(Platform.OS === 'web'
+                      ? {
+                          onDragOver: (e) => {
+                            e.preventDefault();
+                            setIsDraggingOver(true);
+                          },
+                          onDragLeave: (e) => {
+                            e.preventDefault();
+                            setIsDraggingOver(false);
+                          },
+                          onDrop: (e) => {
+                            e.preventDefault();
+                            setIsDraggingOver(false);
+                            const f = e.dataTransfer?.files?.[0];
+                            if (f) handleProcessFile(f);
+                          },
+                        }
+                      : {})}
+                  >
+                    <Ionicons name="cloud-upload-outline" size={34} color="#0284c7" />
+                    <Text style={styles.uploadZoneTitle}>Choose file or drag and drop</Text>
+                    <Text style={styles.uploadZoneSub}>
+                      Excel (.xlsx, .xls) / CSV (Max 10MB) &bull; All master columns auto-mapped
+                    </Text>
+
+                    <View style={styles.browseFileBtn}>
+                      <Text style={styles.browseFileBtnText}>Browse Excel / CSV File</Text>
+                    </View>
+                  </TouchableOpacity>
+                </>
               )}
 
               {/* Or paste text */}
@@ -1431,6 +1972,10 @@ const styles = StyleSheet.create({
     backgroundColor: '#f8fafc',
     padding: 16,
     overflow: 'hidden',
+  },
+  mobilePageContainer: {
+    padding: 0,
+    overflow: 'visible',
   },
   pageHeader: {
     flexDirection: 'row',
@@ -2483,5 +3028,503 @@ const styles = StyleSheet.create({
     color: '#94a3b8',
     marginTop: 3,
     textAlign: 'center',
+  },
+
+  // MOBILE DETAIL PAGE STYLES
+  mobileDetailContainer: {
+    flex: 1,
+    backgroundColor: '#f8fafc',
+    display: 'flex',
+    flexDirection: 'column',
+  },
+  mobileDetailHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: '#ffffff',
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: '#e2e8f0',
+  },
+  mobileBackBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 4,
+    paddingRight: 6,
+  },
+  mobileBackBtnText: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#0284c7',
+    marginLeft: 2,
+  },
+  mobileDetailHeaderCenter: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginHorizontal: 4,
+  },
+  mobileDetailHeaderTitle: {
+    fontSize: 15,
+    fontWeight: '800',
+    color: '#0f172a',
+  },
+  mobileDetailCountBadge: {
+    backgroundColor: '#e0f2fe',
+    paddingHorizontal: 7,
+    paddingVertical: 2,
+    borderRadius: 10,
+    marginLeft: 6,
+  },
+  mobileDetailCountBadgeText: {
+    fontSize: 11,
+    fontWeight: '800',
+    color: '#0284c7',
+  },
+  mobileAddBtnSmall: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#0284c7',
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 7,
+  },
+  mobileAddBtnSmallText: {
+    color: '#ffffff',
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  mobileCategoryPillsScrollWrap: {
+    backgroundColor: '#ffffff',
+    borderBottomWidth: 1,
+    borderBottomColor: '#f1f5f9',
+    paddingVertical: 6,
+  },
+  mobileCategoryPillsRow: {
+    paddingHorizontal: 12,
+    gap: 6,
+  },
+  mobileCatPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 16,
+    backgroundColor: '#f1f5f9',
+  },
+  mobileCatPillActive: {
+    backgroundColor: '#0284c7',
+  },
+  mobileCatPillText: {
+    fontSize: 11.5,
+    fontWeight: '600',
+    color: '#64748b',
+  },
+  mobileCatPillTextActive: {
+    color: '#ffffff',
+    fontWeight: '700',
+  },
+  mobileSearchBoxWrap: {
+    paddingHorizontal: 12,
+    paddingTop: 8,
+    paddingBottom: 4,
+    backgroundColor: '#ffffff',
+  },
+  mobileSearchBox: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#f8fafc',
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+    borderRadius: 8,
+    paddingHorizontal: 10,
+    height: 38,
+  },
+  mobileSearchInput: {
+    flex: 1,
+    fontSize: 13,
+    color: '#0f172a',
+  },
+  mobileFilterPillBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    backgroundColor: '#ffffff',
+    borderBottomWidth: 1,
+    borderBottomColor: '#f1f5f9',
+  },
+  mobileStatusGroup: {
+    flexDirection: 'row',
+    gap: 6,
+  },
+  mobileFilterPill: {
+    paddingHorizontal: 10,
+    paddingVertical: 4.5,
+    borderRadius: 7,
+    backgroundColor: '#f1f5f9',
+  },
+  mobileFilterPillActive: {
+    backgroundColor: '#0284c7',
+  },
+  mobileFilterPillText: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: '#475569',
+  },
+  mobileFilterPillTextActive: {
+    color: '#ffffff',
+    fontWeight: '700',
+  },
+  mobileBulkBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 8,
+    paddingVertical: 4.5,
+    borderRadius: 7,
+    borderWidth: 1,
+    borderColor: '#bae6fd',
+    backgroundColor: '#f0f9ff',
+  },
+  mobileBulkBtnText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#0284c7',
+  },
+  mobileListMetaRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 14,
+    paddingVertical: 7,
+    backgroundColor: '#f8fafc',
+  },
+  mobileSelectAllBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  mobileSelectAllText: {
+    fontSize: 11.5,
+    fontWeight: '600',
+    color: '#475569',
+  },
+  mobileSortToggle: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 6,
+    paddingVertical: 3,
+  },
+  mobileSortToggleText: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: '#64748b',
+  },
+  mobileDetailScroll: {
+    flex: 1,
+    width: '100%',
+  },
+  mobileDetailScrollContent: {
+    paddingHorizontal: 12,
+    paddingTop: 8,
+    paddingBottom: 120,
+  },
+  mobileItemCard: {
+    backgroundColor: '#ffffff',
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+    padding: 10,
+    marginBottom: 8,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.03,
+    shadowRadius: 2,
+    elevation: 1,
+  },
+  mobileItemCardSelected: {
+    borderColor: '#0284c7',
+    backgroundColor: '#f0f9ff',
+    borderWidth: 1.5,
+  },
+  mobileItemCardTop: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  mobileItemCheckbox: {
+    marginRight: 6,
+  },
+  mobileItemIndexBadge: {
+    backgroundColor: '#f1f5f9',
+    borderRadius: 5,
+    paddingHorizontal: 5,
+    paddingVertical: 2,
+    marginRight: 8,
+  },
+  mobileItemIndexText: {
+    fontSize: 10,
+    fontWeight: '700',
+    color: '#64748b',
+  },
+  mobileItemValueWrap: {
+    flex: 1,
+    marginRight: 6,
+  },
+  mobileItemValueText: {
+    fontSize: 13.5,
+    fontWeight: '700',
+    color: '#0f172a',
+  },
+  mobileItemDateText: {
+    fontSize: 10,
+    color: '#94a3b8',
+    marginTop: 2,
+  },
+  mobileStatusBadgeTouch: {
+    paddingHorizontal: 7,
+    paddingVertical: 3,
+    borderRadius: 10,
+  },
+  mobileSubTypesBox: {
+    marginTop: 8,
+    padding: 8,
+    backgroundColor: '#f8fafc',
+    borderRadius: 7,
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+  },
+  mobileSubTypesTitle: {
+    fontSize: 10.5,
+    fontWeight: '700',
+    color: '#64748b',
+    marginBottom: 4,
+  },
+  mobileSubTypeRowItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingVertical: 3,
+  },
+  mobileSubTypeLabel: {
+    fontSize: 11.5,
+    fontWeight: '600',
+    color: '#334155',
+  },
+  mobileItemCardBottom: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'flex-end',
+    gap: 6,
+    marginTop: 8,
+    paddingTop: 7,
+    borderTopWidth: 1,
+    borderTopColor: '#f1f5f9',
+  },
+  mobileActionBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 6,
+    backgroundColor: '#f8fafc',
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+    gap: 3,
+  },
+  mobileActionBtnDelete: {
+    borderColor: '#fee2e2',
+    backgroundColor: '#fef2f2',
+  },
+  mobileActionBtnText: {
+    fontSize: 11,
+    fontWeight: '600',
+  },
+  mobileListFooter: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 14,
+  },
+  mobileListFooterText: {
+    fontSize: 11,
+    color: '#94a3b8',
+  },
+  mobileEmptyState: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 40,
+    paddingHorizontal: 20,
+  },
+  mobileEmptyTitle: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: '#334155',
+    marginTop: 10,
+  },
+  mobileEmptySubtitle: {
+    fontSize: 12,
+    color: '#94a3b8',
+    textAlign: 'center',
+    marginTop: 4,
+    lineHeight: 16,
+  },
+  mobileResetFilterBtn: {
+    marginTop: 14,
+    backgroundColor: '#0284c7',
+    paddingHorizontal: 14,
+    paddingVertical: 7,
+    borderRadius: 7,
+  },
+  mobileResetFilterBtnText: {
+    color: '#ffffff',
+    fontSize: 12,
+    fontWeight: '700',
+  },
+
+  // MOBILE HUB STYLES
+  mobileHubScroll: {
+    flex: 1,
+    backgroundColor: '#f8fafc',
+  },
+  mobileHubScrollContent: {
+    padding: 14,
+    paddingBottom: 120,
+  },
+  mobileHubHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 16,
+  },
+  mobileHubSection: {
+    marginBottom: 20,
+  },
+  mobileSectionHeading: {
+    fontSize: 11,
+    fontWeight: '800',
+    color: '#94a3b8',
+    letterSpacing: 0.8,
+    marginBottom: 10,
+    textTransform: 'uppercase',
+  },
+  mobileHubCardsCol: {
+    gap: 10,
+  },
+  mobileHubCatCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#ffffff',
+    borderRadius: 12,
+    borderWidth: 1.2,
+    borderColor: '#e2e8f0',
+    padding: 12,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.04,
+    shadowRadius: 3,
+    elevation: 1,
+  },
+  mobileHubCatIconWrap: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: '#f0f9ff',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 12,
+  },
+  mobileHubCatContent: {
+    flex: 1,
+  },
+  mobileHubCatTitle: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#0f172a',
+  },
+  mobileHubCatSub: {
+    fontSize: 11,
+    color: '#64748b',
+    marginTop: 2,
+  },
+  mobileHubCatRight: {
+    alignItems: 'flex-end',
+    marginLeft: 8,
+  },
+  mobileHubCountBadge: {
+    backgroundColor: '#0284c7',
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 12,
+    marginBottom: 4,
+  },
+  mobileHubCountText: {
+    color: '#ffffff',
+    fontSize: 12,
+    fontWeight: '800',
+  },
+  mobileHubOpenRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  mobileHubOpenText: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: '#0284c7',
+    marginRight: 2,
+  },
+  mobileToolsGrid: {
+    gap: 10,
+  },
+  mobileToolCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#ffffff',
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+    padding: 12,
+    gap: 12,
+  },
+  mobileToolIconWrap: {
+    width: 40,
+    height: 40,
+    borderRadius: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  mobileToolTitle: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#0f172a',
+  },
+  mobileToolSub: {
+    fontSize: 11,
+    color: '#64748b',
+    marginTop: 2,
+  },
+  catSelectChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 7,
+    backgroundColor: '#f1f5f9',
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+  },
+  catSelectChipActive: {
+    backgroundColor: '#0284c7',
+    borderColor: '#0284c7',
+  },
+  catSelectChipText: {
+    fontSize: 11.5,
+    fontWeight: '600',
+    color: '#475569',
+  },
+  catSelectChipTextActive: {
+    color: '#ffffff',
+    fontWeight: '700',
   },
 });

@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useCallback } from 'react';
 import {
   View,
   Text,
@@ -17,7 +17,6 @@ import {
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
-import Svg, { Path, Defs, LinearGradient as SvgLinearGradient, Stop } from 'react-native-svg';
 import { useAuth } from '../context/AuthContext';
 import { api } from '../api/client';
 
@@ -40,88 +39,46 @@ export const LoginView = () => {
   const [loading, setLoading] = useState(false);
   const [err, setErr] = useState('');
   const [suc, setSuc] = useState('');
-  const [focus, setFocus] = useState(null);
 
   // Input refs for direct focus without re-render glitches
   const emailRef = useRef(null);
   const pwRef = useRef(null);
   const nameRef = useRef(null);
 
-  // OTP modal state
-  const [otpVis, setOtpVis] = useState(false);
-  const [otpPh, setOtpPh] = useState('');
-  const [otpCode, setOtpCode] = useState('');
-  const [otpSent, setOtpSent] = useState(false);
-  const [otpLoad, setOtpLoad] = useState(false);
-  const [otpMsg, setOtpMsg] = useState('');
 
-  // Animations (use opacity-only transitions so Android coordinates are never altered)
-  const fade = useRef(new Animated.Value(1)).current;
-  const pulse = useRef(new Animated.Value(1)).current;
-  const float = useRef(new Animated.Value(0)).current;
+  // Debouncing ref to prevent multiple clicks / double execution
+  const isSubmitting = useRef(false);
 
-  const useNative = Platform.OS !== 'web';
-
-  useEffect(() => {
-    // Pulse animation on logo
-    Animated.loop(
-      Animated.sequence([
-        Animated.timing(pulse, { toValue: 1.05, duration: 1600, useNativeDriver: useNative }),
-        Animated.timing(pulse, { toValue: 1, duration: 1600, useNativeDriver: useNative }),
-      ])
-    ).start();
-
-    // Floating animation on hero images
-    Animated.loop(
-      Animated.sequence([
-        Animated.timing(float, { toValue: -6, duration: 2200, useNativeDriver: useNative }),
-        Animated.timing(float, { toValue: 0, duration: 2200, useNativeDriver: useNative }),
-      ])
-    ).start();
-  }, []);
-
-  const go = (to) => {
+  // Clean, instantaneous screen transition without jarring 0-opacity fade flicker
+  const go = useCallback((to) => {
+    if (screen === to) return;
     setErr('');
     setSuc('');
-    Animated.timing(fade, { toValue: 0, duration: 120, useNativeDriver: useNative }).start(() => {
-      setScreen(to);
-      Animated.timing(fade, { toValue: 1, duration: 160, useNativeDriver: useNative }).start();
-    });
-  };
+    setScreen(to);
+  }, [screen]);
 
   const doLogin = async () => {
+    if (loading || isSubmitting.current) return;
     const e = email.trim();
     const p = password.trim();
     if (!e || !p) {
       setErr('Please enter your email and password.');
       return;
     }
+    isSubmitting.current = true;
     setLoading(true);
     setErr('');
     try {
       await login(e, p);
     } catch (error) {
       setErr(error.message || 'Invalid email or password.');
-    } finally {
       setLoading(false);
-    }
-  };
-
-  const doQuickLogin = async () => {
-    setEmail('admin@materialmapp.com');
-    setPassword('admin123');
-    setLoading(true);
-    setErr('');
-    try {
-      await login('admin@materialmapp.com', 'admin123');
-    } catch (error) {
-      setErr(error.message || 'Quick login failed.');
-    } finally {
-      setLoading(false);
+      isSubmitting.current = false;
     }
   };
 
   const doRegister = async () => {
+    if (loading || isSubmitting.current) return;
     const n = name.trim();
     const e = email.trim();
     const p = password.trim();
@@ -137,6 +94,7 @@ export const LoginView = () => {
       setErr('Password must be at least 4 characters.');
       return;
     }
+    isSubmitting.current = true;
     setLoading(true);
     setErr('');
     setSuc('');
@@ -146,38 +104,8 @@ export const LoginView = () => {
       await login(e, p);
     } catch (error) {
       setErr(error.message || 'Registration failed.');
-    } finally {
       setLoading(false);
-    }
-  };
-
-  const sendOtp = () => {
-    if (!otpPh.trim()) {
-      setOtpMsg('Please enter your mobile number or email.');
-      return;
-    }
-    setOtpLoad(true);
-    setOtpMsg('');
-    setTimeout(() => {
-      setOtpLoad(false);
-      setOtpSent(true);
-      setOtpMsg(`OTP sent to ${otpPh.trim()} (Demo code: 123456)`);
-    }, 600);
-  };
-
-  const verifyOtp = async () => {
-    if (!otpCode.trim()) {
-      setOtpMsg('Enter the 6-digit OTP code.');
-      return;
-    }
-    setOtpLoad(true);
-    try {
-      await login('admin@materialmapp.com', 'admin123');
-      setOtpVis(false);
-    } catch (error) {
-      setOtpMsg('OTP verification failed.');
-    } finally {
-      setOtpLoad(false);
+      isSubmitting.current = false;
     }
   };
 
@@ -203,37 +131,6 @@ export const LoginView = () => {
             isDesktop ? st.deviceDesktopFrame : { overflow: 'visible' },
           ]}
         >
-          
-          {/* Subtle Background Waves (Full Screen - pointerEvents none ensures touches never get blocked) */}
-          <View style={st.bgSvgWrapper} pointerEvents="none">
-            <Svg width="100%" height="100%" viewBox="0 0 400 900" preserveAspectRatio="none" pointerEvents="none">
-              <Defs>
-                <SvgLinearGradient id="bgGrad" x1="0" y1="0" x2="0" y2="1">
-                  <Stop offset="0" stopColor="#ffffff" stopOpacity="1" />
-                  <Stop offset="0.45" stopColor="#ffffff" stopOpacity="1" />
-                  <Stop offset="0.75" stopColor="#f0fdfa" stopOpacity="0.95" />
-                  <Stop offset="0.9" stopColor="#e0f2fe" stopOpacity="0.85" />
-                  <Stop offset="1" stopColor="#ccfbf1" stopOpacity="0.95" />
-                </SvgLinearGradient>
-              </Defs>
-              <Path d="M0,0 H400 V900 H0 Z" fill="url(#bgGrad)" />
-              <Path
-                d="M0,660 C80,620 180,700 280,650 C340,620 380,660 400,640 L400,900 L0,900 Z"
-                fill="#e0f2fe"
-                fillOpacity="0.55"
-              />
-              <Path
-                d="M0,740 C100,690 220,770 320,720 C360,700 390,730 400,710 L400,900 L0,900 Z"
-                fill="#ccfbf1"
-                fillOpacity="0.65"
-              />
-              <Path
-                d="M0,810 C120,780 240,830 340,800 C370,790 390,810 400,800 L400,900 L0,900 Z"
-                fill="#99f6e4"
-                fillOpacity="0.4"
-              />
-            </Svg>
-          </View>
 
           {/* ════════════ TOP APP BAR (Padded below phone status bar) ════════════ */}
           <View style={[st.topBar, { paddingTop: topSafePadding + 8 }]}>
@@ -317,7 +214,7 @@ export const LoginView = () => {
             showsVerticalScrollIndicator={false}
             bounces={false}
           >
-            <Animated.View style={[st.animatedWrap, { opacity: fade }]}>
+            <View style={st.animatedWrap}>
 
               {/* ──────────────────────────────────────────────────────── */}
               {/* SCREEN 1: COMPLETE FIRST LANDING PAGE                   */}
@@ -327,11 +224,9 @@ export const LoginView = () => {
 
                   {/* Brand Block */}
                   <View style={st.brandBlock}>
-                    <Animated.View
-                      style={[st.logoBadge, { transform: [{ scale: pulse }] }]}
-                    >
+                    <View style={st.logoBadge}>
                       <Text style={st.logoBadgeText}>M</Text>
-                    </Animated.View>
+                    </View>
                     <Text style={st.brandTitle}>MaterialMApp</Text>
                     <View style={st.tagPill}>
                       <Text style={st.tagPillText}>Quarry & Weighbridge Dispatch</Text>
@@ -342,10 +237,10 @@ export const LoginView = () => {
                   </View>
 
                   {/* Hero 1: 3D Weighbridge Truck Image */}
-                  <Animated.View
+                  <View
                     style={[
                       st.heroCard,
-                      { height: heroHeight, transform: [{ translateY: float }] },
+                      { height: heroHeight },
                     ]}
                   >
                     <Image
@@ -353,7 +248,7 @@ export const LoginView = () => {
                       style={st.heroImage}
                       resizeMode="cover"
                     />
-                  </Animated.View>
+                  </View>
 
                   {/* Pagination Dots & Skip Button */}
                   <View style={st.dotSkipRow}>
@@ -389,10 +284,10 @@ export const LoginView = () => {
                   </View>
 
                   {/* Hero 2: 3D Operations Illustration */}
-                  <Animated.View
+                  <View
                     style={[
                       st.heroCardSecondary,
-                      { height: heroHeight * 0.85, transform: [{ translateY: float }] },
+                      { height: heroHeight * 0.85 },
                     ]}
                   >
                     <Image
@@ -400,7 +295,7 @@ export const LoginView = () => {
                       style={st.heroImage}
                       resizeMode="cover"
                     />
-                  </Animated.View>
+                  </View>
 
                   {/* 3 Feature Cards */}
                   <View style={st.featuresList}>
@@ -475,11 +370,9 @@ export const LoginView = () => {
                   
                   {/* Brand Block */}
                   <View style={st.brandBlockCompact}>
-                    <Animated.View
-                      style={[st.logoBadgeSmall, { transform: [{ scale: pulse }] }]}
-                    >
+                    <View style={st.logoBadgeSmall}>
                       <Text style={st.logoBadgeSmallText}>M</Text>
-                    </Animated.View>
+                    </View>
                     <Text style={st.brandTitleSmall}>MaterialMApp</Text>
                     <View style={st.tagPillSmall}>
                       <Text style={st.tagPillSmallText}>Quarry & Weighbridge Dispatch</Text>
@@ -509,11 +402,7 @@ export const LoginView = () => {
                   {/* Email Input */}
                   <View style={st.inputGroup}>
                     <Text style={st.inputLabel}>Email Address</Text>
-                    <TouchableOpacity
-                      style={[st.inputBox, focus === 'email' && st.inputBoxFocused]}
-                      activeOpacity={1}
-                      onPress={() => emailRef.current?.focus()}
-                    >
+                    <View style={st.inputBox}>
                       <Ionicons name="mail-outline" size={18} color="#64748b" style={st.inputIcon} />
                       <TextInput
                         ref={emailRef}
@@ -525,8 +414,6 @@ export const LoginView = () => {
                         keyboardType="email-address"
                         autoCapitalize="none"
                         autoCorrect={false}
-                        onFocus={() => setFocus('email')}
-                        onBlur={() => setFocus(null)}
                       />
                       {email ? (
                         <TouchableOpacity
@@ -536,17 +423,13 @@ export const LoginView = () => {
                           <Ionicons name="close-circle" size={18} color="#94a3b8" />
                         </TouchableOpacity>
                       ) : null}
-                    </TouchableOpacity>
+                    </View>
                   </View>
 
                   {/* Password Input */}
                   <View style={st.inputGroup}>
                     <Text style={st.inputLabel}>Password</Text>
-                    <TouchableOpacity
-                      style={[st.inputBox, focus === 'pw' && st.inputBoxFocused]}
-                      activeOpacity={1}
-                      onPress={() => pwRef.current?.focus()}
-                    >
+                    <View style={st.inputBox}>
                       <Ionicons name="lock-closed-outline" size={18} color="#64748b" style={st.inputIcon} />
                       <TextInput
                         ref={pwRef}
@@ -558,8 +441,6 @@ export const LoginView = () => {
                         secureTextEntry={!showPw}
                         autoCapitalize="none"
                         autoCorrect={false}
-                        onFocus={() => setFocus('pw')}
-                        onBlur={() => setFocus(null)}
                       />
                       <TouchableOpacity
                         onPress={() => setShowPw((v) => !v)}
@@ -571,7 +452,7 @@ export const LoginView = () => {
                           color="#64748b"
                         />
                       </TouchableOpacity>
-                    </TouchableOpacity>
+                    </View>
                   </View>
 
                   {/* Sign In Button */}
@@ -588,42 +469,6 @@ export const LoginView = () => {
                     )}
                   </TouchableOpacity>
 
-                  {/* Quick Demo Login Helper */}
-                  <TouchableOpacity
-                    style={st.quickDemoPill}
-                    onPress={doQuickLogin}
-                    activeOpacity={0.8}
-                  >
-                    <Ionicons name="flash-outline" size={14} color="#0284c7" />
-                    <Text style={st.quickDemoText}>1-Click Demo Login (Admin)</Text>
-                  </TouchableOpacity>
-
-                  {/* OR Divider */}
-                  <View style={st.orDivider}>
-                    <View style={st.orLine} />
-                    <Text style={st.orText}>OR</Text>
-                    <View style={st.orLine} />
-                  </View>
-
-                  {/* OTP Button */}
-                  <TouchableOpacity
-                    style={st.otpButton}
-                    onPress={() => {
-                      setOtpMsg('');
-                      setOtpSent(false);
-                      setOtpCode('');
-                      setOtpVis(true);
-                    }}
-                    activeOpacity={0.8}
-                  >
-                    <Ionicons
-                      name="phone-portrait-outline"
-                      size={18}
-                      color="#0284c7"
-                      style={{ marginRight: 8 }}
-                    />
-                    <Text style={st.otpButtonText}>Continue with OTP</Text>
-                  </TouchableOpacity>
 
                   {/* Bottom Link */}
                   <View style={st.switchLinkBox}>
@@ -651,11 +496,9 @@ export const LoginView = () => {
 
                   {/* Brand Block */}
                   <View style={st.brandBlockCompact}>
-                    <Animated.View
-                      style={[st.logoBadgeSmall, { transform: [{ scale: pulse }] }]}
-                    >
+                    <View style={st.logoBadgeSmall}>
                       <Text style={st.logoBadgeSmallText}>M</Text>
-                    </Animated.View>
+                    </View>
                     <Text style={st.brandTitleSmall}>MaterialMApp</Text>
                     <View style={st.tagPillSmall}>
                       <Text style={st.tagPillSmallText}>Quarry & Weighbridge Dispatch</Text>
@@ -685,11 +528,7 @@ export const LoginView = () => {
                   {/* Full Name Input */}
                   <View style={st.inputGroup}>
                     <Text style={st.inputLabel}>Full Name</Text>
-                    <TouchableOpacity
-                      style={[st.inputBox, focus === 'name' && st.inputBoxFocused]}
-                      activeOpacity={1}
-                      onPress={() => nameRef.current?.focus()}
-                    >
+                    <View style={st.inputBox}>
                       <Ionicons name="person-outline" size={18} color="#64748b" style={st.inputIcon} />
                       <TextInput
                         ref={nameRef}
@@ -700,8 +539,6 @@ export const LoginView = () => {
                         onChangeText={setName}
                         autoCapitalize="words"
                         autoCorrect={false}
-                        onFocus={() => setFocus('name')}
-                        onBlur={() => setFocus(null)}
                       />
                       {name ? (
                         <TouchableOpacity
@@ -711,17 +548,13 @@ export const LoginView = () => {
                           <Ionicons name="close-circle" size={18} color="#94a3b8" />
                         </TouchableOpacity>
                       ) : null}
-                    </TouchableOpacity>
+                    </View>
                   </View>
 
                   {/* Email Input */}
                   <View style={st.inputGroup}>
                     <Text style={st.inputLabel}>Email Address</Text>
-                    <TouchableOpacity
-                      style={[st.inputBox, focus === 'regEmail' && st.inputBoxFocused]}
-                      activeOpacity={1}
-                      onPress={() => emailRef.current?.focus()}
-                    >
+                    <View style={st.inputBox}>
                       <Ionicons name="mail-outline" size={18} color="#64748b" style={st.inputIcon} />
                       <TextInput
                         ref={emailRef}
@@ -733,8 +566,6 @@ export const LoginView = () => {
                         keyboardType="email-address"
                         autoCapitalize="none"
                         autoCorrect={false}
-                        onFocus={() => setFocus('regEmail')}
-                        onBlur={() => setFocus(null)}
                       />
                       {email ? (
                         <TouchableOpacity
@@ -744,17 +575,13 @@ export const LoginView = () => {
                           <Ionicons name="close-circle" size={18} color="#94a3b8" />
                         </TouchableOpacity>
                       ) : null}
-                    </TouchableOpacity>
+                    </View>
                   </View>
 
                   {/* Password Input */}
                   <View style={st.inputGroup}>
                     <Text style={st.inputLabel}>Password</Text>
-                    <TouchableOpacity
-                      style={[st.inputBox, focus === 'regPw' && st.inputBoxFocused]}
-                      activeOpacity={1}
-                      onPress={() => pwRef.current?.focus()}
-                    >
+                    <View style={st.inputBox}>
                       <Ionicons name="lock-closed-outline" size={18} color="#64748b" style={st.inputIcon} />
                       <TextInput
                         ref={pwRef}
@@ -766,8 +593,6 @@ export const LoginView = () => {
                         secureTextEntry={!showPw}
                         autoCapitalize="none"
                         autoCorrect={false}
-                        onFocus={() => setFocus('regPw')}
-                        onBlur={() => setFocus(null)}
                       />
                       <TouchableOpacity
                         onPress={() => setShowPw((v) => !v)}
@@ -779,7 +604,7 @@ export const LoginView = () => {
                           color="#64748b"
                         />
                       </TouchableOpacity>
-                    </TouchableOpacity>
+                    </View>
                   </View>
 
                   {/* Sign Up Button */}
@@ -819,94 +644,9 @@ export const LoginView = () => {
                 </View>
               )}
 
-            </Animated.View>
+            </View>
           </ScrollView>
 
-          {/* ════════════ OTP MODAL ════════════ */}
-          <Modal
-            visible={otpVis}
-            transparent
-            animationType="fade"
-            onRequestClose={() => setOtpVis(false)}
-          >
-            <TouchableOpacity
-              style={st.modalBackdrop}
-              activeOpacity={1}
-              onPress={() => setOtpVis(false)}
-            >
-              <TouchableOpacity
-                style={st.modalCard}
-                activeOpacity={1}
-                onPress={(e) => Platform.OS === 'web' && e?.stopPropagation?.()}
-              >
-                <View style={st.modalHeader}>
-                  <View>
-                    <Text style={st.modalTitle}>Continue with OTP</Text>
-                    <Text style={st.modalSubtitle}>Quick login via one-time verification</Text>
-                  </View>
-                  <TouchableOpacity
-                    style={st.modalCloseBtn}
-                    onPress={() => setOtpVis(false)}
-                  >
-                    <Ionicons name="close" size={18} color="#64748b" />
-                  </TouchableOpacity>
-                </View>
-
-                {otpMsg ? (
-                  <View style={[st.errorBanner, { backgroundColor: '#f0fdf4', borderColor: '#bbf7d0' }]}>
-                    <Ionicons name="information-circle" size={16} color="#15803d" />
-                    <Text style={[st.errorBannerText, { color: '#15803d' }]}>{otpMsg}</Text>
-                  </View>
-                ) : null}
-
-                <View style={st.inputGroup}>
-                  <Text style={st.inputLabel}>Mobile Number or Email</Text>
-                  <View style={st.inputBox}>
-                    <Ionicons name="call-outline" size={17} color="#64748b" style={st.inputIcon} />
-                    <TextInput
-                      style={st.textInput}
-                      placeholder="+91 98765 43210 or email"
-                      placeholderTextColor="#94a3b8"
-                      value={otpPh}
-                      onChangeText={setOtpPh}
-                      autoCapitalize="none"
-                    />
-                  </View>
-                </View>
-
-                {otpSent && (
-                  <View style={st.inputGroup}>
-                    <Text style={st.inputLabel}>6-Digit OTP</Text>
-                    <View style={st.inputBox}>
-                      <Ionicons name="key-outline" size={17} color="#64748b" style={st.inputIcon} />
-                      <TextInput
-                        style={st.textInput}
-                        placeholder="Enter 6-digit code"
-                        placeholderTextColor="#94a3b8"
-                        value={otpCode}
-                        onChangeText={setOtpCode}
-                        keyboardType="number-pad"
-                      />
-                    </View>
-                  </View>
-                )}
-
-                <TouchableOpacity
-                  style={[st.primaryButton, otpLoad && { opacity: 0.75 }]}
-                  onPress={otpSent ? verifyOtp : sendOtp}
-                  disabled={otpLoad}
-                >
-                  {otpLoad ? (
-                    <ActivityIndicator size="small" color="#ffffff" />
-                  ) : (
-                    <Text style={st.primaryButtonText}>
-                      {otpSent ? 'Verify & Sign In' : 'Send OTP'}
-                    </Text>
-                  )}
-                </TouchableOpacity>
-              </TouchableOpacity>
-            </TouchableOpacity>
-          </Modal>
 
         </View>
       </KeyboardAvoidingView>
@@ -945,15 +685,6 @@ const st = StyleSheet.create({
     overflow: 'hidden',
   },
 
-  /* Background Wave SVG */
-  bgSvgWrapper: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-    zIndex: 0,
-  },
 
   /* Top Bar */
   topBar: {
@@ -998,10 +729,12 @@ const st = StyleSheet.create({
     gap: 10,
   },
   backCircle: {
-    width: 38,
-    height: 38,
-    borderRadius: 19,
-    backgroundColor: '#f1f5f9',
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: '#ffffff',
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -1270,17 +1003,17 @@ const st = StyleSheet.create({
   },
   primaryButton: {
     width: '100%',
-    height: 52,
+    height: 50,
     backgroundColor: '#0284c7',
-    borderRadius: 26,
+    borderRadius: 12,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     shadowColor: '#0284c7',
     shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
+    shadowOpacity: 0.25,
     shadowRadius: 8,
-    elevation: 4,
+    elevation: 3,
   },
   primaryButtonText: {
     color: '#ffffff',
@@ -1312,25 +1045,29 @@ const st = StyleSheet.create({
 
   /* ── FORM STYLES (Login & Register) ── */
   formContainer: {
-    paddingHorizontal: 22,
-    paddingTop: 16,
+    paddingHorizontal: 24,
+    paddingTop: 14,
+    paddingBottom: 24,
+    maxWidth: 420,
+    width: '100%',
+    alignSelf: 'center',
   },
   brandBlockCompact: {
     alignItems: 'center',
-    marginBottom: 16,
+    marginBottom: 14,
   },
   logoBadgeSmall: {
     width: 48,
     height: 48,
-    borderRadius: 15,
+    borderRadius: 14,
     backgroundColor: '#0d9488',
     alignItems: 'center',
     justifyContent: 'center',
     marginBottom: 8,
     shadowColor: '#0d9488',
     shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.28,
-    shadowRadius: 10,
+    shadowOpacity: 0.25,
+    shadowRadius: 8,
     elevation: 4,
   },
   logoBadgeSmallText: {
@@ -1339,17 +1076,19 @@ const st = StyleSheet.create({
     fontWeight: '900',
   },
   brandTitleSmall: {
-    fontSize: 23,
+    fontSize: 22,
     fontWeight: '900',
     color: '#0f172a',
-    letterSpacing: -0.5,
+    letterSpacing: -0.4,
+    textAlign: 'center',
   },
   tagPillSmall: {
     backgroundColor: '#ccfbf1',
     paddingHorizontal: 12,
-    paddingVertical: 3,
+    paddingVertical: 3.5,
     borderRadius: 14,
     marginTop: 4,
+    alignSelf: 'center',
   },
   tagPillSmallText: {
     fontSize: 12,
@@ -1357,27 +1096,32 @@ const st = StyleSheet.create({
     color: '#0f766e',
   },
   formHeadingBox: {
-    marginBottom: 18,
+    alignItems: 'center',
+    marginBottom: 20,
+    marginTop: 6,
   },
   formTitle: {
     fontSize: 24,
-    fontWeight: '900',
+    fontWeight: '800',
     color: '#0f172a',
     letterSpacing: -0.4,
+    textAlign: 'center',
   },
   formSub: {
     fontSize: 13.5,
     color: '#64748b',
-    marginTop: 3,
+    marginTop: 4,
+    textAlign: 'center',
   },
 
-  /* Input fields - Constant 1.5px border ensures Android never re-layouts on focus */
+  /* Input fields */
   inputGroup: {
     marginBottom: 14,
+    width: '100%',
   },
   inputLabel: {
     fontSize: 13,
-    fontWeight: '700',
+    fontWeight: '600',
     color: '#334155',
     marginBottom: 6,
   },
@@ -1386,24 +1130,21 @@ const st = StyleSheet.create({
     alignItems: 'center',
     backgroundColor: '#ffffff',
     borderWidth: 1.5,
-    borderColor: '#e2e8f0',
-    borderRadius: 14,
+    borderColor: '#cbd5e1',
+    borderRadius: 12,
     paddingHorizontal: 14,
-    height: 52,
-  },
-  inputBoxFocused: {
-    borderColor: '#0284c7',
-    backgroundColor: '#f8fafc',
+    height: 50,
   },
   inputIcon: {
     marginRight: 10,
   },
   textInput: {
     flex: 1,
-    height: 52,
+    height: 50,
     paddingVertical: 0,
-    fontSize: 15,
+    fontSize: 14.5,
     color: '#0f172a',
+    backgroundColor: 'transparent',
     ...(Platform.OS === 'web' ? { outlineWidth: 0 } : {}),
   },
 

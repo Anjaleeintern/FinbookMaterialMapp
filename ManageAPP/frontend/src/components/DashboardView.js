@@ -555,7 +555,7 @@ export const DashboardView = React.memo(({ entries = [], onOpenAddModal, onNavig
       { key: 'qr', label: 'QR / UPI Sale', amount: modeTotals.qr, percent: sumAllModes > 0 ? Math.round((modeTotals.qr / sumAllModes) * 100) : 0, color: MODE_COLORS.qr },
       { key: 'royalty', label: 'Royalty Bills (GST)', amount: modeTotals.royalty, percent: sumAllModes > 0 ? Math.round((modeTotals.royalty / sumAllModes) * 100) : 0, color: MODE_COLORS.royalty },
       { key: 'credit', label: 'Credit Sale', amount: modeTotals.credit, percent: sumAllModes > 0 ? Math.round((modeTotals.credit / sumAllModes) * 100) : 0, color: MODE_COLORS.credit },
-      { key: 'hr_royalty', label: 'HR Loading (Royalty Sale)', amount: modeTotals.hr_royalty, percent: sumAllModes > 0 ? Math.round((modeTotals.hr_royalty / sumAllModes) * 100) : 0, color: MODE_COLORS.hr_royalty },
+      { key: 'hr_royalty', label: 'HR Loading (Royalty)', amount: modeTotals.hr_royalty, percent: sumAllModes > 0 ? Math.round((modeTotals.hr_royalty / sumAllModes) * 100) : 0, color: MODE_COLORS.hr_royalty },
       { key: 'cash', label: 'Cash Sale', amount: modeTotals.cash, percent: sumAllModes > 0 ? Math.round((modeTotals.cash / sumAllModes) * 100) : 0, color: MODE_COLORS.cash },
       { key: 'hr_without_royalty', label: 'HR Loading (Without Royalty)', amount: modeTotals.hr_without_royalty, percent: sumAllModes > 0 ? Math.round((modeTotals.hr_without_royalty / sumAllModes) * 100) : 0, color: MODE_COLORS.hr_without_royalty },
     ];
@@ -983,16 +983,20 @@ export const DashboardView = React.memo(({ entries = [], onOpenAddModal, onNavig
                         const barTopY = currentY;
                         const dateKey = d?.date || `date-${i}`;
 
+                        const trendGProps = isWeb
+                          ? {
+                              className: `bar-col-${i}`,
+                              style: { cursor: 'pointer' },
+                              onMouseEnter: () => setHoveredTrendIdx(i),
+                              onMouseLeave: () => setHoveredTrendIdx(null),
+                              onClick: () => setHoveredTrendIdx((prev) => (prev === i ? null : i)),
+                            }
+                          : {
+                              onPress: () => setHoveredTrendIdx((prev) => (prev === i ? null : i)),
+                            };
+
                         return (
-                          <G
-                            key={`col-${dateKey}-${i}`}
-                            className={isWeb ? `bar-col-${i}` : undefined}
-                            style={isWeb ? { cursor: 'pointer' } : undefined}
-                            onMouseEnter={isWeb ? () => setHoveredTrendIdx(i) : undefined}
-                            onMouseLeave={isWeb ? () => setHoveredTrendIdx(null) : undefined}
-                            onClick={isWeb ? () => setHoveredTrendIdx((prev) => (prev === i ? null : i)) : undefined}
-                            onPress={!isWeb ? () => setHoveredTrendIdx((prev) => (prev === i ? null : i)) : undefined}
-                          >
+                          <G key={`col-${dateKey}-${i}`} {...trendGProps}>
                             {/* Hover background column indicator */}
                             {isHovered && (
                               <Rect
@@ -1196,8 +1200,8 @@ export const DashboardView = React.memo(({ entries = [], onOpenAddModal, onNavig
 
               const cx = 135;
               const cy = 135;
-              const baseR = 104;
-              const base_r = 68;
+              const baseR = 118;
+              const base_r = 74;
 
               // Compute Donut Slices starting at -90 degrees (12 o'clock)
               let currentDeg = -90;
@@ -1237,13 +1241,14 @@ export const DashboardView = React.memo(({ entries = [], onOpenAddModal, onNavig
                 const y4 = (cy + shiftY) + r * Math.sin(startRad);
 
                 const largeArc = sweepDeg > 180 ? 1 : 0;
-                const pathD = sweepDeg >= 359.9
-                  ? `M ${cx - R} ${cy} A ${R} ${R} 0 1 0 ${cx + R} ${cy} A ${R} ${R} 0 1 0 ${cx - R} ${cy} M ${cx - r} ${cy} A ${r} ${r} 0 1 1 ${cx + r} ${cy} A ${r} ${r} 0 1 1 ${cx - r} ${cy} Z`
+                const isFullCircle = sweepDeg >= 359.9;
+                const pathD = isFullCircle
+                  ? `M ${cx - R} ${cy} A ${R} ${R} 0 1 0 ${cx + R} ${cy} A ${R} ${R} 0 1 0 ${cx - R} ${cy} Z`
                   : `M ${x1.toFixed(1)} ${y1.toFixed(1)} A ${R} ${R} 0 ${largeArc} 1 ${x2.toFixed(1)} ${y2.toFixed(1)} L ${x3.toFixed(1)} ${y3.toFixed(1)} A ${r} ${r} 0 ${largeArc} 0 ${x4.toFixed(1)} ${y4.toFixed(1)} Z`;
 
                 const midR = (R + r) / 2;
-                const lx = (cx + shiftX) + midR * Math.cos(midRad);
-                const ly = (cy + shiftY) + midR * Math.sin(midRad);
+                const lx = isFullCircle ? cx : (cx + shiftX) + midR * Math.cos(midRad);
+                const ly = isFullCircle ? cy - midR + 4.5 : (cy + shiftY) + midR * Math.sin(midRad);
 
                 return {
                   ...item,
@@ -1253,6 +1258,7 @@ export const DashboardView = React.memo(({ entries = [], onOpenAddModal, onNavig
                   lx,
                   ly,
                   isHovered,
+                  isFullCircle,
                   hasSales: item.amount > 0,
                 };
               });
@@ -1261,15 +1267,15 @@ export const DashboardView = React.memo(({ entries = [], onOpenAddModal, onNavig
                 <View style={[styles.pieChartContainerRow, isUltraSmall && styles.pieChartContainerRowUltraSmall]}>
                   {/* Left: Clean Interactive Donut Graphic */}
                   <View style={styles.pieSvgWrap}>
-                    <View style={{ width: isMobile ? 150 : 210, height: isMobile ? 150 : 210, position: 'relative', alignItems: 'center', justifyContent: 'center' }}>
+                    <View style={{ width: isMobile ? 180 : 235, height: isMobile ? 180 : 235, position: 'relative', alignItems: 'center', justifyContent: 'center' }}>
                       <Svg
-                        width={isMobile ? "150" : "210"}
-                        height={isMobile ? "150" : "210"}
+                        width={isMobile ? "180" : "235"}
+                        height={isMobile ? "180" : "235"}
                         viewBox="0 0 270 270"
                         preserveAspectRatio="xMidYMid meet"
                         style={{
-                          width: isMobile ? 150 : 210,
-                          height: isMobile ? 150 : 210,
+                          width: isMobile ? 180 : 235,
+                          height: isMobile ? 180 : 235,
                           alignSelf: 'center',
                           display: isWeb ? 'block' : undefined,
                           overflow: 'visible',
@@ -1280,6 +1286,20 @@ export const DashboardView = React.memo(({ entries = [], onOpenAddModal, onNavig
                           {slices.map((slice) => {
                             if (!slice.hasSales) return null;
                             const isAnyHovered = hoveredModeKey !== null;
+                            const sliceProps = isWeb
+                              ? {
+                                  style: {
+                                    cursor: 'pointer',
+                                    transition: 'all 0.25s ease',
+                                  },
+                                  onMouseEnter: () => setHoveredModeKey(slice.key),
+                                  onMouseLeave: () => setHoveredModeKey(null),
+                                  onClick: () => setHoveredModeKey((prev) => (prev === slice.key ? null : slice.key)),
+                                }
+                              : {
+                                  onPress: () => setHoveredModeKey((prev) => (prev === slice.key ? null : slice.key)),
+                                };
+
                             return (
                               <Path
                                 key={`slice-${slice.key}`}
@@ -1290,14 +1310,7 @@ export const DashboardView = React.memo(({ entries = [], onOpenAddModal, onNavig
                                 strokeLinejoin="round"
                                 className={isWeb ? "pie-slice-path" : undefined}
                                 opacity={isAnyHovered && !slice.isHovered ? 0.45 : 1}
-                                onMouseEnter={isWeb ? () => setHoveredModeKey(slice.key) : undefined}
-                                onMouseLeave={isWeb ? () => setHoveredModeKey(null) : undefined}
-                                onClick={isWeb ? () => setHoveredModeKey(slice.isHovered ? null : slice.key) : undefined}
-                                onPress={!isWeb ? () => setHoveredModeKey(slice.isHovered ? null : slice.key) : undefined}
-                                style={isWeb ? {
-                                  cursor: 'pointer',
-                                  transition: 'all 0.25s ease',
-                                } : undefined}
+                                {...sliceProps}
                               />
                             );
                           })}
@@ -1312,9 +1325,9 @@ export const DashboardView = React.memo(({ entries = [], onOpenAddModal, onNavig
                                 y={slice.ly + 4}
                                 textAnchor="middle"
                                 fill="#ffffff"
-                                fontSize="12"
+                                fontSize={slice.isFullCircle ? "13" : "12"}
                                 fontWeight="800"
-                                pointerEvents="none"
+                                style={isWeb ? { pointerEvents: 'none' } : undefined}
                               >
                                 {slice.percent}%
                               </SvgText>
@@ -1325,11 +1338,11 @@ export const DashboardView = React.memo(({ entries = [], onOpenAddModal, onNavig
                           <Circle
                             cx={cx}
                             cy={cy}
-                            r={hoveredModeKey !== null ? 62 : 66}
+                            r={hoveredModeKey !== null ? 70 : 74}
                             fill="#ffffff"
                             stroke="#e2e8f0"
                             strokeWidth="1.5"
-                            style={{ transition: 'all 0.25s ease' }}
+                            style={isWeb ? { transition: 'all 0.25s ease' } : undefined}
                           />
                         </G>
                       </Svg>
@@ -1354,7 +1367,7 @@ export const DashboardView = React.memo(({ entries = [], onOpenAddModal, onNavig
                               Total Sales
                             </Text>
                             <Text style={[styles.donutCenterValue, isMobile && styles.donutCenterValueMobile]} numberOfLines={1}>
-                              {formatCompactINR(totalModeAmount)}
+                              ₹{formatINR(totalModeAmount)}
                             </Text>
                             <Text style={[styles.donutCenterPeriod, isMobile && styles.donutCenterPeriodMobile]}>
                               Past 1 Months
@@ -1369,26 +1382,33 @@ export const DashboardView = React.memo(({ entries = [], onOpenAddModal, onNavig
                   <View style={[styles.pieLegendCard, isMobile && styles.pieLegendCardMobile]}>
                     {sortedModes.map((item) => {
                       const isHovered = hoveredModeKey === item.key;
+                      const modeProps = isWeb
+                        ? {
+                            onMouseEnter: () => setHoveredModeKey(item.key),
+                            onMouseLeave: () => setHoveredModeKey(null),
+                            onClick: () => setHoveredModeKey((prev) => (prev === item.key ? null : item.key)),
+                          }
+                        : {};
+
                       return (
-                        <View
+                        <TouchableOpacity
                           key={item.key}
                           className={isWeb ? "pie-legend-card-row" : undefined}
                           style={[
                             styles.pieLegendRow,
                             isHovered && styles.pieLegendRowHovered,
                           ]}
-                          onMouseEnter={isWeb ? () => setHoveredModeKey(item.key) : undefined}
-                          onMouseLeave={isWeb ? () => setHoveredModeKey(null) : undefined}
-                          onClick={isWeb ? () => setHoveredModeKey(isHovered ? null : item.key) : undefined}
-                          onPress={() => setHoveredModeKey(isHovered ? null : item.key)}
+                          activeOpacity={0.8}
+                          onPress={() => setHoveredModeKey((prev) => (prev === item.key ? null : item.key))}
+                          {...modeProps}
                         >
                           <View style={[styles.pieLegendBullet, { backgroundColor: item.color }]} />
                           <View style={styles.pieLegendCol}>
-                            <Text style={[styles.pieLegendLabel, isMobile && { fontSize: 10 }]} numberOfLines={1}>{item.label}</Text>
+                            <Text style={[styles.pieLegendLabel, isMobile && { fontSize: 10 }]} numberOfLines={2}>{item.label}</Text>
                             <Text style={[styles.pieLegendAmount, isMobile && { fontSize: 10.5 }]}>₹{formatINR(item.amount)}</Text>
                           </View>
                           <Text style={[styles.pieLegendPercent, isMobile && { fontSize: 10.5 }]}>{item.percent}%</Text>
-                        </View>
+                        </TouchableOpacity>
                       );
                     })}
                   </View>
@@ -1422,7 +1442,7 @@ export const DashboardView = React.memo(({ entries = [], onOpenAddModal, onNavig
             <View style={[styles.donutSectionRow, isUltraSmall && styles.donutSectionRowUltraSmall]}>
               {/* Dynamic SVG Donut Graphic */}
               <View style={styles.donutSvgWrap}>
-                <Svg width={isMobile ? "135" : "190"} height={isMobile ? "135" : "190"} viewBox="0 0 220 220" style={{ overflow: 'visible', display: 'block', maxWidth: '100%' }}>
+                <Svg width={isMobile ? "180" : "240"} height={isMobile ? "180" : "240"} viewBox="0 0 220 220" style={{ overflow: 'visible', display: 'block', maxWidth: '100%' }}>
                   <G className="donut-rotate-group">
                     {/* Render dynamic arc slices with smooth increase/decrease on hover */}
                     {(() => {
@@ -1438,8 +1458,8 @@ export const DashboardView = React.memo(({ entries = [], onOpenAddModal, onNavig
                         const endA = currentAngle + sliceAngle;
                         currentAngle = endA;
 
-                        const R = isHovered ? 98 : (isAnyHovered ? 86 : 92);
-                        const r = isHovered ? 52 : (isAnyHovered ? 60 : 58);
+                        const R = isHovered ? 104 : (isAnyHovered ? 94 : 100);
+                        const r = isHovered ? 56 : (isAnyHovered ? 66 : 62);
 
                         const midA = (startA + endA) / 2;
                         const midRad = (midA * Math.PI) / 180;
@@ -1460,16 +1480,26 @@ export const DashboardView = React.memo(({ entries = [], onOpenAddModal, onNavig
                         const y4 = (cy + shiftY) + r * Math.sin(radStart);
 
                         const largeArc = sliceAngle > 180 ? 1 : 0;
-                        const pathD = `M ${x1.toFixed(1)} ${y1.toFixed(1)} A ${R} ${R} 0 ${largeArc} 1 ${x2.toFixed(1)} ${y2.toFixed(1)} L ${x3.toFixed(1)} ${y3.toFixed(1)} A ${r} ${r} 0 ${largeArc} 0 ${x4.toFixed(1)} ${y4.toFixed(1)} Z`;
+                        const isFullCircle = m.percent >= 99.5 || sliceAngle >= 359.9;
+                        const pathD = isFullCircle
+                          ? `M ${cx - R} ${cy} A ${R} ${R} 0 1 0 ${cx + R} ${cy} A ${R} ${R} 0 1 0 ${cx - R} ${cy} Z`
+                          : `M ${x1.toFixed(1)} ${y1.toFixed(1)} A ${R} ${R} 0 ${largeArc} 1 ${x2.toFixed(1)} ${y2.toFixed(1)} L ${x3.toFixed(1)} ${y3.toFixed(1)} A ${r} ${r} 0 ${largeArc} 0 ${x4.toFixed(1)} ${y4.toFixed(1)} Z`;
+
+                        const matGProps = isWeb
+                          ? {
+                              style: { cursor: 'pointer' },
+                              onMouseEnter: () => setHoveredMaterialIdx(idx),
+                              onMouseLeave: () => setHoveredMaterialIdx(null),
+                              onClick: () => setHoveredMaterialIdx((prev) => (prev === idx ? null : idx)),
+                            }
+                          : {
+                              onPress: () => setHoveredMaterialIdx((prev) => (prev === idx ? null : idx)),
+                            };
 
                         return (
                           <G
-                            key={m.name}
-                            style={isWeb ? { cursor: 'pointer' } : undefined}
-                            onMouseEnter={isWeb ? () => setHoveredMaterialIdx(idx) : undefined}
-                            onMouseLeave={isWeb ? () => setHoveredMaterialIdx(null) : undefined}
-                            onClick={isWeb ? () => setHoveredMaterialIdx(isHovered ? null : idx) : undefined}
-                            onPress={!isWeb ? () => setHoveredMaterialIdx(isHovered ? null : idx) : undefined}
+                            key={`mat-slice-${m.name || idx}-${idx}`}
+                            {...matGProps}
                           >
                             <Path
                               d={pathD}
@@ -1477,20 +1507,20 @@ export const DashboardView = React.memo(({ entries = [], onOpenAddModal, onNavig
                               opacity={hoveredMaterialIdx === null || isHovered ? 1 : 0.32}
                               stroke="#ffffff"
                               strokeWidth={isHovered ? 2.5 : 1}
-                              style={{
+                              style={isWeb ? {
                                 transition: 'd 0.32s cubic-bezier(0.34, 1.56, 0.64, 1), opacity 0.25s ease',
-                              }}
+                              } : undefined}
                             />
                             {/* Direct Percentage on Donut Slice - NO CLICK NEEDED! */}
                             {m.percent >= 8 && (
                               <SvgText
-                                x={(cx + shiftX) + ((R + r) / 2) * Math.cos(midRad)}
-                                y={(cy + shiftY) + ((R + r) / 2) * Math.sin(midRad) + 3.5}
+                                x={isFullCircle ? cx : (cx + shiftX) + ((R + r) / 2) * Math.cos(midRad)}
+                                y={isFullCircle ? cy - ((R + r) / 2) + 4.5 : (cy + shiftY) + ((R + r) / 2) * Math.sin(midRad) + 3.5}
                                 fill="#ffffff"
-                                fontSize="10.5"
+                                fontSize={isFullCircle ? "13" : "11"}
                                 fontWeight="800"
                                 textAnchor="middle"
-                                pointerEvents="none"
+                                style={isWeb ? { pointerEvents: 'none' } : undefined}
                               >
                                 {m.percent}%
                               </SvgText>
@@ -1504,11 +1534,11 @@ export const DashboardView = React.memo(({ entries = [], onOpenAddModal, onNavig
                     <Circle
                       cx="110"
                       cy="110"
-                      r={hoveredMaterialIdx !== null ? 50 : 55}
+                      r={hoveredMaterialIdx !== null ? 56 : 62}
                       fill="#ffffff"
                       stroke="#e2e8f0"
                       strokeWidth="1.5"
-                      style={{ transition: 'all 0.3s ease' }}
+                      style={isWeb ? { transition: 'all 0.3s ease' } : undefined}
                     />
                   </G>
                 </Svg>
@@ -1542,19 +1572,34 @@ export const DashboardView = React.memo(({ entries = [], onOpenAddModal, onNavig
               <View style={[styles.materialLegendList, isMobile && styles.materialLegendListMobile]}>
                 {materialData.map((m, idx) => {
                   const isHovered = hoveredMaterialIdx === idx;
+                  const legendProps = isWeb
+                    ? {
+                        onMouseEnter: () => setHoveredMaterialIdx(idx),
+                        onMouseLeave: () => setHoveredMaterialIdx(null),
+                        onClick: () => setHoveredMaterialIdx((prev) => (prev === idx ? null : idx)),
+                      }
+                    : {};
                   return (
-                    <View
-                      key={m.name}
+                    <TouchableOpacity
+                      key={m.name || `mat-legend-${idx}`}
                       style={[styles.materialLegendItem, isHovered && styles.materialLegendItemHovered]}
-                      onMouseEnter={() => setHoveredMaterialIdx(idx)}
-                      onMouseLeave={() => setHoveredMaterialIdx(null)}
-                      onClick={() => setHoveredMaterialIdx(isHovered ? null : idx)}
+                      activeOpacity={0.8}
+                      onPress={() => setHoveredMaterialIdx((prev) => (prev === idx ? null : idx))}
+                      {...legendProps}
                     >
-                      <View style={[styles.legendColorBox, { backgroundColor: m.color }]} />
-                      <Text style={[styles.materialLegendLabel, isMobile && { fontSize: 11 }]} numberOfLines={1}>
-                        {m.name}: <Text style={{ fontWeight: '700', color: '#0f172a' }}>₹{formatINR(m.amount)}</Text> ({m.percent}%)
-                      </Text>
-                    </View>
+                      <View style={[styles.legendColorBox, { backgroundColor: m.color, marginTop: 3 }]} />
+                      <View style={{ flex: 1, minWidth: 0 }}>
+                        <Text style={[styles.materialLegendLabel, isMobile && { fontSize: 11.5, lineHeight: 15 }]} numberOfLines={2}>
+                          {m.name}
+                        </Text>
+                        <Text style={{ fontSize: isMobile ? 11 : 12, fontWeight: '700', color: '#0f172a', marginTop: 1 }}>
+                          ₹{formatINR(m.amount)}{' '}
+                          <Text style={{ fontSize: isMobile ? 10 : 11, fontWeight: '600', color: '#64748b' }}>
+                            ({m.percent}%)
+                          </Text>
+                        </Text>
+                      </View>
+                    </TouchableOpacity>
                   );
                 })}
               </View>
@@ -1634,15 +1679,19 @@ export const DashboardView = React.memo(({ entries = [], onOpenAddModal, onNavig
                       const barY = 170 - barH;
                       const barColor = PARTY_COLORS[i % PARTY_COLORS.length];
 
+                      const partyGProps = isWeb
+                        ? {
+                            style: { cursor: 'pointer' },
+                            onMouseEnter: () => setHoveredPartyIdx(i),
+                            onMouseLeave: () => setHoveredPartyIdx(null),
+                            onClick: () => setHoveredPartyIdx(isHovered ? null : i),
+                          }
+                        : {
+                            onPress: () => setHoveredPartyIdx(isHovered ? null : i),
+                          };
+
                       return (
-                        <G
-                          key={`party-bar-${p.name || i}`}
-                          style={isWeb ? { cursor: 'pointer' } : undefined}
-                          onMouseEnter={isWeb ? () => setHoveredPartyIdx(i) : undefined}
-                          onMouseLeave={isWeb ? () => setHoveredPartyIdx(null) : undefined}
-                          onClick={isWeb ? () => setHoveredPartyIdx(isHovered ? null : i) : undefined}
-                          onPress={!isWeb ? () => setHoveredPartyIdx(isHovered ? null : i) : undefined}
-                        >
+                        <G key={`party-bar-${p.name || i}`} {...partyGProps}>
                           {/* Hover background column indicator */}
                           {isHovered && (
                             <Rect
@@ -2452,7 +2501,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'flex-start',
-    gap: 14,
+    gap: 12,
     paddingTop: 4,
     paddingHorizontal: 4,
     width: '100%',
@@ -2460,7 +2509,7 @@ const styles = StyleSheet.create({
   donutSectionRowUltraSmall: {
     flexDirection: 'column',
     alignItems: 'center',
-    gap: 10,
+    gap: 12,
   },
   donutSvgWrap: {
     position: 'relative',
@@ -2484,28 +2533,28 @@ const styles = StyleSheet.create({
     maxWidth: '85%',
   },
   donutCenterLabel: {
-    fontSize: 11.5,
+    fontSize: 12,
     fontWeight: '600',
     color: '#64748b',
     textAlign: 'center',
-    lineHeight: 14,
+    lineHeight: 15,
   },
   donutCenterLabelMobile: {
-    fontSize: 9.5,
-    lineHeight: 12,
+    fontSize: 10,
+    lineHeight: 13,
   },
   donutCenterValue: {
-    fontSize: 17,
+    fontSize: 18.5,
     fontWeight: '800',
     color: '#0f172a',
     textAlign: 'center',
-    lineHeight: 20,
+    lineHeight: 22,
     marginVertical: 1,
     paddingHorizontal: 2,
     letterSpacing: -0.2,
   },
   donutCenterValueMobile: {
-    fontSize: 14,
+    fontSize: 13.5,
     lineHeight: 17,
     marginVertical: 1,
   },
@@ -2574,17 +2623,17 @@ const styles = StyleSheet.create({
     minWidth: 175,
   },
   materialLegendListMobile: {
+    flex: 1,
     minWidth: 0,
-    width: '100%',
-    marginTop: 8,
+    marginTop: 0,
     gap: 6,
   },
   materialLegendItem: {
     flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    paddingVertical: 5,
-    paddingHorizontal: 8,
+    alignItems: 'flex-start',
+    gap: 7,
+    paddingVertical: 3.5,
+    paddingHorizontal: 6,
     borderRadius: 6,
     ...(Platform.OS === 'web' ? { cursor: 'pointer' } : {}),
   },
@@ -2688,6 +2737,7 @@ const styles = StyleSheet.create({
   pieLegendCol: {
     flex: 1,
     justifyContent: 'center',
+    minWidth: 0,
   },
   pieLegendLabel: {
     fontSize: 10.5,

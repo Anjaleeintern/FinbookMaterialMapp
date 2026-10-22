@@ -102,9 +102,9 @@ async def test_destination_routing_and_calculations():
         assert data1["saved_in"] == "royalty_sale"
         entry1 = data1["entry"]
         assert entry1["net_wt"] == 10000.0  # 15000 - 5000
-        assert entry1["amount"] == 2000000.0 # 10000 * 200
-        assert entry1["gst_amount"] == 100000.0 # 5% of 2000000
-        assert entry1["total_amount"] == 2100000.0 # 2000000 + 100000
+        assert entry1["amount"] == 2000.0 # (10000 / 1000) * 200
+        assert entry1["gst_amount"] == 100.0 # 5% of 2000
+        assert entry1["total_amount"] == 2100.0 # 2000 + 100
 
         # Case 2: HR Loading + With Royalty -> hr_loading (with GST)
         hr_with_royalty = {
@@ -125,7 +125,7 @@ async def test_destination_routing_and_calculations():
         data2 = res2.json()
         assert data2["saved_in"] == "hr_loading"
         assert data2["entry"]["gst_rate"] == 18.0
-        assert data2["entry"]["gst_amount"] == 540000.0
+        assert data2["entry"]["gst_amount"] == 540.0 # 18% of ((10000 / 1000) * 300 = 3000)
 
         # Case 3: HR Loading + Without Royalty -> hr_loading (NO GST)
         hr_without_royalty = {

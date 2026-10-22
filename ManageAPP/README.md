@@ -73,7 +73,7 @@ npx expo start --web --port 8081
 | Rule / Formula | Implementation |
 |---|---|
 | **NET WT** | `max(0, G.WT - T.WT)` (Reactive + Backend verified) |
-| **Amount** | `NET WT > 0 ? (NET WT * Rate) : (CUM * Rate)` |
+| **Amount** | `NET WT > 0 ? ((NET WT / 1000) * Rate) : (CUM * Rate)` |
 | **GST Visibility** | `[Type/Mode] == "Royalty Sale" OR ([Type/Mode] == "HR Loading" AND [HR Loading Type] == "With Royalty")` |
 | **GST Amount** | `(Amount * GST Rate) / 100` |
 | **Total Amount** | `Amount + GST Amount` |

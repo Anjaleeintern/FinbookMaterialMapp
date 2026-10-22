@@ -1,4 +1,5 @@
 import { Platform, NativeModules } from 'react-native';
+import * as FileSystem from 'expo-file-system/legacy';
 
 // Environment variables configured in frontend/.env (EXPO_PUBLIC_ prefix)
 const ENV_API_URL = process.env.EXPO_PUBLIC_API_URL || 'https://finbookmaterialmapp.onrender.com';
@@ -95,6 +96,101 @@ const request = async (endpoint, options = {}) => {
   return data;
 };
 
+// Universal Multipart File Upload Helper (Native FileSystem.uploadAsync for Mobile, FormData + fetch for Web)
+const uploadMultipartFile = async (url, file, extraParams = {}) => {
+  // 1. Native Mobile Devices (Android / iOS): stream file natively from disk via OkHttp/NSURLSession
+  if (Platform.OS !== 'web' && file && file.uri) {
+    try {
+      const mimeType =
+        file.mimeType ||
+        file.type ||
+        (file.name?.toLowerCase().endsWith('.csv')
+          ? 'text/csv'
+          : 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+
+      const stringParams = {};
+      if (extraParams) {
+        Object.keys(extraParams).forEach((k) => {
+          stringParams[k] = String(extraParams[k]);
+        });
+      }
+
+      const uploadResult = await FileSystem.uploadAsync(url, file.uri, {
+        uploadType: FileSystem.FileSystemUploadType.MULTIPART,
+        httpMethod: 'POST',
+        fieldName: 'file',
+        mimeType,
+        parameters: stringParams,
+        headers: {
+          Accept: 'application/json',
+          ...(authToken ? { Authorization: `Bearer ${authToken}` } : {}),
+        },
+      });
+
+      let data = null;
+      try {
+        data = JSON.parse(uploadResult.body);
+      } catch (e) {
+        data = null;
+      }
+
+      if (uploadResult.status < 200 || uploadResult.status >= 300) {
+        const errorMsg =
+          data?.detail || data?.message || `File upload failed with status ${uploadResult.status}`;
+        throw new Error(errorMsg);
+      }
+
+      return data;
+    } catch (nativeErr) {
+      // If error was already an API/HTTP error or file read error, rethrow
+      if (nativeErr.message && !nativeErr.message.includes('uploadAsync')) {
+        throw nativeErr;
+      }
+      console.warn('Native FileSystem upload error, attempting fallback:', nativeErr);
+    }
+  }
+
+  // 2. Web Browser & Fallback: Standard browser FormData + fetch
+  const formData = new FormData();
+  if (file && file.uri && Platform.OS !== 'web') {
+    formData.append('file', {
+      uri: file.uri,
+      name: file.name || 'sheet.xlsx',
+      type:
+        file.mimeType ||
+        file.type ||
+        'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    });
+  } else {
+    formData.append('file', file);
+  }
+
+  if (extraParams) {
+    Object.keys(extraParams).forEach((key) => {
+      formData.append(key, String(extraParams[key]));
+    });
+  }
+
+  const headers = {
+    ...(authToken ? { Authorization: `Bearer ${authToken}` } : {}),
+  };
+
+  const response = await fetch(url, {
+    method: 'POST',
+    headers,
+    body: formData,
+  });
+
+  const data = await response.json().catch(() => null);
+
+  if (!response.ok) {
+    const errorMsg = data?.detail || data?.message || `Upload failed with status ${response.status}`;
+    throw new Error(errorMsg);
+  }
+
+  return data;
+};
+
 export const api = {
   // Auth
   login: (email, password) =>
@@ -139,13 +235,10 @@ export const api = {
       body: JSON.stringify({ category, items, status }),
     }),
   importMasterFile: (file, preview = true, defaultCategory = 'VehicleNo') => {
-    const formData = new FormData();
-    formData.append('file', file);
-    formData.append('preview', preview ? 'true' : 'false');
-    formData.append('default_category', defaultCategory);
-    return request('/api/masters/import-file', {
-      method: 'POST',
-      body: formData,
+    const url = `${BASE_URL}/api/masters/import-file?preview=${preview ? 'true' : 'false'}&default_category=${encodeURIComponent(defaultCategory)}`;
+    return uploadMultipartFile(url, file, {
+      preview: preview ? 'true' : 'false',
+      default_category: defaultCategory,
     });
   },
   importMasterPasted: (rawText, defaultCategory = 'VehicleNo', preview = true) =>
@@ -191,13 +284,6 @@ export const api = {
   // Excel Bulk Import & Template
   getTemplateDownloadUrl: () => `${BASE_URL}/api/entries/template`,
   importExcel: async (file, previewOnly = false, defaultTypeMode = null, selectedSheets = null) => {
-    const formData = new FormData();
-    formData.append('file', file);
-
-    const headers = {
-      ...(authToken ? { Authorization: `Bearer ${authToken}` } : {}),
-    };
-
     let url = `${BASE_URL}/api/entries/import-excel?preview_only=${previewOnly ? 'true' : 'false'}`;
     if (defaultTypeMode && defaultTypeMode !== 'auto') {
       url += `&default_type_mode=${encodeURIComponent(defaultTypeMode)}`;
@@ -207,19 +293,6 @@ export const api = {
       url += `&selected_sheets=${encodeURIComponent(sheetsStr)}`;
     }
 
-    const response = await fetch(url, {
-      method: 'POST',
-      headers,
-      body: formData,
-    });
-
-    const data = await response.json().catch(() => null);
-
-    if (!response.ok) {
-      const errorMsg = data?.detail || data?.message || `Excel upload failed with status ${response.status}`;
-      throw new Error(errorMsg);
-    }
-
-    return data;
+    return uploadMultipartFile(url, file);
   },
 };

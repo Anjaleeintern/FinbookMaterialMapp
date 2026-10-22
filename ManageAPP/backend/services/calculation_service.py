@@ -9,11 +9,11 @@ def process_entry_calculations(entry: EntryCreate) -> dict:
     net_wt = max(0.0, round(g_wt - t_wt, 2))
     data["net_wt"] = net_wt
 
-    # 2. Base Amount: (NET WT * Rate) if NET WT > 0 else (CUM * Rate)
+    # 2. Base Amount: ((NET WT / 1000) * Rate) if NET WT > 0 else (CUM * Rate)
     rate = float(data.get("rate") or 0.0)
     cum = float(data.get("cum") or 0.0)
     if net_wt > 0:
-        amount = round(net_wt * rate, 2)
+        amount = round((net_wt / 1000.0) * rate, 2)
     else:
         amount = round(cum * rate, 2)
     data["amount"] = amount

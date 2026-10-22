@@ -31,7 +31,7 @@ const MainApp = () => {
   const isMobile = width < 768;
 
   const [activeTab, setActiveTab] = useState('dashboard');
-  const [visitedTabs, setVisitedTabs] = useState(() => new Set(['dashboard']));
+  const [visitedTabs, setVisitedTabs] = useState(() => new Set(['dashboard', 'entries', 'masters', 'about']));
   const [sidebarOpen, setSidebarOpen] = useState(!isMobile);
   const [search, setSearch] = useState('');
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -41,15 +41,15 @@ const MainApp = () => {
   const [masters, setMasters] = useState(null);
   const [loading, setLoading] = useState(false);
 
-  // Keep track of visited tabs so once visited, they remain mounted in DOM for 0ms instant tab switching
-  useEffect(() => {
+  const handleSelectTab = useCallback((tab) => {
+    setActiveTab(tab);
     setVisitedTabs((prev) => {
-      if (prev.has(activeTab)) return prev;
+      if (prev.has(tab)) return prev;
       const next = new Set(prev);
-      next.add(activeTab);
+      next.add(tab);
       return next;
     });
-  }, [activeTab]);
+  }, []);
 
   useEffect(() => {
     setSidebarOpen(!isMobile);
@@ -83,7 +83,7 @@ const MainApp = () => {
   const handleCloseAddModal = useCallback(() => setIsModalOpen(false), []);
   const handleOpenImportModal = useCallback(() => setIsImportModalOpen(true), []);
   const handleCloseImportModal = useCallback(() => setIsImportModalOpen(false), []);
-  const handleNavigateMasters = useCallback(() => setActiveTab('masters'), []);
+  const handleNavigateMasters = useCallback(() => handleSelectTab('masters'), [handleSelectTab]);
   const handleToggleSidebar = useCallback(() => setSidebarOpen((prev) => !prev), []);
   const handleCloseSidebar = useCallback(() => setSidebarOpen(false), []);
 
@@ -123,7 +123,7 @@ const MainApp = () => {
       <View style={styles.mainLayout}>
         <Sidebar
           activeTab={activeTab}
-          setActiveTab={setActiveTab}
+          setActiveTab={handleSelectTab}
           isOpen={sidebarOpen}
           onClose={handleCloseSidebar}
         />
@@ -195,9 +195,8 @@ const MainApp = () => {
           {/* 1. Dashboard */}
           <TouchableOpacity
             style={styles.bottomTab}
-            onPress={() => setActiveTab('dashboard')}
-            activeOpacity={0.7}
-            delayPressIn={0}
+            onPress={() => handleSelectTab('dashboard')}
+            activeOpacity={0.75}
           >
             <Ionicons
               name={activeTab === 'dashboard' ? 'home' : 'home-outline'}
@@ -216,9 +215,8 @@ const MainApp = () => {
           {/* 2. All Entries */}
           <TouchableOpacity
             style={styles.bottomTab}
-            onPress={() => setActiveTab('entries')}
-            activeOpacity={0.7}
-            delayPressIn={0}
+            onPress={() => handleSelectTab('entries')}
+            activeOpacity={0.75}
           >
             <Ionicons
               name={activeTab === 'entries' ? 'list' : 'list-outline'}
@@ -237,9 +235,8 @@ const MainApp = () => {
           {/* 3. Masters */}
           <TouchableOpacity
             style={styles.bottomTab}
-            onPress={() => setActiveTab('masters')}
-            activeOpacity={0.7}
-            delayPressIn={0}
+            onPress={() => handleSelectTab('masters')}
+            activeOpacity={0.75}
           >
             <Ionicons
               name={activeTab === 'masters' ? 'layers' : 'layers-outline'}
@@ -258,9 +255,8 @@ const MainApp = () => {
           {/* 4. About */}
           <TouchableOpacity
             style={styles.bottomTab}
-            onPress={() => setActiveTab('about')}
-            activeOpacity={0.7}
-            delayPressIn={0}
+            onPress={() => handleSelectTab('about')}
+            activeOpacity={0.75}
           >
             <Ionicons
               name={activeTab === 'about' ? 'information-circle' : 'information-circle-outline'}

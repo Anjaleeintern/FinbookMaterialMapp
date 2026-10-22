@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
+import React, { createContext, useContext, useState, useEffect, useMemo, useCallback } from 'react';
 import { api, setAuthToken } from '../api/client';
 
 const AuthContext = createContext(null);
@@ -35,36 +35,42 @@ export const AuthProvider = ({ children }) => {
     initAuth();
   }, []);
 
-  const login = async (email, password) => {
+  const login = useCallback(async (email, password) => {
     const data = await api.login(email, password);
-    setToken(data.access_token);
-    setUser(data.user);
     setAuthToken(data.access_token);
     if (typeof localStorage !== 'undefined') {
       localStorage.setItem('materialmapp_token', data.access_token);
     }
+    setToken(data.access_token);
+    setUser(data.user);
     return data;
-  };
+  }, []);
 
-  const logout = async () => {
+  const logout = useCallback(async () => {
     try {
       await api.logout();
     } catch (e) {
       // Ignore network error on logout
     }
-    setToken(null);
-    setUser(null);
     setAuthToken(null);
     if (typeof localStorage !== 'undefined') {
       localStorage.removeItem('materialmapp_token');
     }
-  };
+    setToken(null);
+    setUser(null);
+  }, []);
+
+  const value = useMemo(
+    () => ({ user, token, loading, login, logout }),
+    [user, token, loading, login, logout]
+  );
 
   return (
-    <AuthContext.Provider value={{ user, token, loading, login, logout }}>
+    <AuthContext.Provider value={value}>
       {children}
     </AuthContext.Provider>
   );
 };
 
 export const useAuth = () => useContext(AuthContext);
+

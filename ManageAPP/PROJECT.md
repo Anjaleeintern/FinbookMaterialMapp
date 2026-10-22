@@ -63,7 +63,7 @@ Analysis based on the 5 visual artifacts provided:
 | `T.WT` | Stepper (`-` / `+`) | No | `0` | Always | Yes | Tare Weight (Truck empty weight) |
 | `NET WT` | Numeric Display | Auto | `0` | Always | Read-Only | **App Formula:** `[G.WT] - [T.WT]` |
 | `Rate` | Stepper (`-` / `+`) | **Yes** | `0` | Always | Yes | Rate per Ton / CUM |
-| `Amount` | Numeric Display | Auto | `0` | Always | Read-Only | **Formula:** `NET WT > 0 ? (NET WT * Rate) : (CUM * Rate)` |
+| `Amount` | Numeric Display | Auto | `0` | Always | Read-Only | **Formula:** `NET WT > 0 ? ((NET WT / 1000) * Rate) : (CUM * Rate)` |
 | `Payment Mode` | Radio / Dropdown | Conditional | Cash (if Cash Sale), QR (if QR Sale) | `IN([Type/Mode], LIST("Cash Sale", "QR Sale"))` | Yes | Cash or QR |
 | `GST Rate` | Dropdown / Stepper | Conditional | `5%` / `18%` / `0` | GST Condition (see below) | Yes | Applicable tax percentage |
 | `GST Amount` | Numeric Display | Auto | `0` | GST Condition (see below) | Read-Only | **App Formula:** `[Amount] * [GST Rate] / 100` |

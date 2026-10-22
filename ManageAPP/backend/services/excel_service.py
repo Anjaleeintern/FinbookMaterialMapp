@@ -640,7 +640,7 @@ def generate_sample_excel_template() -> bytes:
         ["ETP No", "Optional", "ETP-8921", "Electronic Transit Pass number."],
         ["G.WT", "Optional", "60790", "Gross weight in kg."],
         ["T.WT", "Optional", "15000", "Tare weight in kg. Net weight = G.WT - T.WT."],
-        ["Rate", "Yes", "450", "Rate per Ton or per CUM. Amount = Net Wt * Rate (or CUM * Rate)."],
+        ["Rate", "Yes", "450", "Rate per Ton or per CUM. Amount = (Net Wt / 1000) * Rate (or CUM * Rate)."],
         ["Payment Mode", "Conditional", "Cash or QR", "Auto-defaults to Cash for Cash Sale, QR for QR Sale."],
         ["GST Rate", "Conditional", "5, 18, or 0", "Auto-calculates GST Amount and Total Amount for Royalty Sale or HR Loading With Royalty."]
     ]

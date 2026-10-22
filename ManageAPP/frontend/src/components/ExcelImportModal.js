@@ -8,8 +8,10 @@ import {
   StyleSheet,
   ActivityIndicator,
   Platform,
+  Linking,
   useWindowDimensions,
 } from 'react-native';
+import * as DocumentPicker from 'expo-document-picker';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { api } from '../api/client';
@@ -81,6 +83,48 @@ export const ExcelImportModal = ({ visible, onClose, onSuccess }) => {
     await loadPreview(file, selectedMode, null);
   };
 
+  const handlePickFile = async () => {
+    setErrorMsg('');
+    if (Platform.OS === 'web') {
+      if (fileInputRef.current) {
+        fileInputRef.current.click();
+      }
+      return;
+    }
+
+    try {
+      const result = await DocumentPicker.getDocumentAsync({
+        type: [
+          'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+          'application/vnd.ms-excel',
+          'text/csv',
+          'application/csv',
+          '*/*',
+        ],
+        copyToCacheDirectory: true,
+      });
+
+      if (result.canceled || !result.assets || result.assets.length === 0) {
+        return;
+      }
+
+      const asset = result.assets[0];
+      const pickedFile = {
+        uri: asset.uri,
+        name: asset.name,
+        size: asset.size || 0,
+        mimeType: asset.mimeType,
+      };
+
+      setSelectedFile(pickedFile);
+      setSelectedSheets([]);
+      setImportResult(null);
+      await loadPreview(pickedFile, selectedMode, null);
+    } catch (err) {
+      setErrorMsg('Failed to select file: ' + (err.message || 'Unknown error'));
+    }
+  };
+
   const handleModeChange = async (newMode) => {
     setSelectedMode(newMode);
     if (selectedFile) {
@@ -125,10 +169,20 @@ export const ExcelImportModal = ({ visible, onClose, onSuccess }) => {
     }
   };
 
-  const handleDownloadTemplate = () => {
+  const handleDownloadTemplate = async () => {
     const url = api.getTemplateDownloadUrl();
-    if (Platform.OS === 'web' && typeof window !== 'undefined') {
-      window.open(url, '_blank');
+    try {
+      if (Platform.OS === 'web' && typeof window !== 'undefined') {
+        window.open(url, '_blank');
+      } else {
+        await Linking.openURL(url);
+      }
+    } catch (err) {
+      if (Platform.OS === 'web' && typeof window !== 'undefined') {
+        window.open(url, '_blank');
+      } else {
+        setErrorMsg('Could not open download link: ' + (err.message || ''));
+      }
     }
   };
 
@@ -271,11 +325,7 @@ export const ExcelImportModal = ({ visible, onClose, onSuccess }) => {
 
                   <TouchableOpacity
                     style={styles.dropZone}
-                    onPress={() => {
-                      if (fileInputRef.current) {
-                        fileInputRef.current.click();
-                      }
-                    }}
+                    onPress={handlePickFile}
                     activeOpacity={0.7}
                   >
                     <View style={styles.dropZoneIconCircle}>
