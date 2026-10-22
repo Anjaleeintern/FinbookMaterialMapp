@@ -386,119 +386,155 @@ export const AllEntriesView = React.memo(({ entries, loading, onOpenAddModal, on
                 {/* Row 1: Date & Type */}
                 <View style={styles.mobileFilterRow}>
                   {/* DATE Dropdown */}
-                  <View style={styles.mobileFilterCard}>
-                    <Text style={styles.mobileFilterCardLabel}>DATE</Text>
+                  <TouchableOpacity
+                    style={[
+                      styles.mobileFilterCard,
+                      selectedDate !== 'All' && styles.mobileFilterCardActive,
+                    ]}
+                    activeOpacity={0.7}
+                    onPress={() =>
+                      setMobilePicker({
+                        title: 'Date',
+                        options: uniqueDates,
+                        current: selectedDate,
+                        onSelect: setSelectedDate,
+                      })
+                    }
+                  >
+                    <Text style={[styles.mobileFilterCardLabel, selectedDate !== 'All' && styles.mobileFilterCardLabelActive]}>
+                      DATE
+                    </Text>
                     <View style={styles.mobileFilterCardValRow}>
-                      <Text style={styles.mobileFilterCardVal} numberOfLines={1}>
+                      <Text
+                        style={[
+                          styles.mobileFilterCardVal,
+                          selectedDate !== 'All' && styles.mobileFilterCardValActive,
+                        ]}
+                        numberOfLines={1}
+                      >
                         {selectedDate === 'All' ? 'All Dates' : selectedDate}
                       </Text>
-                      <Ionicons name="chevron-down" size={13} color="#64748b" />
-                    </View>
-                    {Platform.OS === 'web' ? (
-                      <select
-                        value={selectedDate}
-                        onChange={(e) => setSelectedDate(e.target.value)}
-                        style={styles.mobileHiddenSelect}
-                      >
-                        <option value="All">All Dates</option>
-                        {uniqueDates.map((d) => (
-                          <option key={d} value={d}>{d}</option>
-                        ))}
-                      </select>
-                    ) : (
-                      <TouchableOpacity
-                        style={StyleSheet.absoluteFill}
-                        onPress={() => setMobilePicker({ title: 'Date', options: uniqueDates, current: selectedDate, onSelect: setSelectedDate })}
+                      <Ionicons
+                        name="chevron-down"
+                        size={13}
+                        color={selectedDate !== 'All' ? '#0284c7' : '#64748b'}
                       />
-                    )}
-                  </View>
+                    </View>
+                  </TouchableOpacity>
 
                   {/* TYPE Dropdown */}
-                  <View style={styles.mobileFilterCard}>
-                    <Text style={styles.mobileFilterCardLabel}>TYPE</Text>
+                  <TouchableOpacity
+                    style={[
+                      styles.mobileFilterCard,
+                      selectedType !== 'All' && styles.mobileFilterCardActive,
+                    ]}
+                    activeOpacity={0.7}
+                    onPress={() =>
+                      setMobilePicker({
+                        title: 'Type',
+                        options: uniqueTypes,
+                        current: selectedType,
+                        onSelect: setSelectedType,
+                      })
+                    }
+                  >
+                    <Text style={[styles.mobileFilterCardLabel, selectedType !== 'All' && styles.mobileFilterCardLabelActive]}>
+                      TYPE
+                    </Text>
                     <View style={styles.mobileFilterCardValRow}>
-                      <Text style={styles.mobileFilterCardVal} numberOfLines={1}>
+                      <Text
+                        style={[
+                          styles.mobileFilterCardVal,
+                          selectedType !== 'All' && styles.mobileFilterCardValActive,
+                        ]}
+                        numberOfLines={1}
+                      >
                         {selectedType === 'All' ? 'All Types' : selectedType}
                       </Text>
-                      <Ionicons name="chevron-down" size={13} color="#64748b" />
-                    </View>
-                    {Platform.OS === 'web' ? (
-                      <select
-                        value={selectedType}
-                        onChange={(e) => setSelectedType(e.target.value)}
-                        style={styles.mobileHiddenSelect}
-                      >
-                        <option value="All">All Types</option>
-                        {uniqueTypes.map((t) => (
-                          <option key={t} value={t}>{t}</option>
-                        ))}
-                      </select>
-                    ) : (
-                      <TouchableOpacity
-                        style={StyleSheet.absoluteFill}
-                        onPress={() => setMobilePicker({ title: 'Type', options: uniqueTypes, current: selectedType, onSelect: setSelectedType })}
+                      <Ionicons
+                        name="chevron-down"
+                        size={13}
+                        color={selectedType !== 'All' ? '#0284c7' : '#64748b'}
                       />
-                    )}
-                  </View>
+                    </View>
+                  </TouchableOpacity>
                 </View>
 
                 {/* Row 2: Mode & Material */}
                 <View style={styles.mobileFilterRow}>
                   {/* MODE Dropdown */}
-                  <View style={styles.mobileFilterCard}>
-                    <Text style={styles.mobileFilterCardLabel}>MODE</Text>
+                  <TouchableOpacity
+                    style={[
+                      styles.mobileFilterCard,
+                      selectedMode !== 'All' && styles.mobileFilterCardActive,
+                    ]}
+                    activeOpacity={0.7}
+                    onPress={() =>
+                      setMobilePicker({
+                        title: 'Mode',
+                        options: uniqueModes,
+                        current: selectedMode,
+                        onSelect: setSelectedMode,
+                      })
+                    }
+                  >
+                    <Text style={[styles.mobileFilterCardLabel, selectedMode !== 'All' && styles.mobileFilterCardLabelActive]}>
+                      MODE
+                    </Text>
                     <View style={styles.mobileFilterCardValRow}>
-                      <Text style={styles.mobileFilterCardVal} numberOfLines={1}>
+                      <Text
+                        style={[
+                          styles.mobileFilterCardVal,
+                          selectedMode !== 'All' && styles.mobileFilterCardValActive,
+                        ]}
+                        numberOfLines={1}
+                      >
                         {selectedMode === 'All' ? 'All Modes' : selectedMode}
                       </Text>
-                      <Ionicons name="chevron-down" size={13} color="#64748b" />
-                    </View>
-                    {Platform.OS === 'web' ? (
-                      <select
-                        value={selectedMode}
-                        onChange={(e) => setSelectedMode(e.target.value)}
-                        style={styles.mobileHiddenSelect}
-                      >
-                        <option value="All">All Modes</option>
-                        {uniqueModes.map((m) => (
-                          <option key={m} value={m}>{m}</option>
-                        ))}
-                      </select>
-                    ) : (
-                      <TouchableOpacity
-                        style={StyleSheet.absoluteFill}
-                        onPress={() => setMobilePicker({ title: 'Mode', options: uniqueModes, current: selectedMode, onSelect: setSelectedMode })}
+                      <Ionicons
+                        name="chevron-down"
+                        size={13}
+                        color={selectedMode !== 'All' ? '#0284c7' : '#64748b'}
                       />
-                    )}
-                  </View>
+                    </View>
+                  </TouchableOpacity>
 
                   {/* MATERIAL Dropdown */}
-                  <View style={styles.mobileFilterCard}>
-                    <Text style={styles.mobileFilterCardLabel}>MATERIAL</Text>
+                  <TouchableOpacity
+                    style={[
+                      styles.mobileFilterCard,
+                      selectedMaterial !== 'All' && styles.mobileFilterCardActive,
+                    ]}
+                    activeOpacity={0.7}
+                    onPress={() =>
+                      setMobilePicker({
+                        title: 'Material',
+                        options: uniqueMaterials,
+                        current: selectedMaterial,
+                        onSelect: setSelectedMaterial,
+                      })
+                    }
+                  >
+                    <Text style={[styles.mobileFilterCardLabel, selectedMaterial !== 'All' && styles.mobileFilterCardLabelActive]}>
+                      MATERIAL
+                    </Text>
                     <View style={styles.mobileFilterCardValRow}>
-                      <Text style={styles.mobileFilterCardVal} numberOfLines={1}>
+                      <Text
+                        style={[
+                          styles.mobileFilterCardVal,
+                          selectedMaterial !== 'All' && styles.mobileFilterCardValActive,
+                        ]}
+                        numberOfLines={1}
+                      >
                         {selectedMaterial === 'All' ? 'All Materials' : selectedMaterial}
                       </Text>
-                      <Ionicons name="chevron-down" size={13} color="#64748b" />
-                    </View>
-                    {Platform.OS === 'web' ? (
-                      <select
-                        value={selectedMaterial}
-                        onChange={(e) => setSelectedMaterial(e.target.value)}
-                        style={styles.mobileHiddenSelect}
-                      >
-                        <option value="All">All Materials</option>
-                        {uniqueMaterials.map((mat) => (
-                          <option key={mat} value={mat}>{mat}</option>
-                        ))}
-                      </select>
-                    ) : (
-                      <TouchableOpacity
-                        style={StyleSheet.absoluteFill}
-                        onPress={() => setMobilePicker({ title: 'Material', options: uniqueMaterials, current: selectedMaterial, onSelect: setSelectedMaterial })}
+                      <Ionicons
+                        name="chevron-down"
+                        size={13}
+                        color={selectedMaterial !== 'All' ? '#0284c7' : '#64748b'}
                       />
-                    )}
-                  </View>
+                    </View>
+                  </TouchableOpacity>
                 </View>
               </View>
             </View>
@@ -1205,20 +1241,40 @@ export const AllEntriesView = React.memo(({ entries, loading, onOpenAddModal, on
           animationType="fade"
           onRequestClose={() => setMobilePicker(null)}
         >
-          <View style={styles.modalOverlay}>
-            <View style={styles.mobilePickerBox}>
+          <TouchableOpacity
+            style={styles.modalOverlay}
+            activeOpacity={1}
+            onPress={() => setMobilePicker(null)}
+          >
+            <TouchableOpacity
+              style={styles.mobilePickerBox}
+              activeOpacity={1}
+              onPress={(e) => {
+                if (Platform.OS === 'web' && e?.stopPropagation) {
+                  e.stopPropagation();
+                }
+              }}
+            >
               <View style={styles.mobilePickerHeader}>
-                <Text style={styles.mobilePickerTitle}>Filter by {mobilePicker.title}</Text>
-                <TouchableOpacity onPress={() => setMobilePicker(null)}>
-                  <Ionicons name="close" size={22} color="#64748b" />
+                <View>
+                  <Text style={styles.mobilePickerTitle}>Select {mobilePicker.title}</Text>
+                  <Text style={styles.mobilePickerSubtitle}>Choose an option to filter entries</Text>
+                </View>
+                <TouchableOpacity
+                  style={styles.mobilePickerCloseBtn}
+                  onPress={() => setMobilePicker(null)}
+                  hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                >
+                  <Ionicons name="close" size={18} color="#64748b" />
                 </TouchableOpacity>
               </View>
-              <ScrollView style={styles.mobilePickerList}>
+              <ScrollView style={styles.mobilePickerList} showsVerticalScrollIndicator={true}>
                 <TouchableOpacity
                   style={[
                     styles.mobilePickerOption,
                     mobilePicker.current === 'All' && styles.mobilePickerOptionActive,
                   ]}
+                  activeOpacity={0.7}
                   onPress={() => {
                     mobilePicker.onSelect('All');
                     setMobilePicker(null);
@@ -1232,32 +1288,43 @@ export const AllEntriesView = React.memo(({ entries, loading, onOpenAddModal, on
                   >
                     All {mobilePicker.title}s
                   </Text>
+                  {mobilePicker.current === 'All' && (
+                    <Ionicons name="checkmark-circle" size={18} color="#0284c7" />
+                  )}
                 </TouchableOpacity>
-                {mobilePicker.options.map((opt) => (
-                  <TouchableOpacity
-                    key={opt}
-                    style={[
-                      styles.mobilePickerOption,
-                      mobilePicker.current === opt && styles.mobilePickerOptionActive,
-                    ]}
-                    onPress={() => {
-                      mobilePicker.onSelect(opt);
-                      setMobilePicker(null);
-                    }}
-                  >
-                    <Text
+                {mobilePicker.options.map((opt) => {
+                  const isSelected = mobilePicker.current === opt;
+                  return (
+                    <TouchableOpacity
+                      key={opt}
                       style={[
-                        styles.mobilePickerOptionText,
-                        mobilePicker.current === opt && styles.mobilePickerOptionTextActive,
+                        styles.mobilePickerOption,
+                        isSelected && styles.mobilePickerOptionActive,
                       ]}
+                      activeOpacity={0.7}
+                      onPress={() => {
+                        mobilePicker.onSelect(opt);
+                        setMobilePicker(null);
+                      }}
                     >
-                      {opt}
-                    </Text>
-                  </TouchableOpacity>
-                ))}
+                      <Text
+                        style={[
+                          styles.mobilePickerOptionText,
+                          isSelected && styles.mobilePickerOptionTextActive,
+                        ]}
+                        numberOfLines={1}
+                      >
+                        {opt}
+                      </Text>
+                      {isSelected && (
+                        <Ionicons name="checkmark-circle" size={18} color="#0284c7" />
+                      )}
+                    </TouchableOpacity>
+                  );
+                })}
               </ScrollView>
-            </View>
-          </View>
+            </TouchableOpacity>
+          </TouchableOpacity>
         </Modal>
       )}
     </View>
@@ -1793,53 +1860,72 @@ const styles = StyleSheet.create({
   /* Modal Overlay */
   modalOverlay: {
     flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.45)',
+    backgroundColor: 'rgba(15, 23, 42, 0.55)',
     alignItems: 'center',
     justifyContent: 'center',
     padding: 20,
   },
   mobilePickerBox: {
     backgroundColor: '#ffffff',
-    borderRadius: 12,
+    borderRadius: 16,
     width: '100%',
     maxWidth: 340,
-    maxHeight: 420,
+    maxHeight: 440,
     padding: 16,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.15,
-    shadowRadius: 10,
-    elevation: 8,
+    shadowColor: '#0f172a',
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.2,
+    shadowRadius: 20,
+    elevation: 12,
   },
   mobilePickerHeader: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingBottom: 10,
+    paddingBottom: 12,
     borderBottomWidth: 1,
     borderBottomColor: '#f1f5f9',
   },
   mobilePickerTitle: {
-    fontSize: 15,
+    fontSize: 16,
     fontWeight: '700',
     color: '#0f172a',
+  },
+  mobilePickerSubtitle: {
+    fontSize: 11,
+    color: '#64748b',
+    marginTop: 2,
+  },
+  mobilePickerCloseBtn: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: '#f1f5f9',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   mobilePickerList: {
     marginTop: 8,
   },
   mobilePickerOption: {
-    paddingVertical: 11,
-    paddingHorizontal: 10,
-    borderBottomWidth: 1,
-    borderBottomColor: '#f8fafc',
-    borderRadius: 6,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: 12,
+    paddingHorizontal: 12,
+    borderRadius: 8,
+    marginBottom: 4,
+    backgroundColor: '#ffffff',
   },
   mobilePickerOptionActive: {
     backgroundColor: '#f0f9ff',
+    borderWidth: 1,
+    borderColor: '#bae6fd',
   },
   mobilePickerOptionText: {
-    fontSize: 13,
+    fontSize: 14,
     color: '#334155',
+    fontWeight: '500',
   },
   mobilePickerOptionTextActive: {
     color: '#0284c7',
@@ -2105,12 +2191,19 @@ const styles = StyleSheet.create({
     paddingVertical: 6,
     position: 'relative',
   },
+  mobileFilterCardActive: {
+    borderColor: '#0284c7',
+    backgroundColor: '#f0f9ff',
+  },
   mobileFilterCardLabel: {
     fontSize: 9,
     fontWeight: '700',
     color: '#64748b',
     letterSpacing: 0.3,
     marginBottom: 2,
+  },
+  mobileFilterCardLabelActive: {
+    color: '#0284c7',
   },
   mobileFilterCardValRow: {
     flexDirection: 'row',
@@ -2124,14 +2217,9 @@ const styles = StyleSheet.create({
     color: '#0f172a',
     flex: 1,
   },
-  mobileHiddenSelect: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    width: '100%',
-    height: '100%',
-    opacity: 0,
-    cursor: 'pointer',
+  mobileFilterCardValActive: {
+    color: '#0284c7',
+    fontWeight: '700',
   },
   mobileActionsCol: {
     width: 100,
