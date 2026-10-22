@@ -189,30 +189,10 @@ const MainApp = () => {
         </View>
       </View>
 
-      {/* Mobile Bottom Navigation Bar with exact Symmetrical Flex Insets & Instant 0ms Tap Response */}
+      {/* Mobile Bottom Navigation Bar: Dashboard, All Entries, Masters, About */}
       {isMobile && (
         <View style={[styles.bottomBar, { paddingBottom: Math.max(bottomPadding, 6) }]}>
-          {/* 1. About */}
-          <TouchableOpacity
-            style={styles.bottomTab}
-            onPress={() => setActiveTab('about')}
-            activeOpacity={0.7}
-            delayPressIn={0}
-          >
-            <Ionicons
-              name={activeTab === 'about' ? 'information-circle' : 'information-circle-outline'}
-              size={20}
-              color={activeTab === 'about' ? '#0284c7' : '#64748b'}
-            />
-            <Text
-              style={[styles.bottomTabText, activeTab === 'about' && styles.bottomTabTextActive]}
-              numberOfLines={1}
-            >
-              About
-            </Text>
-          </TouchableOpacity>
-
-          {/* 2. Dashboard */}
+          {/* 1. Dashboard */}
           <TouchableOpacity
             style={styles.bottomTab}
             onPress={() => setActiveTab('dashboard')}
@@ -220,8 +200,8 @@ const MainApp = () => {
             delayPressIn={0}
           >
             <Ionicons
-              name={activeTab === 'dashboard' ? 'grid' : 'grid-outline'}
-              size={20}
+              name={activeTab === 'dashboard' ? 'home' : 'home-outline'}
+              size={22}
               color={activeTab === 'dashboard' ? '#0284c7' : '#64748b'}
             />
             <Text
@@ -230,21 +210,10 @@ const MainApp = () => {
             >
               Dashboard
             </Text>
+            {activeTab === 'dashboard' && <View style={styles.activeTabIndicator} />}
           </TouchableOpacity>
 
-          {/* Center Add Button inside its own flex slot */}
-          <View style={styles.centerAddSlot}>
-            <TouchableOpacity
-              style={styles.centerAddBtn}
-              onPress={handleOpenAddModal}
-              activeOpacity={0.85}
-              delayPressIn={0}
-            >
-              <Ionicons name="add" size={26} color="#ffffff" />
-            </TouchableOpacity>
-          </View>
-
-          {/* 3. Entries */}
+          {/* 2. All Entries */}
           <TouchableOpacity
             style={styles.bottomTab}
             onPress={() => setActiveTab('entries')}
@@ -252,19 +221,20 @@ const MainApp = () => {
             delayPressIn={0}
           >
             <Ionicons
-              name={activeTab === 'entries' ? 'flash' : 'flash-outline'}
-              size={20}
+              name={activeTab === 'entries' ? 'list' : 'list-outline'}
+              size={22}
               color={activeTab === 'entries' ? '#0284c7' : '#64748b'}
             />
             <Text
               style={[styles.bottomTabText, activeTab === 'entries' && styles.bottomTabTextActive]}
               numberOfLines={1}
             >
-              Entries
+              All Entries
             </Text>
+            {activeTab === 'entries' && <View style={styles.activeTabIndicator} />}
           </TouchableOpacity>
 
-          {/* 4. Masters */}
+          {/* 3. Masters */}
           <TouchableOpacity
             style={styles.bottomTab}
             onPress={() => setActiveTab('masters')}
@@ -273,7 +243,7 @@ const MainApp = () => {
           >
             <Ionicons
               name={activeTab === 'masters' ? 'layers' : 'layers-outline'}
-              size={20}
+              size={22}
               color={activeTab === 'masters' ? '#0284c7' : '#64748b'}
             />
             <Text
@@ -282,6 +252,28 @@ const MainApp = () => {
             >
               Masters
             </Text>
+            {activeTab === 'masters' && <View style={styles.activeTabIndicator} />}
+          </TouchableOpacity>
+
+          {/* 4. About */}
+          <TouchableOpacity
+            style={styles.bottomTab}
+            onPress={() => setActiveTab('about')}
+            activeOpacity={0.7}
+            delayPressIn={0}
+          >
+            <Ionicons
+              name={activeTab === 'about' ? 'information-circle' : 'information-circle-outline'}
+              size={22}
+              color={activeTab === 'about' ? '#0284c7' : '#64748b'}
+            />
+            <Text
+              style={[styles.bottomTabText, activeTab === 'about' && styles.bottomTabTextActive]}
+              numberOfLines={1}
+            >
+              About
+            </Text>
+            {activeTab === 'about' && <View style={styles.activeTabIndicator} />}
           </TouchableOpacity>
         </View>
       )}
@@ -350,9 +342,9 @@ const styles = StyleSheet.create({
     borderTopColor: '#e2e8f0',
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingTop: 6,
-    paddingHorizontal: 2,
+    justifyContent: 'space-around',
+    paddingTop: 8,
+    paddingHorizontal: 4,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: -2 },
     shadowOpacity: 0.06,
@@ -363,12 +355,13 @@ const styles = StyleSheet.create({
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: 4,
+    paddingVertical: 2,
+    position: 'relative',
   },
   bottomTabText: {
     fontSize: 11,
     color: '#64748b',
-    marginTop: 2,
+    marginTop: 3,
     fontWeight: '500',
     textAlign: 'center',
   },
@@ -376,22 +369,11 @@ const styles = StyleSheet.create({
     color: '#0284c7',
     fontWeight: '700',
   },
-  centerAddSlot: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  centerAddBtn: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
+  activeTabIndicator: {
+    width: 36,
+    height: 3,
     backgroundColor: '#0284c7',
-    alignItems: 'center',
-    justifyContent: 'center',
-    shadowColor: '#0284c7',
-    shadowOffset: { width: 0, height: 3 },
-    shadowOpacity: 0.35,
-    shadowRadius: 5,
-    elevation: 6,
+    borderRadius: 2,
+    marginTop: 4,
   },
 });

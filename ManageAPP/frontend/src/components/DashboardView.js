@@ -215,8 +215,11 @@ export const DashboardView = React.memo(({ entries = [], onOpenAddModal, onNavig
   const { user } = useAuth();
   const displayName = user?.name || (user?.email ? user.email.split('@')[0] : 'User');
   const { width } = useWindowDimensions();
-  const isMobile = width < 900 || (Platform.OS === 'web' && typeof window !== 'undefined' && window.innerWidth < 900);
-  const isNarrowPhone = width < 520 || (Platform.OS === 'web' && typeof window !== 'undefined' && window.innerWidth < 520);
+  const screenW = Platform.OS === 'web' && typeof window !== 'undefined' ? window.innerWidth : width;
+  const isMobile = screenW < 768;
+  const isTablet = screenW >= 768 && screenW < 1024;
+  const isDesktop = screenW >= 1024;
+  const isUltraSmall = screenW < 340; // Only ultra small phones (<340px) fall back to 1-column KPI grid
 
   // Dynamic hover states for interactive tooltips
   const [hoveredTrendIdx, setHoveredTrendIdx] = useState(null);
@@ -683,8 +686,8 @@ export const DashboardView = React.memo(({ entries = [], onOpenAddModal, onNavig
       id: 'sales',
       title: isFiltered ? 'Selected Range Total Sales (₹)' : 'Overall Total Sales (₹)',
       value: `₹ ${formatINR(isFiltered ? metrics.totalSale : metrics.overallTotalSale)}`,
-      trend: isFiltered ? `Sales for ${dateRangeStr}` : 'All-Time Overall Sales',
-      icon: 'wallet',
+      trend: isFiltered ? `Sales for ${dateRangeStr}` : 'At Time Overall Sales',
+      icon: 'layers',
       iconBg: '#e0f2fe',
       iconColor: '#0284c7',
       cardBg: '#ffffff',
@@ -695,7 +698,7 @@ export const DashboardView = React.memo(({ entries = [], onOpenAddModal, onNavig
       title: isFiltered ? 'Selected Range Trips' : 'Total Trips / Challans',
       value: String(isFiltered ? metrics.trips : metrics.overallTrips),
       trend: isFiltered ? `Trips for ${dateRangeStr}` : 'Total Trips Recorded',
-      icon: 'bus',
+      icon: 'receipt',
       iconBg: '#dcfce7',
       iconColor: '#10b981',
       cardBg: '#ffffff',
@@ -705,8 +708,8 @@ export const DashboardView = React.memo(({ entries = [], onOpenAddModal, onNavig
       id: 'taxable',
       title: isFiltered ? 'Selected Taxable Amount (₹)' : 'Overall Taxable Amount (₹)',
       value: `₹ ${formatINR(isFiltered ? metrics.taxableAmount : metrics.overallTaxable)}`,
-      trend: isFiltered ? `Taxable Base for ${dateRangeStr}` : 'All-Time Taxable Base',
-      icon: 'newspaper',
+      trend: isFiltered ? `Taxable Base for ${dateRangeStr}` : 'At Time Taxable Amount',
+      icon: 'calculator',
       iconBg: '#ede9fe',
       iconColor: '#7c3aed',
       cardBg: '#ffffff',
@@ -716,7 +719,7 @@ export const DashboardView = React.memo(({ entries = [], onOpenAddModal, onNavig
       id: 'gst',
       title: isFiltered ? 'Selected GST Collected (₹)' : 'Overall GST Collected (₹)',
       value: `₹ ${formatINR(isFiltered ? metrics.gstCollected : metrics.overallGst)}`,
-      trend: isFiltered ? `GST Liability for ${dateRangeStr}` : 'All-Time GST Liability',
+      trend: isFiltered ? `GST Liability for ${dateRangeStr}` : 'At Time GST Liability',
       isPercent: true,
       iconBg: '#ffedd5',
       iconColor: '#ea580c',
@@ -756,7 +759,66 @@ export const DashboardView = React.memo(({ entries = [], onOpenAddModal, onNavig
           </Text>
 
           <View style={[styles.filterControlsGroup, isMobile && styles.filterControlsGroupMobile]}>
-            {/* Quick Segmented Date Tabs: Daily | Weekly | Monthly | All */}
+            {/* 1. Date Selector Card (Full width on mobile, rendered above tabs) */}
+            <View style={[styles.datePickerGroup, isMobile && styles.datePickerGroupMobile]}>
+              <TouchableOpacity
+                activeOpacity={0.75}
+                onPress={() => {
+                  const todayISO = toISODateString(new Date());
+                  setTempStartDate(customStartDate || todayISO);
+                  setTempEndDate(customEndDate || todayISO);
+                  const refDate = parseEntryDate(customStartDate) || new Date();
+                  setCalendarMonth(new Date(refDate.getFullYear(), refDate.getMonth(), 1));
+                  setActiveDateTab('start');
+                  setShowDateModal(true);
+                }}
+                style={[
+                  styles.dateSelectorPill,
+                  isMobile && styles.dateSelectorPillMobile,
+                  dateFilter === 'custom' && styles.dateSelectorPillActive,
+                ]}
+              >
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                  <Ionicons
+                    name="calendar"
+                    size={18}
+                    color="#0284c7"
+                  />
+                  <Text
+                    style={[
+                      styles.dateSelectorText,
+                      isMobile && styles.dateSelectorTextMobile,
+                      dateFilter === 'custom' && styles.dateSelectorTextActive,
+                    ]}
+                  >
+                    {dateRangeStr}
+                  </Text>
+                </View>
+                {dateFilter === 'custom' ? (
+                  <TouchableOpacity
+                    activeOpacity={0.7}
+                    onPress={(e) => {
+                      if (e && e.stopPropagation) e.stopPropagation();
+                      setCustomStartDate(null);
+                      setCustomEndDate(null);
+                      setDateFilter('all');
+                    }}
+                    style={styles.dateSelectorClearBtn}
+                    hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                  >
+                    <Ionicons name="close-circle" size={16} color="#0284c7" />
+                  </TouchableOpacity>
+                ) : (
+                  <Ionicons
+                    name="chevron-down"
+                    size={16}
+                    color="#64748b"
+                  />
+                )}
+              </TouchableOpacity>
+            </View>
+
+            {/* 2. Quick Segmented Date Tabs: All | Daily | Weekly | Monthly */}
             <View style={[styles.dateFilterTabs, isMobile && styles.dateFilterTabsMobile]}>
               {[
                 { id: 'all', label: 'All' },
@@ -794,69 +856,11 @@ export const DashboardView = React.memo(({ entries = [], onOpenAddModal, onNavig
                 );
               })}
             </View>
-
-            {/* App-Based Date Filter Pill */}
-            <View style={[styles.datePickerGroup, isMobile && styles.datePickerGroupMobile]}>
-              <TouchableOpacity
-                activeOpacity={0.75}
-                onPress={() => {
-                  const todayISO = toISODateString(new Date());
-                  setTempStartDate(customStartDate || todayISO);
-                  setTempEndDate(customEndDate || todayISO);
-                  const refDate = parseEntryDate(customStartDate) || new Date();
-                  setCalendarMonth(new Date(refDate.getFullYear(), refDate.getMonth(), 1));
-                  setActiveDateTab('start');
-                  setShowDateModal(true);
-                }}
-                style={[
-                  styles.dateSelectorPill,
-                  isMobile && styles.dateSelectorPillMobile,
-                  dateFilter === 'custom' && styles.dateSelectorPillActive,
-                ]}
-              >
-                <Ionicons
-                  name="calendar"
-                  size={isMobile ? 14 : 16}
-                  color={dateFilter === 'custom' ? '#0284c7' : '#0284c7'}
-                />
-                <Text
-                  style={[
-                    styles.dateSelectorText,
-                    isMobile && styles.dateSelectorTextMobile,
-                    dateFilter === 'custom' && styles.dateSelectorTextActive,
-                  ]}
-                >
-                  {dateRangeStr}
-                </Text>
-                {dateFilter === 'custom' ? (
-                  <TouchableOpacity
-                    activeOpacity={0.7}
-                    onPress={(e) => {
-                      if (e && e.stopPropagation) e.stopPropagation();
-                      setCustomStartDate(null);
-                      setCustomEndDate(null);
-                      setDateFilter('all');
-                    }}
-                    style={styles.dateSelectorClearBtn}
-                    hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-                  >
-                    <Ionicons name="close-circle" size={16} color="#0284c7" />
-                  </TouchableOpacity>
-                ) : (
-                  <Ionicons
-                    name="chevron-down"
-                    size={13}
-                    color="#64748b"
-                    style={{ marginLeft: 2 }}
-                  />
-                )}
-              </TouchableOpacity>
-            </View>
           </View>
         </View>
       </View>
 
-      {/* 2. THE 4 KPI CARDS (1 per row on narrow phone, 2 per row on tablet, 4 in 1 row on Desktop) */}
+      {/* 2. THE 4 KPI CARDS (2-column grid on mobile, 1-col on ultra-small <340px, 4-col on Desktop) */}
       <View style={[styles.kpiGrid, isMobile && styles.kpiGridMobile]}>
         {kpiCards.map((card) => (
           <View
@@ -865,9 +869,9 @@ export const DashboardView = React.memo(({ entries = [], onOpenAddModal, onNavig
             style={[
               styles.kpiCard,
               isMobile && styles.kpiCardMobile,
-              isNarrowPhone && styles.kpiCardNarrowPhone,
+              isUltraSmall && styles.kpiCardUltraSmall,
+              isDesktop && styles.kpiCardDesktop,
               { backgroundColor: card.cardBg, borderColor: card.borderColor },
-              !isMobile && styles.kpiCardDesktop,
             ]}
           >
             {/* Left Squircle Icon */}
@@ -909,7 +913,9 @@ export const DashboardView = React.memo(({ entries = [], onOpenAddModal, onNavig
                       {timelineData[hoveredTrendIdx].date}: ₹{formatINR(timelineData[hoveredTrendIdx].total)}
                     </Text>
                   </View>
-                ) : null}
+                ) : (
+                  <Ionicons name="chevron-forward" size={16} color="#94a3b8" />
+                )}
               </View>
             </View>
 
@@ -1149,28 +1155,23 @@ export const DashboardView = React.memo(({ entries = [], onOpenAddModal, onNavig
             <View style={styles.stackedBarLegendRow}>
               {STACKED_MODES.map((m) => (
                 <View key={m.key} style={styles.stackedBarLegendItem}>
-                  <View style={[styles.stackedLegendBox, { backgroundColor: m.color }]} />
+                  <View style={[styles.stackedLegendCircle, { backgroundColor: m.color }]} />
                   <Text style={[styles.stackedLegendText, isMobile && { fontSize: 10.5 }]}>{m.label}</Text>
                 </View>
               ))}
+            </View>
+            {/* Scroll Indicator Track matching screenshot */}
+            <View style={styles.chartScrollTrack}>
+              <View style={styles.chartScrollThumb} />
             </View>
           </View>
 
           {/* Chart 2: Sales by Mode (Monthly Overview) - Animated Pie Chart matching Reference Image */}
           <View style={[styles.chartCard, isMobile && styles.chartCardMobile, !isMobile && styles.chartCardHalf]}>
             <View style={styles.chartHeaderRow}>
-              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
-                <View style={styles.chartTitleBadge}>
-                  <Svg width="16" height="16" viewBox="0 0 24 24" fill="none">
-                    <Rect x="3" y="12" width="4.5" height="9" rx="1.5" fill="#2563eb" />
-                    <Rect x="9.75" y="4" width="4.5" height="17" rx="1.5" fill="#2563eb" />
-                    <Rect x="16.5" y="8" width="4.5" height="13" rx="1.5" fill="#2563eb" />
-                  </Svg>
-                </View>
-                <Text style={[styles.chartCardTitle, isMobile && styles.chartCardTitleMobile, { flexShrink: 1 }]} numberOfLines={1}>
-                  Sales by Mode (Monthly Overview)
-                </Text>
-              </View>
+              <Text style={[styles.chartCardTitle, isMobile && styles.chartCardTitleMobile, { flexShrink: 1 }]} numberOfLines={1}>
+                Sales by Mode (Monthly Overview)
+              </Text>
               <View style={styles.headerBadgeContainer}>
                 {hoveredModeKey ? (() => {
                   const item = modeShares.find((s) => s.key === hoveredModeKey);
@@ -1181,14 +1182,15 @@ export const DashboardView = React.memo(({ entries = [], onOpenAddModal, onNavig
                       </Text>
                     </View>
                   ) : null;
-                })() : null}
+                })() : (
+                  <Ionicons name="chevron-forward" size={16} color="#94a3b8" />
+                )}
               </View>
             </View>
 
             {(() => {
               const sortedModes = [...modeShares].sort((a, b) => b.amount - a.amount);
               const totalModeAmount = sortedModes.reduce((sum, m) => sum + (m.amount || 0), 0);
-              const isNarrowChart = isMobile || width < 1000;
               const hoveredModeItem = hoveredModeKey ? sortedModes.find((m) => m.key === hoveredModeKey) : null;
 
               const cx = 135;
@@ -1255,18 +1257,18 @@ export const DashboardView = React.memo(({ entries = [], onOpenAddModal, onNavig
               });
 
               return (
-                <View style={[styles.pieChartContainerRow, isNarrowChart && styles.pieChartContainerRowMobile]}>
-                  {/* Left: Clean Interactive Donut Graphic with Zero Text Collisions */}
-                  <View style={[styles.pieSvgWrap, !isNarrowChart && styles.pieSvgWrapDesktop, isNarrowChart && styles.pieSvgWrapMobile]}>
-                    <View style={{ width: isMobile ? 240 : 270, height: isMobile ? 240 : 270, position: 'relative', alignItems: 'center', justifyContent: 'center' }}>
+                <View style={[styles.pieChartContainerRow, isUltraSmall && styles.pieChartContainerRowUltraSmall]}>
+                  {/* Left: Clean Interactive Donut Graphic */}
+                  <View style={styles.pieSvgWrap}>
+                    <View style={{ width: isMobile ? 148 : 210, height: isMobile ? 148 : 210, position: 'relative', alignItems: 'center', justifyContent: 'center' }}>
                       <Svg
-                        width={isMobile ? "240" : "270"}
-                        height={isMobile ? "240" : "270"}
+                        width={isMobile ? "148" : "210"}
+                        height={isMobile ? "148" : "210"}
                         viewBox="0 0 270 270"
                         preserveAspectRatio="xMidYMid meet"
                         style={{
-                          width: isMobile ? 240 : 270,
-                          height: isMobile ? 240 : 270,
+                          width: isMobile ? 148 : 210,
+                          height: isMobile ? 148 : 210,
                           alignSelf: 'center',
                           display: isWeb ? 'block' : undefined,
                           overflow: 'visible',
@@ -1299,9 +1301,9 @@ export const DashboardView = React.memo(({ entries = [], onOpenAddModal, onNavig
                             );
                           })}
 
-                          {/* 2. White Percentage Text inside prominent slices (>= 6%) */}
+                          {/* 2. White Percentage Text inside prominent slices (>= 12%) */}
                           {slices.map((slice) => {
-                            if (!slice.hasSales || slice.percent < 6) return null;
+                            if (!slice.hasSales || slice.percent < 12) return null;
                             return (
                               <SvgText
                                 key={`pct-${slice.key}`}
@@ -1331,40 +1333,44 @@ export const DashboardView = React.memo(({ entries = [], onOpenAddModal, onNavig
                         </G>
                       </Svg>
 
-                      {/* 4. Center Content Overlay: Clear, Bug-Free Value Display */}
+                      {/* 4. Center Content Overlay matching screenshot */}
                       <View style={styles.donutCenterOverlay} pointerEvents="none">
                         {hoveredModeItem ? (
                           <>
-                            <Text style={styles.donutCenterLabel} numberOfLines={1}>
+                            <Text style={[styles.donutCenterLabel, isMobile && { fontSize: 10 }]} numberOfLines={1}>
                               {hoveredModeItem.label}
                             </Text>
-                            <Text style={[styles.donutCenterValue, { color: hoveredModeItem.color, fontSize: 12.5 }]} numberOfLines={1}>
+                            <Text style={[styles.donutCenterValue, { color: hoveredModeItem.color }, isMobile && { fontSize: 12 }]} numberOfLines={1}>
                               ₹{formatINR(hoveredModeItem.amount)}
                             </Text>
-                            <Text style={styles.donutCenterPercent}>
+                            <Text style={[styles.donutCenterPercent, isMobile && { fontSize: 9.5 }]}>
                               {hoveredModeItem.percent}% of sales
                             </Text>
                           </>
                         ) : (
                           <>
-                            <Text style={styles.donutCenterLabel}>Total Sales</Text>
-                            <Text style={styles.donutCenterValue} numberOfLines={1}>
-                              ₹{formatCompactINR(totalModeAmount)}
+                            <Text style={[styles.donutCenterLabel, isMobile && { fontSize: 9.5 }]}>Total Sales</Text>
+                            <Text style={[styles.donutCenterValue, isMobile && { fontSize: 13.5 }]} numberOfLines={1}>
+                              {formatCompactINR(totalModeAmount)}
                             </Text>
-                            <Text style={styles.donutCenterPercent}>
-                              All 7 Modes
+                            <Text style={[styles.donutCenterPercent, isMobile && { fontSize: 8.5 }]}>
+                              Past 1 Months
                             </Text>
+                            {totalModeAmount > 0 && (
+                              <Text style={[styles.donutCenterBottomPercent, isMobile && { fontSize: 10.5 }]}>
+                                100%
+                              </Text>
+                            )}
                           </>
                         )}
                       </View>
                     </View>
                   </View>
 
-                  {/* Right: Sleek Enclosed Legend Card */}
-                  <View style={[styles.pieLegendCard, isNarrowChart && styles.pieLegendCardMobile]}>
+                  {/* Right: Sleek Mode List matching Reference Image */}
+                  <View style={[styles.pieLegendCard, isMobile && styles.pieLegendCardMobile]}>
                     {sortedModes.map((item) => {
                       const isHovered = hoveredModeKey === item.key;
-                      const isAnyHovered = hoveredModeKey !== null;
                       return (
                         <View
                           key={item.key}
@@ -1372,7 +1378,6 @@ export const DashboardView = React.memo(({ entries = [], onOpenAddModal, onNavig
                           style={[
                             styles.pieLegendRow,
                             isHovered && styles.pieLegendRowHovered,
-                            isAnyHovered && !isHovered && { opacity: 0.65 },
                           ]}
                           onMouseEnter={isWeb ? () => setHoveredModeKey(item.key) : undefined}
                           onMouseLeave={isWeb ? () => setHoveredModeKey(null) : undefined}
@@ -1381,10 +1386,10 @@ export const DashboardView = React.memo(({ entries = [], onOpenAddModal, onNavig
                         >
                           <View style={[styles.pieLegendBullet, { backgroundColor: item.color }]} />
                           <View style={styles.pieLegendCol}>
-                            <Text style={styles.pieLegendLabel}>{item.label}</Text>
-                            <Text style={styles.pieLegendAmount}>₹ {formatINR(item.amount)}</Text>
+                            <Text style={[styles.pieLegendLabel, isMobile && { fontSize: 10 }]} numberOfLines={1}>{item.label}</Text>
+                            <Text style={[styles.pieLegendAmount, isMobile && { fontSize: 10.5 }]}>₹{formatINR(item.amount)}</Text>
                           </View>
-                          <Text style={styles.pieLegendPercent}>{item.percent}%</Text>
+                          <Text style={[styles.pieLegendPercent, isMobile && { fontSize: 10.5 }]}>{item.percent}%</Text>
                         </View>
                       );
                     })}
@@ -1410,14 +1415,16 @@ export const DashboardView = React.memo(({ entries = [], onOpenAddModal, onNavig
                       {materialData[hoveredMaterialIdx].name}: ₹{formatINR(materialData[hoveredMaterialIdx].amount)} ({materialData[hoveredMaterialIdx].percent}%)
                     </Text>
                   </View>
-                ) : null}
+                ) : (
+                  <Ionicons name="chevron-forward" size={16} color="#94a3b8" />
+                )}
               </View>
             </View>
 
-            <View style={[styles.donutSectionRow, isMobile && { flexDirection: 'column', alignItems: 'center' }]}>
-              {/* Dynamic SVG Donut Graphic - Prominent & Bold */}
+            <View style={[styles.donutSectionRow, isUltraSmall && styles.donutSectionRowUltraSmall]}>
+              {/* Dynamic SVG Donut Graphic */}
               <View style={styles.donutSvgWrap}>
-                <Svg width={isMobile ? "190" : "215"} height={isMobile ? "190" : "215"} viewBox="0 0 220 220" style={{ overflow: 'visible', display: 'block', maxWidth: '100%' }}>
+                <Svg width={isMobile ? "135" : "190"} height={isMobile ? "135" : "190"} viewBox="0 0 220 220" style={{ overflow: 'visible', display: 'block', maxWidth: '100%' }}>
                   <G className="donut-rotate-group">
                     {/* Render dynamic arc slices with smooth increase/decrease on hover */}
                     {(() => {
@@ -1572,7 +1579,7 @@ export const DashboardView = React.memo(({ entries = [], onOpenAddModal, onNavig
                 ) : (
                   <View style={[styles.hoverBadgePill, { backgroundColor: '#f1f5f9' }]}>
                     <Text style={[styles.hoverBadgeText, { color: '#475569' }]} numberOfLines={1}>
-                      Ranked by Total Purchase
+                      Ranked by Total Purchases
                     </Text>
                   </View>
                 )}
@@ -2207,13 +2214,15 @@ const styles = StyleSheet.create({
     borderWidth: 1.5,
   },
   dateSelectorPillMobile: {
+    width: '100%',
     paddingHorizontal: 14,
-    paddingVertical: 6,
-    borderRadius: 20,
-    alignSelf: 'center',
-    justifyContent: 'center',
-    backgroundColor: '#f8fafc',
-    gap: 6,
+    paddingVertical: 10,
+    borderRadius: 12,
+    backgroundColor: '#ffffff',
+    justifyContent: 'space-between',
+    marginBottom: 4,
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
   },
   dateSelectorText: {
     fontSize: 13,
@@ -2225,7 +2234,7 @@ const styles = StyleSheet.create({
     fontWeight: '700',
   },
   dateSelectorTextMobile: {
-    fontSize: 12,
+    fontSize: 12.5,
   },
   dateSelectorClearBtn: {
     marginLeft: 4,
@@ -2272,7 +2281,7 @@ const styles = StyleSheet.create({
   },
   kpiGridMobile: {
     gap: 8,
-    marginBottom: 14,
+    marginBottom: 12,
   },
   kpiCard: {
     width: '48.5%',
@@ -2289,11 +2298,12 @@ const styles = StyleSheet.create({
     elevation: 1,
   },
   kpiCardMobile: {
+    width: '48.5%',
     padding: 10,
     borderRadius: 13,
     gap: 8,
   },
-  kpiCardNarrowPhone: {
+  kpiCardUltraSmall: {
     width: '100%',
   },
   kpiCardDesktop: {
@@ -2444,9 +2454,15 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'flex-start',
-    gap: 18,
+    gap: 14,
     paddingTop: 4,
     paddingHorizontal: 4,
+    width: '100%',
+  },
+  donutSectionRowUltraSmall: {
+    flexDirection: 'column',
+    alignItems: 'center',
+    gap: 10,
   },
   donutSvgWrap: {
     position: 'relative',
@@ -2486,6 +2502,14 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     lineHeight: 14,
     marginTop: 2,
+  },
+  donutCenterBottomPercent: {
+    fontSize: 11,
+    fontWeight: '800',
+    color: '#7c3aed',
+    textAlign: 'center',
+    lineHeight: 14,
+    marginTop: 1,
   },
   modeCenterOverlay: {
     position: 'absolute',
@@ -2574,47 +2598,44 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    gap: 16,
-    paddingTop: 8,
+    gap: 10,
+    paddingTop: 4,
     width: '100%',
   },
-  pieChartContainerRowMobile: {
+  pieChartContainerRowUltraSmall: {
     flexDirection: 'column',
     alignItems: 'center',
-    gap: 12,
+    gap: 10,
     width: '100%',
   },
   pieSvgWrap: {
-    width: '100%',
     alignItems: 'center',
     justifyContent: 'center',
+    flexShrink: 0,
   },
   pieSvgWrapDesktop: {
     flex: 1,
     minWidth: 0,
   },
   pieSvgWrapMobile: {
-    width: '100%',
-    alignSelf: 'stretch',
     alignItems: 'center',
     justifyContent: 'center',
-    minHeight: 280,
   },
   pieLegendCard: {
-    backgroundColor: '#f8fafc',
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: '#e2e8f0',
-    padding: 8,
-    gap: 2,
+    backgroundColor: '#ffffff',
+    borderRadius: 10,
+    padding: 2,
+    gap: 1,
     flex: 1,
-    minWidth: 210,
-    maxWidth: 260,
+    minWidth: 140,
   },
   pieLegendCardMobile: {
-    width: '100%',
-    marginTop: 8,
-    padding: 8,
+    flex: 1,
+    minWidth: 140,
+    marginTop: 0,
+    padding: 0,
+    backgroundColor: 'transparent',
+    borderWidth: 0,
     gap: 2,
   },
   pieLegendRow: {
@@ -2716,10 +2737,30 @@ const styles = StyleSheet.create({
     height: 11,
     borderRadius: 1,
   },
+  stackedLegendCircle: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    marginRight: 2,
+  },
   stackedLegendText: {
     fontSize: 11.5,
     fontWeight: '500',
     color: '#1e293b',
+  },
+  chartScrollTrack: {
+    width: '100%',
+    height: 4,
+    backgroundColor: '#e2e8f0',
+    borderRadius: 2,
+    marginTop: 10,
+    overflow: 'hidden',
+  },
+  chartScrollThumb: {
+    width: '32%',
+    height: '100%',
+    backgroundColor: '#94a3b8',
+    borderRadius: 2,
   },
 
   // App-Based Date Bottom Sheet Styles

@@ -791,3 +791,10 @@ html, body, #root {
   }
 }
 
+/* Prevent horizontal page scrolling */
+html, body, #root {
+  overflow-x: hidden !important;
+  max-width: 100vw !important;
+  width: 100% !important;
+}
+

@@ -88,9 +88,7 @@ export const Navbar = ({ search, setSearch, onRefresh, toggleSidebar }) => {
             <View style={styles.avatar}>
               <Text style={styles.avatarText}>{initial}</Text>
             </View>
-            {!isMobile && (
-              <Ionicons name="chevron-down" size={14} color="#ffffff" style={{ marginLeft: 4 }} />
-            )}
+            <Ionicons name="chevron-down" size={14} color="#ffffff" style={{ marginLeft: 4 }} />
           </TouchableOpacity>
         </View>
       </View>
