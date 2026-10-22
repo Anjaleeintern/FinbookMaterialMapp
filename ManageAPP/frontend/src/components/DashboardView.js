@@ -1195,8 +1195,8 @@ export const DashboardView = React.memo(({ entries = [], onOpenAddModal, onNavig
 
               const cx = 135;
               const cy = 135;
-              const baseR = 100;
-              const base_r = 54;
+              const baseR = 104;
+              const base_r = 68;
 
               // Compute Donut Slices starting at -90 degrees (12 o'clock)
               let currentDeg = -90;
@@ -1260,15 +1260,15 @@ export const DashboardView = React.memo(({ entries = [], onOpenAddModal, onNavig
                 <View style={[styles.pieChartContainerRow, isUltraSmall && styles.pieChartContainerRowUltraSmall]}>
                   {/* Left: Clean Interactive Donut Graphic */}
                   <View style={styles.pieSvgWrap}>
-                    <View style={{ width: isMobile ? 148 : 210, height: isMobile ? 148 : 210, position: 'relative', alignItems: 'center', justifyContent: 'center' }}>
+                    <View style={{ width: isMobile ? 150 : 210, height: isMobile ? 150 : 210, position: 'relative', alignItems: 'center', justifyContent: 'center' }}>
                       <Svg
-                        width={isMobile ? "148" : "210"}
-                        height={isMobile ? "148" : "210"}
+                        width={isMobile ? "150" : "210"}
+                        height={isMobile ? "150" : "210"}
                         viewBox="0 0 270 270"
                         preserveAspectRatio="xMidYMid meet"
                         style={{
-                          width: isMobile ? 148 : 210,
-                          height: isMobile ? 148 : 210,
+                          width: isMobile ? 150 : 210,
+                          height: isMobile ? 150 : 210,
                           alignSelf: 'center',
                           display: isWeb ? 'block' : undefined,
                           overflow: 'visible',
@@ -1324,7 +1324,7 @@ export const DashboardView = React.memo(({ entries = [], onOpenAddModal, onNavig
                           <Circle
                             cx={cx}
                             cy={cy}
-                            r={hoveredModeKey !== null ? 48 : 52}
+                            r={hoveredModeKey !== null ? 62 : 66}
                             fill="#ffffff"
                             stroke="#e2e8f0"
                             strokeWidth="1.5"
@@ -1333,35 +1333,32 @@ export const DashboardView = React.memo(({ entries = [], onOpenAddModal, onNavig
                         </G>
                       </Svg>
 
-                      {/* 4. Center Content Overlay matching screenshot */}
+                      {/* 4. Center Content Overlay matching reference image */}
                       <View style={styles.donutCenterOverlay} pointerEvents="none">
                         {hoveredModeItem ? (
-                          <>
-                            <Text style={[styles.donutCenterLabel, isMobile && { fontSize: 10 }]} numberOfLines={1}>
+                          <View style={styles.donutCenterInner}>
+                            <Text style={[styles.donutCenterLabel, isMobile && styles.donutCenterLabelMobile]} numberOfLines={1}>
                               {hoveredModeItem.label}
                             </Text>
-                            <Text style={[styles.donutCenterValue, { color: hoveredModeItem.color }, isMobile && { fontSize: 12 }]} numberOfLines={1}>
+                            <Text style={[styles.donutCenterValue, { color: hoveredModeItem.color }, isMobile && styles.donutCenterValueMobile]} numberOfLines={1}>
                               ₹{formatINR(hoveredModeItem.amount)}
                             </Text>
-                            <Text style={[styles.donutCenterPercent, isMobile && { fontSize: 9.5 }]}>
+                            <Text style={[styles.donutCenterPercent, isMobile && styles.donutCenterPercentMobile]}>
                               {hoveredModeItem.percent}% of sales
                             </Text>
-                          </>
+                          </View>
                         ) : (
-                          <>
-                            <Text style={[styles.donutCenterLabel, isMobile && { fontSize: 9.5 }]}>Total Sales</Text>
-                            <Text style={[styles.donutCenterValue, isMobile && { fontSize: 13.5 }]} numberOfLines={1}>
+                          <View style={styles.donutCenterInner}>
+                            <Text style={[styles.donutCenterLabel, isMobile && styles.donutCenterLabelMobile]}>
+                              Total Sales
+                            </Text>
+                            <Text style={[styles.donutCenterValue, isMobile && styles.donutCenterValueMobile]} numberOfLines={1}>
                               {formatCompactINR(totalModeAmount)}
                             </Text>
-                            <Text style={[styles.donutCenterPercent, isMobile && { fontSize: 8.5 }]}>
+                            <Text style={[styles.donutCenterPeriod, isMobile && styles.donutCenterPeriodMobile]}>
                               Past 1 Months
                             </Text>
-                            {totalModeAmount > 0 && (
-                              <Text style={[styles.donutCenterBottomPercent, isMobile && { fontSize: 10.5 }]}>
-                                100%
-                              </Text>
-                            )}
-                          </>
+                          </View>
                         )}
                       </View>
                     </View>
@@ -1440,8 +1437,8 @@ export const DashboardView = React.memo(({ entries = [], onOpenAddModal, onNavig
                         const endA = currentAngle + sliceAngle;
                         currentAngle = endA;
 
-                        const R = isHovered ? 98 : (isAnyHovered ? 84 : 90);
-                        const r = isHovered ? 48 : (isAnyHovered ? 56 : 54);
+                        const R = isHovered ? 98 : (isAnyHovered ? 86 : 92);
+                        const r = isHovered ? 52 : (isAnyHovered ? 60 : 58);
 
                         const midA = (startA + endA) / 2;
                         const midRad = (midA * Math.PI) / 180;
@@ -1506,7 +1503,7 @@ export const DashboardView = React.memo(({ entries = [], onOpenAddModal, onNavig
                     <Circle
                       cx="110"
                       cy="110"
-                      r={hoveredMaterialIdx !== null ? 45 : 50}
+                      r={hoveredMaterialIdx !== null ? 50 : 55}
                       fill="#ffffff"
                       stroke="#e2e8f0"
                       strokeWidth="1.5"
@@ -1515,27 +1512,27 @@ export const DashboardView = React.memo(({ entries = [], onOpenAddModal, onNavig
                   </G>
                 </Svg>
 
-                {/* Center Content Overlay using Native Text (100% bug-free rupee alignment) */}
+                {/* Center Content Overlay using Native Text */}
                 <View style={styles.donutCenterOverlay} pointerEvents="none">
                   {hoveredMaterialIdx !== null && materialData[hoveredMaterialIdx] ? (
-                    <>
-                      <Text style={styles.donutCenterLabel} numberOfLines={1}>
+                    <View style={styles.donutCenterInner}>
+                      <Text style={[styles.donutCenterLabel, isMobile && styles.donutCenterLabelMobile]} numberOfLines={1}>
                         {materialData[hoveredMaterialIdx].name}
                       </Text>
-                      <Text style={[styles.donutCenterValue, { color: materialData[hoveredMaterialIdx].color }]} numberOfLines={1}>
+                      <Text style={[styles.donutCenterValue, { color: materialData[hoveredMaterialIdx].color }, isMobile && { fontSize: 12.5, lineHeight: 16 }]} numberOfLines={1}>
                         ₹{formatINR(materialData[hoveredMaterialIdx].amount)}
                       </Text>
-                      <Text style={styles.donutCenterPercent}>
+                      <Text style={[styles.donutCenterPercent, isMobile && styles.donutCenterPercentMobile]}>
                         {materialData[hoveredMaterialIdx].percent}%
                       </Text>
-                    </>
+                    </View>
                   ) : (
-                    <>
-                      <Text style={styles.donutCenterLabel}>Total</Text>
-                      <Text style={styles.donutCenterValue} numberOfLines={1}>
+                    <View style={styles.donutCenterInner}>
+                      <Text style={[styles.donutCenterLabel, isMobile && styles.donutCenterLabelMobile]}>Total</Text>
+                      <Text style={[styles.donutCenterValue, isMobile && { fontSize: 12.5, lineHeight: 16 }]} numberOfLines={1}>
                         ₹{formatINR(metrics.totalSale)}
                       </Text>
-                    </>
+                    </View>
                   )}
                 </View>
               </View>
@@ -2478,37 +2475,61 @@ const styles = StyleSheet.create({
     bottom: 0,
     justifyContent: 'center',
     alignItems: 'center',
+    padding: 2,
+  },
+  donutCenterInner: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    maxWidth: '85%',
   },
   donutCenterLabel: {
-    fontSize: 12,
+    fontSize: 11.5,
     fontWeight: '600',
     color: '#64748b',
     textAlign: 'center',
-    lineHeight: 15,
+    lineHeight: 14,
+  },
+  donutCenterLabelMobile: {
+    fontSize: 9.5,
+    lineHeight: 12,
   },
   donutCenterValue: {
-    fontSize: 14,
+    fontSize: 17,
     fontWeight: '800',
     color: '#0f172a',
     textAlign: 'center',
-    lineHeight: 18,
-    marginTop: 2,
-    paddingHorizontal: 4,
+    lineHeight: 20,
+    marginVertical: 1,
+    paddingHorizontal: 2,
+    letterSpacing: -0.2,
+  },
+  donutCenterValueMobile: {
+    fontSize: 14,
+    lineHeight: 17,
+    marginVertical: 1,
+  },
+  donutCenterPeriod: {
+    fontSize: 10,
+    fontWeight: '500',
+    color: '#64748b',
+    textAlign: 'center',
+    lineHeight: 13,
+  },
+  donutCenterPeriodMobile: {
+    fontSize: 8.5,
+    lineHeight: 11,
   },
   donutCenterPercent: {
-    fontSize: 11,
+    fontSize: 10.5,
     fontWeight: '700',
-    color: '#0f172a',
+    color: '#0284c7',
     textAlign: 'center',
-    lineHeight: 14,
-    marginTop: 2,
+    lineHeight: 13,
+    marginTop: 1,
   },
-  donutCenterBottomPercent: {
-    fontSize: 11,
-    fontWeight: '800',
-    color: '#7c3aed',
-    textAlign: 'center',
-    lineHeight: 14,
+  donutCenterPercentMobile: {
+    fontSize: 9,
+    lineHeight: 11,
     marginTop: 1,
   },
   modeCenterOverlay: {
