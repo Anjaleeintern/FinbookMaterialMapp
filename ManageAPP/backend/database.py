@@ -1,3 +1,4 @@
+import certifi
 import logging
 from motor.motor_asyncio import AsyncIOMotorClient
 from config import settings
@@ -12,7 +13,11 @@ db_instance = Database()
 
 async def connect_to_mongo():
     logger.info("Connecting to MongoDB at %s", settings.MONGODB_URL)
-    db_instance.client = AsyncIOMotorClient(settings.MONGODB_URL)
+    client_kwargs = {}
+    if "mongodb+srv://" in settings.MONGODB_URL or "ssl=true" in settings.MONGODB_URL.lower():
+        client_kwargs["tlsCAFile"] = certifi.where()
+    
+    db_instance.client = AsyncIOMotorClient(settings.MONGODB_URL, **client_kwargs)
     db_instance.db = db_instance.client[settings.DB_NAME]
     
     # Initialize indexes
