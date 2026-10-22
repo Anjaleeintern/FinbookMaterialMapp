@@ -578,51 +578,28 @@ export const DashboardView = React.memo(({ entries = [], onOpenAddModal, onNavig
             timelineKeys.push(`${dayNum}-${mName}`);
           }
         } else {
-          const activeKeys = Object.keys(dateMap);
-          if (activeKeys.length > 0 && activeKeys.length <= 14) {
-            timelineKeys = activeKeys;
-          } else {
-            const step = Math.max(1, Math.floor(diffDays / 7));
-            for (let i = 0; i < diffDays; i += step) {
-              const cur = new Date(cStart);
-              cur.setDate(cStart.getDate() + i);
-              const dayNum = String(cur.getDate()).padStart(2, '0');
-              const mName = monthNames[cur.getMonth()] || 'Oct';
-              timelineKeys.push(`${dayNum}-${mName}`);
-              if (timelineKeys.length >= 8) break;
-            }
+          const step = Math.max(1, Math.floor(diffDays / 7));
+          for (let i = 0; i < diffDays; i += step) {
+            const cur = new Date(cStart);
+            cur.setDate(cStart.getDate() + i);
+            const dayNum = String(cur.getDate()).padStart(2, '0');
+            const mName = monthNames[cur.getMonth()] || 'Oct';
+            timelineKeys.push(`${dayNum}-${mName}`);
+            if (timelineKeys.length >= 8) break;
           }
         }
       }
     }
 
     if (timelineKeys.length === 0) {
-      if (dateFilter === 'daily') {
-        const dNum = String(today.getDate()).padStart(2, '0');
-        const mName = monthNames[today.getMonth()] || 'Oct';
-        timelineKeys.push(`${dNum}-${mName}`);
-      } else {
-        const activeDateKeys = Object.keys(dateMap);
-        if (activeDateKeys.length > 0 && activeDateKeys.length <= 10) {
-          timelineKeys = activeDateKeys;
-        } else {
-          let baseDate = targetDate || new Date();
-          if (datesFound.length > 0) {
-            datesFound.forEach((dStr) => {
-              const parsed = parseEntryDate(dStr);
-              if (parsed && parsed > baseDate) {
-                baseDate = parsed;
-              }
-            });
-          }
-          for (let offset = 6; offset >= 0; offset--) {
-            const d = new Date(baseDate);
-            d.setDate(baseDate.getDate() - offset);
-            const dayNum = String(d.getDate()).padStart(2, '0');
-            const mName = monthNames[d.getMonth()] || 'Oct';
-            timelineKeys.push(`${dayNum}-${mName}`);
-          }
-        }
+      // Proper chronological series of the last 5 days from current date (Today): [Today-4, Today-3, Today-2, Today-1, Today]
+      const baseDate = new Date(today);
+      for (let offset = 4; offset >= 0; offset--) {
+        const d = new Date(baseDate);
+        d.setDate(baseDate.getDate() - offset);
+        const dayNum = String(d.getDate()).padStart(2, '0');
+        const mName = monthNames[d.getMonth()] || 'Oct';
+        timelineKeys.push(`${dayNum}-${mName}`);
       }
     }
 
