@@ -14,11 +14,10 @@ import {
   KeyboardAvoidingView,
   SafeAreaView,
   StatusBar,
-  Dimensions,
   useWindowDimensions,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import Svg, { Path, Defs, LinearGradient, Stop } from 'react-native-svg';
+import Svg, { Path, Defs, LinearGradient as SvgLinearGradient, Stop } from 'react-native-svg';
 import { useAuth } from '../context/AuthContext';
 import { api } from '../api/client';
 
@@ -27,1105 +26,571 @@ const operationsHero = require('../../assets/operations_hero.jpg');
 
 export const LoginView = () => {
   const { login } = useAuth();
-  const { width: screenWidth, height: screenHeight } = useWindowDimensions();
+  const { width: W, height: H } = useWindowDimensions();
 
-  // Screen flow: 'onboard1' -> 'onboard2' -> 'login' -> 'register'
-  // Default starts at onboarding slide 1 (Screen 1 from reference)
-  const [activeScreen, setActiveScreen] = useState('onboard1');
+  // Flow: onboard1 → onboard2 → login ↔ register
+  const [screen, setScreen] = useState('onboard1');
 
-  // Form Fields
+  // Form state
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [showPassword, setShowPassword] = useState(false);
+  const [showPw, setShowPw] = useState(false);
   const [loading, setLoading] = useState(false);
-  const [errorMsg, setErrorMsg] = useState('');
-  const [successMsg, setSuccessMsg] = useState('');
-  const [focusedInput, setFocusedInput] = useState(null);
+  const [err, setErr] = useState('');
+  const [suc, setSuc] = useState('');
+  const [focus, setFocus] = useState(null);
 
-  // OTP Modal
-  const [otpModalVisible, setOtpModalVisible] = useState(false);
-  const [otpPhone, setOtpPhone] = useState('');
+  // OTP
+  const [otpVis, setOtpVis] = useState(false);
+  const [otpPh, setOtpPh] = useState('');
   const [otpCode, setOtpCode] = useState('');
   const [otpSent, setOtpSent] = useState(false);
-  const [otpLoading, setOtpLoading] = useState(false);
+  const [otpLoad, setOtpLoad] = useState(false);
   const [otpMsg, setOtpMsg] = useState('');
 
-  // Animations
-  const fadeAnim = useRef(new Animated.Value(1)).current;
-  const slideAnim = useRef(new Animated.Value(0)).current;
-  const logoPulse = useRef(new Animated.Value(1)).current;
-  const floatAnim = useRef(new Animated.Value(0)).current;
+  // Anims
+  const fade = useRef(new Animated.Value(1)).current;
+  const slide = useRef(new Animated.Value(0)).current;
+  const pulse = useRef(new Animated.Value(1)).current;
+  const float = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
-    // Logo pulse
-    Animated.loop(
-      Animated.sequence([
-        Animated.timing(logoPulse, { toValue: 1.06, duration: 1400, useNativeDriver: true }),
-        Animated.timing(logoPulse, { toValue: 1, duration: 1400, useNativeDriver: true }),
-      ])
-    ).start();
-    // Float for hero images
-    Animated.loop(
-      Animated.sequence([
-        Animated.timing(floatAnim, { toValue: -6, duration: 1800, useNativeDriver: true }),
-        Animated.timing(floatAnim, { toValue: 0, duration: 1800, useNativeDriver: true }),
-      ])
-    ).start();
+    Animated.loop(Animated.sequence([
+      Animated.timing(pulse, { toValue: 1.06, duration: 1400, useNativeDriver: true }),
+      Animated.timing(pulse, { toValue: 1, duration: 1400, useNativeDriver: true }),
+    ])).start();
+    Animated.loop(Animated.sequence([
+      Animated.timing(float, { toValue: -8, duration: 2000, useNativeDriver: true }),
+      Animated.timing(float, { toValue: 0, duration: 2000, useNativeDriver: true }),
+    ])).start();
   }, []);
 
-  const navigateTo = (screen, direction = 'next') => {
-    setErrorMsg('');
-    setSuccessMsg('');
+  const go = (to, dir = 'next') => {
+    setErr(''); setSuc('');
     Animated.parallel([
-      Animated.timing(fadeAnim, { toValue: 0, duration: 120, useNativeDriver: true }),
-      Animated.timing(slideAnim, { toValue: direction === 'next' ? -30 : 30, duration: 120, useNativeDriver: true }),
+      Animated.timing(fade, { toValue: 0, duration: 110, useNativeDriver: true }),
+      Animated.timing(slide, { toValue: dir === 'next' ? -30 : 30, duration: 110, useNativeDriver: true }),
     ]).start(() => {
-      setActiveScreen(screen);
-      slideAnim.setValue(direction === 'next' ? 30 : -30);
+      setScreen(to);
+      slide.setValue(dir === 'next' ? 30 : -30);
       Animated.parallel([
-        Animated.timing(fadeAnim, { toValue: 1, duration: 180, useNativeDriver: true }),
-        Animated.timing(slideAnim, { toValue: 0, duration: 180, useNativeDriver: true }),
+        Animated.timing(fade, { toValue: 1, duration: 170, useNativeDriver: true }),
+        Animated.timing(slide, { toValue: 0, duration: 170, useNativeDriver: true }),
       ]).start();
     });
   };
 
-  const handleLogin = async () => {
-    if (!email.trim() || !password.trim()) {
-      setErrorMsg('Please enter both email and password.');
-      return;
-    }
-    setLoading(true);
-    setErrorMsg('');
-    try {
-      await login(email.trim(), password.trim());
-    } catch (err) {
-      setErrorMsg(err.message || 'Invalid email or password.');
-    } finally {
-      setLoading(false);
-    }
+  const doLogin = async () => {
+    if (!email.trim() || !password.trim()) { setErr('Please enter email and password.'); return; }
+    setLoading(true); setErr('');
+    try { await login(email.trim(), password.trim()); }
+    catch (e) { setErr(e.message || 'Invalid credentials.'); }
+    finally { setLoading(false); }
   };
 
-  const handleRegister = async () => {
-    if (!name.trim()) { setErrorMsg('Please enter your full name.'); return; }
-    if (!email.trim() || !password.trim()) { setErrorMsg('Please enter both email and password.'); return; }
-    if (password.length < 4) { setErrorMsg('Password must be at least 4 characters.'); return; }
-    setLoading(true);
-    setErrorMsg('');
-    setSuccessMsg('');
+  const doRegister = async () => {
+    if (!name.trim()) { setErr('Please enter your name.'); return; }
+    if (!email.trim() || !password.trim()) { setErr('Please enter email and password.'); return; }
+    if (password.length < 4) { setErr('Password must be 4+ characters.'); return; }
+    setLoading(true); setErr(''); setSuc('');
     try {
       await api.register(email.trim(), password.trim(), name.trim());
-      setSuccessMsg('Account created! Signing in...');
+      setSuc('Account created! Signing in...');
       await login(email.trim(), password.trim());
-    } catch (err) {
-      setErrorMsg(err.message || 'Registration failed.');
-    } finally {
-      setLoading(false);
-    }
+    } catch (e) { setErr(e.message || 'Registration failed.'); }
+    finally { setLoading(false); }
   };
 
-  const handleSendOtp = () => {
-    if (!otpPhone.trim()) { setOtpMsg('Please enter your mobile number or email.'); return; }
-    setOtpLoading(true);
-    setOtpMsg('');
-    setTimeout(() => { setOtpLoading(false); setOtpSent(true); setOtpMsg(`OTP sent to ${otpPhone.trim()}. (Demo: 123456)`); }, 700);
+  const sendOtp = () => {
+    if (!otpPh.trim()) { setOtpMsg('Enter your mobile or email.'); return; }
+    setOtpLoad(true); setOtpMsg('');
+    setTimeout(() => { setOtpLoad(false); setOtpSent(true); setOtpMsg(`OTP sent to ${otpPh.trim()} (Demo: 123456)`); }, 700);
   };
 
-  const handleVerifyOtp = async () => {
-    if (!otpCode.trim()) { setOtpMsg('Please enter the 6-digit OTP.'); return; }
-    setOtpLoading(true);
-    try {
-      await login('admin@materialmapp.com', 'admin123');
-      setOtpModalVisible(false);
-    } catch (err) { setOtpMsg('OTP verification failed.'); }
-    finally { setOtpLoading(false); }
+  const verifyOtp = async () => {
+    if (!otpCode.trim()) { setOtpMsg('Enter the 6-digit OTP.'); return; }
+    setOtpLoad(true);
+    try { await login('admin@materialmapp.com', 'admin123'); setOtpVis(false); }
+    catch (e) { setOtpMsg('Verification failed.'); }
+    finally { setOtpLoad(false); }
   };
 
-  // ─────────────────────────────────────────────────
-  // RENDER
-  // ─────────────────────────────────────────────────
+  const heroH = Math.min(H * 0.32, 280);
+
+  // ── RENDER ──
   return (
-    <SafeAreaView style={s.safe}>
-      <StatusBar barStyle="dark-content" backgroundColor="#ffffff" />
-      <KeyboardAvoidingView
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-        style={s.kav}
-      >
-        <ScrollView
-          contentContainerStyle={s.scroll}
-          keyboardShouldPersistTaps="handled"
-          showsVerticalScrollIndicator={false}
-          bounces={false}
-        >
-          {/* ═══ FULL SCREEN CANVAS ═══ */}
-          <View style={[s.canvas, { minHeight: screenHeight }]}>
+    <SafeAreaView style={st.safe}>
+      <StatusBar barStyle="dark-content" backgroundColor="#f0fdfa" />
+      <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={{ flex: 1 }}>
+        <View style={[st.root, { minHeight: H }]}>
 
-            {/* ─── TOP BAR (conditionally rendered per screen) ─── */}
-            {activeScreen === 'login' && (
-              <View style={s.topBar}>
+          {/* ══ GRADIENT BACKGROUND (covers full screen) ══ */}
+          <View style={st.bgGradient} pointerEvents="none">
+            <Svg width="100%" height="100%" viewBox="0 0 375 812" preserveAspectRatio="none">
+              <Defs>
+                <SvgLinearGradient id="bg1" x1="0" y1="0" x2="0" y2="1">
+                  <Stop offset="0" stopColor="#ffffff" stopOpacity="1" />
+                  <Stop offset="0.55" stopColor="#ffffff" stopOpacity="1" />
+                  <Stop offset="0.75" stopColor="#f0fdfa" stopOpacity="1" />
+                  <Stop offset="0.9" stopColor="#e0f2fe" stopOpacity="0.8" />
+                  <Stop offset="1" stopColor="#ccfbf1" stopOpacity="0.9" />
+                </SvgLinearGradient>
+              </Defs>
+              <Path d="M0,0 H375 V812 H0 Z" fill="url(#bg1)" />
+              <Path d="M0,620 C60,580 150,650 220,620 C300,585 340,630 375,600 L375,812 L0,812 Z" fill="#e0f2fe" fillOpacity="0.5" />
+              <Path d="M0,680 C80,640 200,710 280,670 C340,645 360,680 375,660 L375,812 L0,812 Z" fill="#ccfbf1" fillOpacity="0.6" />
+              <Path d="M0,730 C100,700 200,750 300,720 C350,708 370,730 375,720 L375,812 L0,812 Z" fill="#99f6e4" fillOpacity="0.3" />
+            </Svg>
+          </View>
+
+          <ScrollView
+            contentContainerStyle={st.scroll}
+            keyboardShouldPersistTaps="handled"
+            showsVerticalScrollIndicator={false}
+            bounces={false}
+          >
+            {/* ── TOP BAR ── */}
+            {screen === 'login' && (
+              <View style={st.topBar}>
                 <View style={{ width: 40 }} />
-                <View style={s.topBarRight}>
-                  <TouchableOpacity style={s.loginPillOutline} activeOpacity={0.8}>
-                    <Text style={s.loginPillOutlineText}>Login</Text>
+                <View style={st.topRight}>
+                  <TouchableOpacity style={st.pillOutline} activeOpacity={0.8}>
+                    <Text style={st.pillOutlineT}>Login</Text>
                   </TouchableOpacity>
-                  <TouchableOpacity
-                    style={s.signUpPill}
-                    onPress={() => navigateTo('register', 'next')}
-                    activeOpacity={0.85}
-                  >
-                    <Text style={s.signUpPillText}>Sign Up</Text>
+                  <TouchableOpacity style={st.pillFill} onPress={() => go('register')} activeOpacity={0.85}>
+                    <Text style={st.pillFillT}>Sign Up</Text>
                   </TouchableOpacity>
                 </View>
               </View>
             )}
-
-            {activeScreen === 'register' && (
-              <View style={s.topBar}>
-                <TouchableOpacity
-                  style={s.backBtn}
-                  onPress={() => navigateTo('login', 'back')}
-                  activeOpacity={0.7}
-                  hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-                >
+            {screen === 'register' && (
+              <View style={st.topBar}>
+                <TouchableOpacity style={st.backBtn} onPress={() => go('login', 'back')} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
                   <Ionicons name="chevron-back" size={26} color="#0f172a" />
                 </TouchableOpacity>
-                <View style={s.topBarRight}>
-                  <TouchableOpacity
-                    style={s.loginPillOutline}
-                    onPress={() => navigateTo('login', 'back')}
-                    activeOpacity={0.8}
-                  >
-                    <Text style={s.loginPillOutlineText}>Login</Text>
+                <View style={st.topRight}>
+                  <TouchableOpacity style={st.pillOutline} onPress={() => go('login', 'back')} activeOpacity={0.8}>
+                    <Text style={st.pillOutlineT}>Login</Text>
                   </TouchableOpacity>
                 </View>
               </View>
             )}
+            {(screen === 'onboard1' || screen === 'onboard2') && <View style={{ height: 16 }} />}
 
-            {(activeScreen === 'onboard1' || activeScreen === 'onboard2') && (
-              <View style={s.topBar}>
-                <View style={{ width: 40 }} />
-                <View style={{ width: 40 }} />
-              </View>
-            )}
+            {/* ── ANIMATED CONTENT ── */}
+            <Animated.View style={[st.content, { opacity: fade, transform: [{ translateX: slide }] }]}>
 
-            {/* ─── ANIMATED CONTENT AREA ─── */}
-            <Animated.View
-              style={[
-                s.contentArea,
-                { opacity: fadeAnim, transform: [{ translateX: slideAnim }] },
-              ]}
-            >
-
-              {/* ═══════════════════════════════════════════════ */}
-              {/* SCREEN 1: ONBOARDING SLIDE 1                   */}
-              {/* ═══════════════════════════════════════════════ */}
-              {activeScreen === 'onboard1' && (
-                <View style={s.screenInner}>
-                  {/* Brand */}
-                  <View style={s.brandCenter}>
-                    <Animated.View style={[s.logoBadge, { transform: [{ scale: logoPulse }] }]}>
-                      <Text style={s.logoLetter}>M</Text>
-                    </Animated.View>
-                    <Text style={s.brandName}>MaterialMApp</Text>
-                    <Text style={s.brandTagline}>Quarry & Weighbridge Dispatch</Text>
-                  </View>
-
-                  {/* Description */}
-                  <Text style={s.onboardDesc}>
-                    Fast vehicle entries, automated delivery challans, and live sales reports.
-                  </Text>
-
-                  {/* Hero Image */}
-                  <Animated.View style={[s.heroWrap, { transform: [{ translateY: floatAnim }] }]}>
-                    <Image source={weighbridgeHero} style={s.heroImg} resizeMode="cover" />
-                  </Animated.View>
-
-                  {/* Bottom: Dots + Skip */}
-                  <View style={s.onboardBottom}>
-                    <View style={s.dotsRow}>
-                      <View style={[s.dot, s.dotActive]} />
-                      <View style={s.dot} />
-                    </View>
-                    <TouchableOpacity
-                      style={s.skipBtn}
-                      onPress={() => navigateTo('login', 'next')}
-                      activeOpacity={0.7}
-                    >
-                      <Text style={s.skipBtnText}>Skip {'>'}</Text>
-                    </TouchableOpacity>
-                  </View>
-                </View>
-              )}
-
-              {/* ═══════════════════════════════════════════════ */}
-              {/* SCREEN 2: ONBOARDING SLIDE 2                   */}
-              {/* ═══════════════════════════════════════════════ */}
-              {activeScreen === 'onboard2' && (
-                <View style={s.screenInner}>
-                  {/* Hero Image */}
-                  <Animated.View style={[s.heroWrap2, { transform: [{ translateY: floatAnim }] }]}>
-                    <Image source={operationsHero} style={s.heroImg} resizeMode="cover" />
-                  </Animated.View>
-
-                  {/* Title */}
-                  <Text style={s.slide2Title}>Simplify Your{'\n'}Material Operations</Text>
-
-                  {/* Feature Cards */}
-                  <View style={s.featuresCol}>
-                    <View style={s.featureRow}>
-                      <View style={[s.featureIcon, { backgroundColor: '#e0f2fe' }]}>
-                        <Ionicons name="git-branch-outline" size={20} color="#0284c7" />
-                      </View>
-                      <View style={s.featureTextCol}>
-                        <Text style={s.featureTitle}>Quick Vehicle Entries</Text>
-                        <Text style={s.featureSub}>Capture vehicle details in seconds</Text>
-                      </View>
+              {/* ════════════════════════════════════════════ */}
+              {/* SCREEN 1: ONBOARDING SLIDE 1               */}
+              {/* ════════════════════════════════════════════ */}
+              {screen === 'onboard1' && (
+                <View style={[st.inner, { minHeight: H - 40 }]}>
+                  <View style={st.topContent}>
+                    {/* Brand */}
+                    <View style={st.brandC}>
+                      <Animated.View style={[st.logo, { transform: [{ scale: pulse }] }]}>
+                        <Text style={st.logoT}>M</Text>
+                      </Animated.View>
+                      <Text style={st.brandN}>MaterialMApp</Text>
+                      <Text style={st.brandTag}>Quarry & Weighbridge Dispatch</Text>
                     </View>
 
-                    <View style={s.featureRow}>
-                      <View style={[s.featureIcon, { backgroundColor: '#dcfce7' }]}>
-                        <Ionicons name="document-text-outline" size={20} color="#16a34a" />
-                      </View>
-                      <View style={s.featureTextCol}>
-                        <Text style={s.featureTitle}>Automated Challans</Text>
-                        <Text style={s.featureSub}>Generate delivery challans instantly</Text>
-                      </View>
-                    </View>
-
-                    <View style={s.featureRow}>
-                      <View style={[s.featureIcon, { backgroundColor: '#f3e8ff' }]}>
-                        <Ionicons name="bar-chart-outline" size={20} color="#7c3aed" />
-                      </View>
-                      <View style={s.featureTextCol}>
-                        <Text style={s.featureTitle}>Live Sales Reports</Text>
-                        <Text style={s.featureSub}>Track your business in real-time</Text>
-                      </View>
-                    </View>
-                  </View>
-
-                  {/* Bottom: Back + Dots + Next */}
-                  <View style={s.onboardBottom2}>
-                    <TouchableOpacity
-                      style={s.backTextBtn}
-                      onPress={() => navigateTo('onboard1', 'back')}
-                      activeOpacity={0.7}
-                    >
-                      <Text style={s.backTextBtnLabel}>Back</Text>
-                    </TouchableOpacity>
-
-                    <View style={s.dotsRow}>
-                      <View style={s.dot} />
-                      <View style={[s.dot, s.dotActive]} />
-                    </View>
-
-                    <TouchableOpacity
-                      style={s.nextPill}
-                      onPress={() => navigateTo('login', 'next')}
-                      activeOpacity={0.85}
-                    >
-                      <Text style={s.nextPillText}>Next {'>'}</Text>
-                    </TouchableOpacity>
-                  </View>
-                </View>
-              )}
-
-              {/* ═══════════════════════════════════════════════ */}
-              {/* SCREEN 3: LOGIN (WELCOME BACK!)                */}
-              {/* ═══════════════════════════════════════════════ */}
-              {activeScreen === 'login' && (
-                <View style={s.screenInner}>
-                  {/* Brand */}
-                  <View style={s.brandCenter}>
-                    <Animated.View style={[s.logoBadge, { transform: [{ scale: logoPulse }] }]}>
-                      <Text style={s.logoLetter}>M</Text>
-                    </Animated.View>
-                    <Text style={s.brandName}>MaterialMApp</Text>
-                    <Text style={s.brandTagline}>Quarry & Weighbridge Dispatch</Text>
-                  </View>
-
-                  {/* Form */}
-                  <View style={s.formBlock}>
-                    <Text style={s.formTitle}>Welcome Back!</Text>
-                    <Text style={s.formSubtitle}>Sign in to continue to your account</Text>
-                  </View>
-
-                  {errorMsg ? (
-                    <View style={s.errorBanner}>
-                      <Ionicons name="alert-circle" size={16} color="#ef4444" />
-                      <Text style={s.errorText}>{errorMsg}</Text>
-                    </View>
-                  ) : null}
-                  {successMsg ? (
-                    <View style={s.successBanner}>
-                      <Ionicons name="checkmark-circle" size={16} color="#16a34a" />
-                      <Text style={s.successText}>{successMsg}</Text>
-                    </View>
-                  ) : null}
-
-                  {/* Email */}
-                  <View style={s.fieldGroup}>
-                    <Text style={s.fieldLabel}>Email Address</Text>
-                    <View style={[s.inputBox, focusedInput === 'le' && s.inputBoxFocus]}>
-                      <Ionicons name="mail-outline" size={18} color="#64748b" style={s.inputIcon} />
-                      <TextInput
-                        style={s.textInput}
-                        placeholder="Enter your email address"
-                        placeholderTextColor="#94a3b8"
-                        value={email}
-                        onChangeText={setEmail}
-                        keyboardType="email-address"
-                        autoCapitalize="none"
-                        onFocus={() => setFocusedInput('le')}
-                        onBlur={() => setFocusedInput(null)}
-                      />
-                      {email ? (
-                        <TouchableOpacity onPress={() => setEmail('')} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-                          <Ionicons name="close-circle" size={16} color="#94a3b8" />
-                        </TouchableOpacity>
-                      ) : null}
-                    </View>
-                  </View>
-
-                  {/* Password */}
-                  <View style={s.fieldGroup}>
-                    <Text style={s.fieldLabel}>Password</Text>
-                    <View style={[s.inputBox, focusedInput === 'lp' && s.inputBoxFocus]}>
-                      <Ionicons name="lock-closed-outline" size={18} color="#64748b" style={s.inputIcon} />
-                      <TextInput
-                        style={s.textInput}
-                        placeholder="Enter your password"
-                        placeholderTextColor="#94a3b8"
-                        value={password}
-                        onChangeText={setPassword}
-                        secureTextEntry={!showPassword}
-                        autoCapitalize="none"
-                        onFocus={() => setFocusedInput('lp')}
-                        onBlur={() => setFocusedInput(null)}
-                      />
-                      <TouchableOpacity onPress={() => setShowPassword(v => !v)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-                        <Ionicons name={showPassword ? 'eye-off-outline' : 'eye-outline'} size={19} color="#64748b" />
-                      </TouchableOpacity>
-                    </View>
-                  </View>
-
-                  {/* Sign In */}
-                  <TouchableOpacity
-                    style={[s.primaryBtn, loading && { opacity: 0.7 }]}
-                    onPress={handleLogin}
-                    disabled={loading}
-                    activeOpacity={0.85}
-                  >
-                    {loading ? <ActivityIndicator size="small" color="#fff" /> : <Text style={s.primaryBtnText}>Sign In</Text>}
-                  </TouchableOpacity>
-
-                  {/* OR */}
-                  <View style={s.orRow}>
-                    <View style={s.orLine} />
-                    <Text style={s.orText}>OR</Text>
-                    <View style={s.orLine} />
-                  </View>
-
-                  {/* OTP */}
-                  <TouchableOpacity
-                    style={s.otpBtn}
-                    onPress={() => { setOtpMsg(''); setOtpSent(false); setOtpCode(''); setOtpModalVisible(true); }}
-                    activeOpacity={0.8}
-                  >
-                    <Ionicons name="phone-portrait-outline" size={18} color="#0284c7" style={{ marginRight: 8 }} />
-                    <Text style={s.otpBtnText}>Continue with OTP</Text>
-                  </TouchableOpacity>
-
-                  {/* Bottom link */}
-                  <View style={s.bottomLink}>
-                    <Text style={s.bottomLinkMuted}>Don't have an account? </Text>
-                    <TouchableOpacity onPress={() => navigateTo('register', 'next')} hitSlop={{ top: 8, bottom: 8, left: 4, right: 8 }}>
-                      <Text style={s.bottomLinkAction}>Sign Up</Text>
-                    </TouchableOpacity>
-                  </View>
-                </View>
-              )}
-
-              {/* ═══════════════════════════════════════════════ */}
-              {/* SCREEN 4: REGISTER (CREATE YOUR ACCOUNT)       */}
-              {/* ═══════════════════════════════════════════════ */}
-              {activeScreen === 'register' && (
-                <View style={s.screenInner}>
-                  {/* Brand */}
-                  <View style={s.brandCenter}>
-                    <Animated.View style={[s.logoBadge, { transform: [{ scale: logoPulse }] }]}>
-                      <Text style={s.logoLetter}>M</Text>
-                    </Animated.View>
-                    <Text style={s.brandName}>MaterialMApp</Text>
-                    <Text style={s.brandTagline}>Quarry & Weighbridge Dispatch</Text>
-                  </View>
-
-                  <View style={s.formBlock}>
-                    <Text style={s.formTitle}>Create Your Account</Text>
-                    <Text style={s.formSubtitle}>Get started with your business account</Text>
-                  </View>
-
-                  {errorMsg ? (
-                    <View style={s.errorBanner}>
-                      <Ionicons name="alert-circle" size={16} color="#ef4444" />
-                      <Text style={s.errorText}>{errorMsg}</Text>
-                    </View>
-                  ) : null}
-
-                  {/* Full Name */}
-                  <View style={s.fieldGroup}>
-                    <Text style={s.fieldLabel}>Full Name</Text>
-                    <View style={[s.inputBox, focusedInput === 'rn' && s.inputBoxFocus]}>
-                      <Ionicons name="person-outline" size={18} color="#64748b" style={s.inputIcon} />
-                      <TextInput
-                        style={s.textInput}
-                        placeholder="Enter your name"
-                        placeholderTextColor="#94a3b8"
-                        value={name}
-                        onChangeText={setName}
-                        autoCapitalize="words"
-                        onFocus={() => setFocusedInput('rn')}
-                        onBlur={() => setFocusedInput(null)}
-                      />
-                      {name ? (
-                        <TouchableOpacity onPress={() => setName('')} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-                          <Ionicons name="close-circle" size={16} color="#94a3b8" />
-                        </TouchableOpacity>
-                      ) : null}
-                    </View>
-                  </View>
-
-                  {/* Email */}
-                  <View style={s.fieldGroup}>
-                    <Text style={s.fieldLabel}>Email Address</Text>
-                    <View style={[s.inputBox, focusedInput === 're' && s.inputBoxFocus]}>
-                      <Ionicons name="mail-outline" size={18} color="#64748b" style={s.inputIcon} />
-                      <TextInput
-                        style={s.textInput}
-                        placeholder="Enter your email"
-                        placeholderTextColor="#94a3b8"
-                        value={email}
-                        onChangeText={setEmail}
-                        keyboardType="email-address"
-                        autoCapitalize="none"
-                        onFocus={() => setFocusedInput('re')}
-                        onBlur={() => setFocusedInput(null)}
-                      />
-                      {email ? (
-                        <TouchableOpacity onPress={() => setEmail('')} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-                          <Ionicons name="close-circle" size={16} color="#94a3b8" />
-                        </TouchableOpacity>
-                      ) : null}
-                    </View>
-                  </View>
-
-                  {/* Password */}
-                  <View style={s.fieldGroup}>
-                    <Text style={s.fieldLabel}>Password</Text>
-                    <View style={[s.inputBox, focusedInput === 'rp' && s.inputBoxFocus]}>
-                      <Ionicons name="lock-closed-outline" size={18} color="#64748b" style={s.inputIcon} />
-                      <TextInput
-                        style={s.textInput}
-                        placeholder="Create a password"
-                        placeholderTextColor="#94a3b8"
-                        value={password}
-                        onChangeText={setPassword}
-                        secureTextEntry={!showPassword}
-                        autoCapitalize="none"
-                        onFocus={() => setFocusedInput('rp')}
-                        onBlur={() => setFocusedInput(null)}
-                      />
-                      <TouchableOpacity onPress={() => setShowPassword(v => !v)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-                        <Ionicons name={showPassword ? 'eye-off-outline' : 'eye-outline'} size={19} color="#64748b" />
-                      </TouchableOpacity>
-                    </View>
-                  </View>
-
-                  {/* Sign Up */}
-                  <TouchableOpacity
-                    style={[s.primaryBtn, loading && { opacity: 0.7 }]}
-                    onPress={handleRegister}
-                    disabled={loading}
-                    activeOpacity={0.85}
-                  >
-                    {loading ? <ActivityIndicator size="small" color="#fff" /> : <Text style={s.primaryBtnText}>Sign Up</Text>}
-                  </TouchableOpacity>
-
-                  {/* Terms */}
-                  <View style={s.termsWrap}>
-                    <Text style={s.termsText}>
-                      By continuing, you agree to our{' '}
-                      <Text style={s.termsLink}>Terms &amp; Conditions</Text> and{' '}
-                      <Text style={s.termsLink}>Privacy Policy</Text>
+                    <Text style={st.obDesc}>
+                      Fast vehicle entries, automated delivery challans, and live sales reports.
                     </Text>
+
+                    {/* Hero */}
+                    <Animated.View style={[st.heroWrap, { height: heroH, transform: [{ translateY: float }] }]}>
+                      <Image source={weighbridgeHero} style={st.heroImg} resizeMode="cover" />
+                    </Animated.View>
+                  </View>
+
+                  {/* Bottom */}
+                  <View style={st.obBottom}>
+                    <View style={st.dots}>
+                      <View style={[st.dot, st.dotOn]} />
+                      <View style={st.dot} />
+                    </View>
+                    <TouchableOpacity onPress={() => go('login')} activeOpacity={0.7} style={st.skipBtn}>
+                      <Text style={st.skipT}>Skip {'>'}</Text>
+                    </TouchableOpacity>
+                  </View>
+                </View>
+              )}
+
+              {/* ════════════════════════════════════════════ */}
+              {/* SCREEN 2: ONBOARDING SLIDE 2               */}
+              {/* ════════════════════════════════════════════ */}
+              {screen === 'onboard2' && (
+                <View style={[st.inner, { minHeight: H - 40 }]}>
+                  <View style={st.topContent}>
+                    {/* Hero */}
+                    <Animated.View style={[st.heroWrap2, { height: heroH * 0.85, transform: [{ translateY: float }] }]}>
+                      <Image source={operationsHero} style={st.heroImg} resizeMode="cover" />
+                    </Animated.View>
+
+                    <Text style={st.s2Title}>Simplify Your{'\n'}Material Operations</Text>
+
+                    {/* Features */}
+                    <View style={st.featCol}>
+                      <View style={st.featRow}>
+                        <View style={[st.featIc, { backgroundColor: '#e0f2fe' }]}>
+                          <Ionicons name="git-branch-outline" size={20} color="#0284c7" />
+                        </View>
+                        <View style={{ flex: 1 }}>
+                          <Text style={st.featT}>Quick Vehicle Entries</Text>
+                          <Text style={st.featS}>Capture vehicle details in seconds</Text>
+                        </View>
+                      </View>
+                      <View style={st.featRow}>
+                        <View style={[st.featIc, { backgroundColor: '#dcfce7' }]}>
+                          <Ionicons name="document-text-outline" size={20} color="#16a34a" />
+                        </View>
+                        <View style={{ flex: 1 }}>
+                          <Text style={st.featT}>Automated Challans</Text>
+                          <Text style={st.featS}>Generate delivery challans instantly</Text>
+                        </View>
+                      </View>
+                      <View style={st.featRow}>
+                        <View style={[st.featIc, { backgroundColor: '#f3e8ff' }]}>
+                          <Ionicons name="bar-chart-outline" size={20} color="#7c3aed" />
+                        </View>
+                        <View style={{ flex: 1 }}>
+                          <Text style={st.featT}>Live Sales Reports</Text>
+                          <Text style={st.featS}>Track your business in real-time</Text>
+                        </View>
+                      </View>
+                    </View>
+                  </View>
+
+                  {/* Bottom */}
+                  <View style={st.obBottom2}>
+                    <TouchableOpacity onPress={() => go('onboard1', 'back')} style={st.skipBtn}>
+                      <Text style={st.skipT}>Back</Text>
+                    </TouchableOpacity>
+                    <View style={st.dots}>
+                      <View style={st.dot} />
+                      <View style={[st.dot, st.dotOn]} />
+                    </View>
+                    <TouchableOpacity style={st.nextPill} onPress={() => go('login')} activeOpacity={0.85}>
+                      <Text style={st.nextPillT}>Next {'>'}</Text>
+                    </TouchableOpacity>
+                  </View>
+                </View>
+              )}
+
+              {/* ════════════════════════════════════════════ */}
+              {/* SCREEN 3: LOGIN                             */}
+              {/* ════════════════════════════════════════════ */}
+              {screen === 'login' && (
+                <View style={st.inner}>
+                  <View style={st.topContent}>
+                    <View style={st.brandC}>
+                      <Animated.View style={[st.logo, { transform: [{ scale: pulse }] }]}>
+                        <Text style={st.logoT}>M</Text>
+                      </Animated.View>
+                      <Text style={st.brandN}>MaterialMApp</Text>
+                      <Text style={st.brandTag}>Quarry & Weighbridge Dispatch</Text>
+                    </View>
+
+                    <View style={st.formH}>
+                      <Text style={st.formTitle}>Welcome Back!</Text>
+                      <Text style={st.formSub}>Sign in to continue to your account</Text>
+                    </View>
+
+                    {err ? <View style={st.errB}><Ionicons name="alert-circle" size={16} color="#ef4444" /><Text style={st.errT}>{err}</Text></View> : null}
+                    {suc ? <View style={st.sucB}><Ionicons name="checkmark-circle" size={16} color="#16a34a" /><Text style={st.sucT}>{suc}</Text></View> : null}
+
+                    {/* Email */}
+                    <View style={st.fg}>
+                      <Text style={st.fl}>Email Address</Text>
+                      <View style={[st.ib, focus === 'le' && st.ibF]}>
+                        <Ionicons name="mail-outline" size={18} color="#64748b" style={st.ii} />
+                        <TextInput style={st.ti} placeholder="Enter your email address" placeholderTextColor="#94a3b8" value={email} onChangeText={setEmail} keyboardType="email-address" autoCapitalize="none" onFocus={() => setFocus('le')} onBlur={() => setFocus(null)} />
+                        {email ? <TouchableOpacity onPress={() => setEmail('')} hitSlop={{top:8,bottom:8,left:8,right:8}}><Ionicons name="close-circle" size={16} color="#94a3b8" /></TouchableOpacity> : null}
+                      </View>
+                    </View>
+
+                    {/* Password */}
+                    <View style={st.fg}>
+                      <Text style={st.fl}>Password</Text>
+                      <View style={[st.ib, focus === 'lp' && st.ibF]}>
+                        <Ionicons name="lock-closed-outline" size={18} color="#64748b" style={st.ii} />
+                        <TextInput style={st.ti} placeholder="Enter your password" placeholderTextColor="#94a3b8" value={password} onChangeText={setPassword} secureTextEntry={!showPw} autoCapitalize="none" onFocus={() => setFocus('lp')} onBlur={() => setFocus(null)} />
+                        <TouchableOpacity onPress={() => setShowPw(v=>!v)} hitSlop={{top:8,bottom:8,left:8,right:8}}>
+                          <Ionicons name={showPw ? 'eye-off-outline' : 'eye-outline'} size={19} color="#64748b" />
+                        </TouchableOpacity>
+                      </View>
+                    </View>
+
+                    {/* Sign In */}
+                    <TouchableOpacity style={[st.pBtn, loading && {opacity:0.7}]} onPress={doLogin} disabled={loading} activeOpacity={0.85}>
+                      {loading ? <ActivityIndicator size="small" color="#fff" /> : <Text style={st.pBtnT}>Sign In</Text>}
+                    </TouchableOpacity>
+
+                    {/* OR */}
+                    <View style={st.orR}><View style={st.orL} /><Text style={st.orT}>OR</Text><View style={st.orL} /></View>
+
+                    {/* OTP */}
+                    <TouchableOpacity style={st.otpBtn} onPress={() => { setOtpMsg(''); setOtpSent(false); setOtpCode(''); setOtpVis(true); }} activeOpacity={0.8}>
+                      <Ionicons name="phone-portrait-outline" size={18} color="#0284c7" style={{marginRight:8}} />
+                      <Text style={st.otpBtnT}>Continue with OTP</Text>
+                    </TouchableOpacity>
+
+                    {/* Bottom link */}
+                    <View style={st.bLink}>
+                      <Text style={st.bLinkM}>Don't have an account? </Text>
+                      <TouchableOpacity onPress={() => go('register')} hitSlop={{top:8,bottom:8,left:4,right:8}}>
+                        <Text style={st.bLinkA}>Sign Up</Text>
+                      </TouchableOpacity>
+                    </View>
+                  </View>
+                </View>
+              )}
+
+              {/* ════════════════════════════════════════════ */}
+              {/* SCREEN 4: REGISTER                          */}
+              {/* ════════════════════════════════════════════ */}
+              {screen === 'register' && (
+                <View style={st.inner}>
+                  <View style={st.topContent}>
+                    <View style={st.brandC}>
+                      <Animated.View style={[st.logo, { transform: [{ scale: pulse }] }]}>
+                        <Text style={st.logoT}>M</Text>
+                      </Animated.View>
+                      <Text style={st.brandN}>MaterialMApp</Text>
+                      <Text style={st.brandTag}>Quarry & Weighbridge Dispatch</Text>
+                    </View>
+
+                    <View style={st.formH}>
+                      <Text style={st.formTitle}>Create Your Account</Text>
+                      <Text style={st.formSub}>Get started with your business account</Text>
+                    </View>
+
+                    {err ? <View style={st.errB}><Ionicons name="alert-circle" size={16} color="#ef4444" /><Text style={st.errT}>{err}</Text></View> : null}
+
+                    {/* Full Name */}
+                    <View style={st.fg}>
+                      <Text style={st.fl}>Full Name</Text>
+                      <View style={[st.ib, focus === 'rn' && st.ibF]}>
+                        <Ionicons name="person-outline" size={18} color="#64748b" style={st.ii} />
+                        <TextInput style={st.ti} placeholder="Enter your name" placeholderTextColor="#94a3b8" value={name} onChangeText={setName} autoCapitalize="words" onFocus={() => setFocus('rn')} onBlur={() => setFocus(null)} />
+                        {name ? <TouchableOpacity onPress={() => setName('')} hitSlop={{top:8,bottom:8,left:8,right:8}}><Ionicons name="close-circle" size={16} color="#94a3b8" /></TouchableOpacity> : null}
+                      </View>
+                    </View>
+
+                    {/* Email */}
+                    <View style={st.fg}>
+                      <Text style={st.fl}>Email Address</Text>
+                      <View style={[st.ib, focus === 're' && st.ibF]}>
+                        <Ionicons name="mail-outline" size={18} color="#64748b" style={st.ii} />
+                        <TextInput style={st.ti} placeholder="Enter your email" placeholderTextColor="#94a3b8" value={email} onChangeText={setEmail} keyboardType="email-address" autoCapitalize="none" onFocus={() => setFocus('re')} onBlur={() => setFocus(null)} />
+                        {email ? <TouchableOpacity onPress={() => setEmail('')} hitSlop={{top:8,bottom:8,left:8,right:8}}><Ionicons name="close-circle" size={16} color="#94a3b8" /></TouchableOpacity> : null}
+                      </View>
+                    </View>
+
+                    {/* Password */}
+                    <View style={st.fg}>
+                      <Text style={st.fl}>Password</Text>
+                      <View style={[st.ib, focus === 'rp' && st.ibF]}>
+                        <Ionicons name="lock-closed-outline" size={18} color="#64748b" style={st.ii} />
+                        <TextInput style={st.ti} placeholder="Create a password" placeholderTextColor="#94a3b8" value={password} onChangeText={setPassword} secureTextEntry={!showPw} autoCapitalize="none" onFocus={() => setFocus('rp')} onBlur={() => setFocus(null)} />
+                        <TouchableOpacity onPress={() => setShowPw(v=>!v)} hitSlop={{top:8,bottom:8,left:8,right:8}}>
+                          <Ionicons name={showPw ? 'eye-off-outline' : 'eye-outline'} size={19} color="#64748b" />
+                        </TouchableOpacity>
+                      </View>
+                    </View>
+
+                    {/* Sign Up */}
+                    <TouchableOpacity style={[st.pBtn, loading && {opacity:0.7}]} onPress={doRegister} disabled={loading} activeOpacity={0.85}>
+                      {loading ? <ActivityIndicator size="small" color="#fff" /> : <Text style={st.pBtnT}>Sign Up</Text>}
+                    </TouchableOpacity>
+
+                    <View style={st.termsW}>
+                      <Text style={st.termsT}>By continuing, you agree to our{' '}<Text style={st.termsL}>Terms & Conditions</Text> and{' '}<Text style={st.termsL}>Privacy Policy</Text></Text>
+                    </View>
                   </View>
                 </View>
               )}
             </Animated.View>
+          </ScrollView>
 
-            {/* ─── DECORATIVE WAVE AT BOTTOM ─── */}
-            <View style={s.waveWrap} pointerEvents="none">
-              <Svg width="100%" height="90" viewBox="0 0 375 90" preserveAspectRatio="none">
-                <Defs>
-                  <LinearGradient id="w1" x1="0" y1="0" x2="1" y2="1">
-                    <Stop offset="0" stopColor="#e0f2fe" stopOpacity="0.7" />
-                    <Stop offset="1" stopColor="#ccfbf1" stopOpacity="0.7" />
-                  </LinearGradient>
-                  <LinearGradient id="w2" x1="0" y1="0" x2="1" y2="0">
-                    <Stop offset="0" stopColor="#ccfbf1" stopOpacity="0.5" />
-                    <Stop offset="1" stopColor="#f0fdfa" stopOpacity="0.9" />
-                  </LinearGradient>
-                </Defs>
-                <Path d="M0,30 C90,58 190,12 285,40 C330,54 355,42 375,36 L375,90 L0,90 Z" fill="url(#w1)" />
-                <Path d="M0,48 C80,22 185,66 275,38 C325,20 355,32 375,40 L375,90 L0,90 Z" fill="url(#w2)" />
-              </Svg>
-            </View>
-          </View>
-        </ScrollView>
-
-        {/* ─── OTP MODAL ─── */}
-        <Modal visible={otpModalVisible} transparent animationType="fade" onRequestClose={() => setOtpModalVisible(false)}>
-          <TouchableOpacity style={s.modalBg} activeOpacity={1} onPress={() => setOtpModalVisible(false)}>
-            <TouchableOpacity style={s.modalBox} activeOpacity={1} onPress={e => Platform.OS === 'web' && e?.stopPropagation?.()}>
-              <View style={s.modalHeader}>
-                <View>
-                  <Text style={s.modalTitle}>Continue with OTP</Text>
-                  <Text style={s.modalSub}>Quick login via one-time verification</Text>
+          {/* ── OTP MODAL ── */}
+          <Modal visible={otpVis} transparent animationType="fade" onRequestClose={() => setOtpVis(false)}>
+            <TouchableOpacity style={st.mBg} activeOpacity={1} onPress={() => setOtpVis(false)}>
+              <TouchableOpacity style={st.mBox} activeOpacity={1} onPress={e => Platform.OS === 'web' && e?.stopPropagation?.()}>
+                <View style={st.mHdr}><View><Text style={st.mTtl}>Continue with OTP</Text><Text style={st.mSub}>Quick login via one-time verification</Text></View>
+                  <TouchableOpacity style={st.mClose} onPress={() => setOtpVis(false)}><Ionicons name="close" size={18} color="#64748b" /></TouchableOpacity>
                 </View>
-                <TouchableOpacity style={s.modalClose} onPress={() => setOtpModalVisible(false)}>
-                  <Ionicons name="close" size={18} color="#64748b" />
+                {otpMsg ? <View style={[st.errB,{backgroundColor:'#f0fdf4',borderColor:'#bbf7d0'}]}><Ionicons name="information-circle" size={16} color="#15803d" /><Text style={[st.errT,{color:'#15803d'}]}>{otpMsg}</Text></View> : null}
+                <View style={st.fg}><Text style={st.fl}>Mobile Number or Email</Text><View style={st.ib}><Ionicons name="call-outline" size={17} color="#64748b" style={st.ii} /><TextInput style={st.ti} placeholder="+91 98765 43210 or email" placeholderTextColor="#94a3b8" value={otpPh} onChangeText={setOtpPh} autoCapitalize="none" /></View></View>
+                {otpSent && <View style={st.fg}><Text style={st.fl}>6-Digit OTP</Text><View style={st.ib}><Ionicons name="key-outline" size={17} color="#64748b" style={st.ii} /><TextInput style={st.ti} placeholder="Enter 6-digit code" placeholderTextColor="#94a3b8" value={otpCode} onChangeText={setOtpCode} keyboardType="number-pad" /></View></View>}
+                <TouchableOpacity style={[st.pBtn, otpLoad && {opacity:0.7}]} onPress={otpSent ? verifyOtp : sendOtp} disabled={otpLoad}>
+                  {otpLoad ? <ActivityIndicator size="small" color="#fff" /> : <Text style={st.pBtnT}>{otpSent ? 'Verify & Sign In' : 'Send OTP'}</Text>}
                 </TouchableOpacity>
-              </View>
-              {otpMsg ? (
-                <View style={[s.errorBanner, { backgroundColor: '#f0fdf4', borderColor: '#bbf7d0' }]}>
-                  <Ionicons name="information-circle" size={16} color="#15803d" />
-                  <Text style={[s.errorText, { color: '#15803d' }]}>{otpMsg}</Text>
-                </View>
-              ) : null}
-              <View style={s.fieldGroup}>
-                <Text style={s.fieldLabel}>Mobile Number or Email</Text>
-                <View style={s.inputBox}>
-                  <Ionicons name="call-outline" size={17} color="#64748b" style={s.inputIcon} />
-                  <TextInput style={s.textInput} placeholder="+91 98765 43210 or email" placeholderTextColor="#94a3b8" value={otpPhone} onChangeText={setOtpPhone} autoCapitalize="none" />
-                </View>
-              </View>
-              {otpSent && (
-                <View style={s.fieldGroup}>
-                  <Text style={s.fieldLabel}>6-Digit OTP</Text>
-                  <View style={s.inputBox}>
-                    <Ionicons name="key-outline" size={17} color="#64748b" style={s.inputIcon} />
-                    <TextInput style={s.textInput} placeholder="Enter 6-digit code" placeholderTextColor="#94a3b8" value={otpCode} onChangeText={setOtpCode} keyboardType="number-pad" />
-                  </View>
-                </View>
-              )}
-              <TouchableOpacity style={[s.primaryBtn, otpLoading && { opacity: 0.7 }]} onPress={otpSent ? handleVerifyOtp : handleSendOtp} disabled={otpLoading}>
-                {otpLoading ? <ActivityIndicator size="small" color="#fff" /> : <Text style={s.primaryBtnText}>{otpSent ? 'Verify & Sign In' : 'Send OTP'}</Text>}
               </TouchableOpacity>
             </TouchableOpacity>
-          </TouchableOpacity>
-        </Modal>
+          </Modal>
+        </View>
       </KeyboardAvoidingView>
     </SafeAreaView>
   );
 };
 
-// ─────────────────────────────────────────────────
+// ─────────────────────────────────────────
 // STYLES
-// ─────────────────────────────────────────────────
-const s = StyleSheet.create({
-  safe: {
-    flex: 1,
-    backgroundColor: '#ffffff',
-    ...(Platform.OS === 'web' ? { minHeight: '100vh' } : {}),
-  },
-  kav: {
-    flex: 1,
-  },
-  scroll: {
-    flexGrow: 1,
-  },
+// ─────────────────────────────────────────
+const st = StyleSheet.create({
+  safe: { flex: 1, backgroundColor: '#ffffff' },
+  root: { flex: 1, width: '100%', position: 'relative' },
+  scroll: { flexGrow: 1 },
 
-  /* Full-screen canvas */
-  canvas: {
-    flex: 1,
-    width: '100%',
-    backgroundColor: '#ffffff',
-    position: 'relative',
+  /* Full-screen gradient background */
+  bgGradient: {
+    position: 'absolute',
+    top: 0, left: 0, right: 0, bottom: 0,
+    zIndex: 0,
   },
 
   /* Top Bar */
   topBar: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 16,
-    paddingTop: Platform.OS === 'web' ? 16 : 8,
-    paddingBottom: 4,
-    minHeight: 50,
-    zIndex: 10,
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+    paddingHorizontal: 16, paddingTop: Platform.OS === 'web' ? 16 : 10, paddingBottom: 4,
+    minHeight: 52, zIndex: 10,
   },
-  topBarRight: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
+  topRight: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  backBtn: { width: 40, height: 40, alignItems: 'center', justifyContent: 'center' },
+  pillOutline: {
+    borderWidth: 1.5, borderColor: '#0284c7', backgroundColor: 'rgba(255,255,255,0.9)',
+    paddingHorizontal: 18, paddingVertical: 7, borderRadius: 22,
   },
-  backBtn: {
-    width: 40,
-    height: 40,
-    alignItems: 'center',
-    justifyContent: 'center',
+  pillOutlineT: { color: '#0284c7', fontSize: 13.5, fontWeight: '700' },
+  pillFill: {
+    backgroundColor: '#0284c7', paddingHorizontal: 18, paddingVertical: 7, borderRadius: 22,
+    shadowColor: '#0284c7', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.3, shadowRadius: 4, elevation: 3,
   },
-  loginPillOutline: {
-    borderWidth: 1.5,
-    borderColor: '#0284c7',
-    backgroundColor: '#ffffff',
-    paddingHorizontal: 18,
-    paddingVertical: 7,
-    borderRadius: 20,
-  },
-  loginPillOutlineText: {
-    color: '#0284c7',
-    fontSize: 13.5,
-    fontWeight: '700',
-  },
-  signUpPill: {
-    backgroundColor: '#0284c7',
-    paddingHorizontal: 18,
-    paddingVertical: 7,
-    borderRadius: 20,
-    shadowColor: '#0284c7',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.3,
-    shadowRadius: 4,
-    elevation: 3,
-  },
-  signUpPillText: {
-    color: '#ffffff',
-    fontSize: 13.5,
-    fontWeight: '700',
-  },
+  pillFillT: { color: '#fff', fontSize: 13.5, fontWeight: '700' },
 
-  /* Animated content */
-  contentArea: {
-    flex: 1,
-    width: '100%',
-  },
-  screenInner: {
-    flex: 1,
-    paddingHorizontal: 24,
-    paddingTop: 8,
-    paddingBottom: 100,
-  },
+  /* Content */
+  content: { flex: 1, width: '100%', zIndex: 1 },
+  inner: { flex: 1, paddingHorizontal: 24 },
+  topContent: { flex: 1 },
 
   /* Brand */
-  brandCenter: {
-    alignItems: 'center',
-    marginBottom: 12,
+  brandC: { alignItems: 'center', marginTop: 8, marginBottom: 14 },
+  logo: {
+    width: 54, height: 54, borderRadius: 16, backgroundColor: '#0d9488',
+    alignItems: 'center', justifyContent: 'center', marginBottom: 8,
+    shadowColor: '#0d9488', shadowOffset: { width: 0, height: 5 }, shadowOpacity: 0.35, shadowRadius: 12, elevation: 6,
   },
-  logoBadge: {
-    width: 52,
-    height: 52,
-    borderRadius: 15,
-    backgroundColor: '#0d9488',
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: 8,
-    shadowColor: '#0d9488',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 10,
-    elevation: 5,
-  },
-  logoLetter: {
-    color: '#ffffff',
-    fontSize: 28,
-    fontWeight: '900',
-  },
-  brandName: {
-    fontSize: 24,
-    fontWeight: '800',
-    color: '#0f172a',
-    letterSpacing: -0.4,
-  },
-  brandTagline: {
-    fontSize: 13,
-    fontWeight: '700',
-    color: '#0d9488',
-    marginTop: 3,
-  },
+  logoT: { color: '#fff', fontSize: 28, fontWeight: '900' },
+  brandN: { fontSize: 25, fontWeight: '800', color: '#0f172a', letterSpacing: -0.5 },
+  brandTag: { fontSize: 13.5, fontWeight: '700', color: '#0d9488', marginTop: 2 },
 
-  /* Onboarding Screen 1 */
-  onboardDesc: {
-    fontSize: 14,
-    color: '#64748b',
-    textAlign: 'center',
-    lineHeight: 20,
-    marginBottom: 16,
-    paddingHorizontal: 8,
-  },
+  /* Onboarding 1 */
+  obDesc: { fontSize: 14, color: '#64748b', textAlign: 'center', lineHeight: 21, marginBottom: 16, paddingHorizontal: 4 },
   heroWrap: {
-    width: '100%',
-    height: 240,
-    borderRadius: 18,
-    overflow: 'hidden',
-    backgroundColor: '#f8fafc',
-    marginBottom: 20,
-    shadowColor: '#0d9488',
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.15,
-    shadowRadius: 16,
-    elevation: 4,
+    width: '100%', borderRadius: 18, overflow: 'hidden', backgroundColor: '#f0fdfa',
+    shadowColor: '#0d9488', shadowOffset: { width: 0, height: 8 }, shadowOpacity: 0.18, shadowRadius: 18, elevation: 5,
   },
-  heroImg: {
-    width: '100%',
-    height: '100%',
+  heroImg: { width: '100%', height: '100%' },
+  obBottom: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+    paddingTop: 16, paddingBottom: 32,
   },
-  onboardBottom: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingVertical: 8,
-  },
-  dotsRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-  },
-  dot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-    backgroundColor: '#cbd5e1',
-  },
-  dotActive: {
-    width: 20,
-    backgroundColor: '#0d9488',
-    borderRadius: 4,
-  },
-  skipBtn: {
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-  },
-  skipBtnText: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#64748b',
-  },
+  dots: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  dot: { width: 8, height: 8, borderRadius: 4, backgroundColor: '#cbd5e1' },
+  dotOn: { width: 22, backgroundColor: '#0d9488', borderRadius: 4 },
+  skipBtn: { paddingHorizontal: 12, paddingVertical: 8 },
+  skipT: { fontSize: 14, fontWeight: '600', color: '#64748b' },
 
-  /* Onboarding Screen 2 */
+  /* Onboarding 2 */
   heroWrap2: {
-    width: '100%',
-    height: 200,
-    borderRadius: 18,
-    overflow: 'hidden',
-    backgroundColor: '#f8fafc',
-    marginBottom: 16,
-    shadowColor: '#0284c7',
-    shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.12,
-    shadowRadius: 14,
-    elevation: 4,
+    width: '100%', borderRadius: 18, overflow: 'hidden', backgroundColor: '#f0fdfa',
+    marginBottom: 18,
+    shadowColor: '#0284c7', shadowOffset: { width: 0, height: 6 }, shadowOpacity: 0.14, shadowRadius: 16, elevation: 4,
   },
-  slide2Title: {
-    fontSize: 22,
-    fontWeight: '800',
-    color: '#0f172a',
-    letterSpacing: -0.3,
-    marginBottom: 16,
+  s2Title: { fontSize: 23, fontWeight: '800', color: '#0f172a', letterSpacing: -0.3, marginBottom: 18, lineHeight: 30 },
+  featCol: { gap: 12 },
+  featRow: {
+    flexDirection: 'row', alignItems: 'center', backgroundColor: 'rgba(255,255,255,0.85)',
+    borderRadius: 14, borderWidth: 1, borderColor: '#f1f5f9', padding: 13, gap: 14,
+    shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.04, shadowRadius: 3, elevation: 1,
   },
-  featuresCol: {
-    gap: 12,
-    marginBottom: 20,
-  },
-  featureRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#ffffff',
-    borderRadius: 14,
-    borderWidth: 1,
-    borderColor: '#f1f5f9',
-    padding: 12,
-    gap: 14,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.04,
-    shadowRadius: 3,
-    elevation: 1,
-  },
-  featureIcon: {
-    width: 42,
-    height: 42,
-    borderRadius: 21,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  featureTextCol: {
-    flex: 1,
-  },
-  featureTitle: {
-    fontSize: 14,
-    fontWeight: '700',
-    color: '#0f172a',
-  },
-  featureSub: {
-    fontSize: 12,
-    color: '#64748b',
-    marginTop: 2,
-  },
-  onboardBottom2: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingVertical: 8,
-  },
-  backTextBtn: {
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-  },
-  backTextBtnLabel: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#64748b',
+  featIc: { width: 42, height: 42, borderRadius: 21, alignItems: 'center', justifyContent: 'center' },
+  featT: { fontSize: 14.5, fontWeight: '700', color: '#0f172a' },
+  featS: { fontSize: 12, color: '#64748b', marginTop: 2 },
+  obBottom2: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+    paddingTop: 18, paddingBottom: 32,
   },
   nextPill: {
-    backgroundColor: '#0284c7',
-    paddingHorizontal: 22,
-    paddingVertical: 10,
-    borderRadius: 22,
-    shadowColor: '#0284c7',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.3,
-    shadowRadius: 4,
-    elevation: 3,
+    backgroundColor: '#0284c7', paddingHorizontal: 24, paddingVertical: 11, borderRadius: 24,
+    shadowColor: '#0284c7', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.3, shadowRadius: 4, elevation: 3,
   },
-  nextPillText: {
-    color: '#ffffff',
-    fontSize: 13.5,
-    fontWeight: '700',
-  },
+  nextPillT: { color: '#fff', fontSize: 14, fontWeight: '700' },
 
-  /* Form (Login & Register) */
-  formBlock: {
-    marginBottom: 16,
-  },
-  formTitle: {
-    fontSize: 22,
-    fontWeight: '800',
-    color: '#0f172a',
-    letterSpacing: -0.3,
-  },
-  formSubtitle: {
-    fontSize: 13.5,
-    color: '#64748b',
-    marginTop: 3,
-  },
+  /* Form */
+  formH: { marginBottom: 18 },
+  formTitle: { fontSize: 23, fontWeight: '800', color: '#0f172a', letterSpacing: -0.3 },
+  formSub: { fontSize: 14, color: '#64748b', marginTop: 3 },
 
-  /* Input Fields */
-  fieldGroup: {
-    marginBottom: 14,
+  /* Inputs */
+  fg: { marginBottom: 14 },
+  fl: { fontSize: 13, fontWeight: '700', color: '#334155', marginBottom: 6 },
+  ib: {
+    flexDirection: 'row', alignItems: 'center', backgroundColor: '#ffffff',
+    borderWidth: 1, borderColor: '#e2e8f0', borderRadius: 12, paddingHorizontal: 14, height: 50,
   },
-  fieldLabel: {
-    fontSize: 13,
-    fontWeight: '700',
-    color: '#334155',
-    marginBottom: 6,
-  },
-  inputBox: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#ffffff',
-    borderWidth: 1,
-    borderColor: '#e2e8f0',
-    borderRadius: 12,
-    paddingHorizontal: 14,
-    height: 50,
-  },
-  inputBoxFocus: {
-    borderColor: '#0284c7',
-    borderWidth: 1.5,
-    backgroundColor: '#f0f9ff',
-  },
-  inputIcon: {
-    marginRight: 10,
-  },
-  textInput: {
-    flex: 1,
-    height: 50,
-    fontSize: 14,
-    color: '#0f172a',
+  ibF: { borderColor: '#0284c7', borderWidth: 1.5, backgroundColor: '#f0f9ff' },
+  ii: { marginRight: 10 },
+  ti: {
+    flex: 1, height: 50, fontSize: 14, color: '#0f172a',
     ...(Platform.OS === 'web' ? { outlineWidth: 0 } : {}),
   },
 
   /* Buttons */
-  primaryBtn: {
-    backgroundColor: '#0284c7',
-    height: 50,
-    borderRadius: 12,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginTop: 6,
-    shadowColor: '#0284c7',
-    shadowOffset: { width: 0, height: 3 },
-    shadowOpacity: 0.3,
-    shadowRadius: 6,
-    elevation: 3,
+  pBtn: {
+    backgroundColor: '#0284c7', height: 50, borderRadius: 12, alignItems: 'center', justifyContent: 'center', marginTop: 6,
+    shadowColor: '#0284c7', shadowOffset: { width: 0, height: 3 }, shadowOpacity: 0.3, shadowRadius: 6, elevation: 3,
   },
-  primaryBtnText: {
-    color: '#ffffff',
-    fontSize: 15.5,
-    fontWeight: '700',
-  },
-  orRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginVertical: 16,
-    gap: 12,
-  },
-  orLine: {
-    flex: 1,
-    height: 1,
-    backgroundColor: '#e2e8f0',
-  },
-  orText: {
-    fontSize: 12,
-    fontWeight: '700',
-    color: '#94a3b8',
-    letterSpacing: 0.5,
-  },
+  pBtnT: { color: '#fff', fontSize: 15.5, fontWeight: '700' },
+  orR: { flexDirection: 'row', alignItems: 'center', marginVertical: 16, gap: 12 },
+  orL: { flex: 1, height: 1, backgroundColor: '#e2e8f0' },
+  orT: { fontSize: 12, fontWeight: '700', color: '#94a3b8', letterSpacing: 0.5 },
   otpBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    height: 50,
-    borderRadius: 12,
-    borderWidth: 1.5,
-    borderColor: '#0284c7',
-    backgroundColor: '#ffffff',
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
+    height: 50, borderRadius: 12, borderWidth: 1.5, borderColor: '#0284c7', backgroundColor: '#fff',
   },
-  otpBtnText: {
-    color: '#0284c7',
-    fontSize: 14,
-    fontWeight: '700',
-  },
-  bottomLink: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginTop: 20,
-  },
-  bottomLinkMuted: {
-    fontSize: 14,
-    color: '#64748b',
-  },
-  bottomLinkAction: {
-    fontSize: 14,
-    fontWeight: '700',
-    color: '#0284c7',
-  },
-  termsWrap: {
-    marginTop: 18,
-    alignItems: 'center',
-    paddingHorizontal: 10,
-  },
-  termsText: {
-    fontSize: 12,
-    color: '#94a3b8',
-    textAlign: 'center',
-    lineHeight: 18,
-  },
-  termsLink: {
-    color: '#0284c7',
-    fontWeight: '600',
-  },
+  otpBtnT: { color: '#0284c7', fontSize: 14, fontWeight: '700' },
+  bLink: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', marginTop: 20 },
+  bLinkM: { fontSize: 14, color: '#64748b' },
+  bLinkA: { fontSize: 14, fontWeight: '700', color: '#0284c7' },
+  termsW: { marginTop: 18, alignItems: 'center', paddingHorizontal: 10 },
+  termsT: { fontSize: 12, color: '#94a3b8', textAlign: 'center', lineHeight: 18 },
+  termsL: { color: '#0284c7', fontWeight: '600' },
 
   /* Banners */
-  errorBanner: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#fef2f2',
-    borderWidth: 1,
-    borderColor: '#fecaca',
-    paddingHorizontal: 12,
-    paddingVertical: 9,
-    borderRadius: 8,
-    marginBottom: 12,
-    gap: 8,
+  errB: {
+    flexDirection: 'row', alignItems: 'center', backgroundColor: '#fef2f2',
+    borderWidth: 1, borderColor: '#fecaca', paddingHorizontal: 12, paddingVertical: 9, borderRadius: 8, marginBottom: 12, gap: 8,
   },
-  errorText: {
-    fontSize: 12.5,
-    color: '#b91c1c',
-    fontWeight: '600',
-    flex: 1,
+  errT: { fontSize: 12.5, color: '#b91c1c', fontWeight: '600', flex: 1 },
+  sucB: {
+    flexDirection: 'row', alignItems: 'center', backgroundColor: '#f0fdf4',
+    borderWidth: 1, borderColor: '#bbf7d0', paddingHorizontal: 12, paddingVertical: 9, borderRadius: 8, marginBottom: 12, gap: 8,
   },
-  successBanner: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#f0fdf4',
-    borderWidth: 1,
-    borderColor: '#bbf7d0',
-    paddingHorizontal: 12,
-    paddingVertical: 9,
-    borderRadius: 8,
-    marginBottom: 12,
-    gap: 8,
-  },
-  successText: {
-    fontSize: 12.5,
-    color: '#15803d',
-    fontWeight: '600',
-    flex: 1,
-  },
-
-  /* Wave */
-  waveWrap: {
-    position: 'absolute',
-    bottom: 0,
-    left: 0,
-    right: 0,
-    zIndex: -1,
-  },
+  sucT: { fontSize: 12.5, color: '#15803d', fontWeight: '600', flex: 1 },
 
   /* Modal */
-  modalBg: {
-    flex: 1,
-    backgroundColor: 'rgba(15, 23, 42, 0.55)',
-    alignItems: 'center',
-    justifyContent: 'center',
-    padding: 20,
+  mBg: { flex: 1, backgroundColor: 'rgba(15,23,42,0.55)', alignItems: 'center', justifyContent: 'center', padding: 20 },
+  mBox: {
+    width: '100%', maxWidth: 360, backgroundColor: '#fff', borderRadius: 16, padding: 20,
+    shadowColor: '#0f172a', shadowOffset: { width: 0, height: 10 }, shadowOpacity: 0.2, shadowRadius: 20, elevation: 8,
   },
-  modalBox: {
-    width: '100%',
-    maxWidth: 360,
-    backgroundColor: '#fff',
-    borderRadius: 16,
-    padding: 20,
-    shadowColor: '#0f172a',
-    shadowOffset: { width: 0, height: 10 },
-    shadowOpacity: 0.2,
-    shadowRadius: 20,
-    elevation: 8,
-  },
-  modalHeader: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    justifyContent: 'space-between',
-    marginBottom: 14,
-  },
-  modalTitle: {
-    fontSize: 16,
-    fontWeight: '800',
-    color: '#0f172a',
-  },
-  modalSub: {
-    fontSize: 12,
-    color: '#64748b',
-    marginTop: 2,
-  },
-  modalClose: {
-    width: 28,
-    height: 28,
-    borderRadius: 14,
-    backgroundColor: '#f1f5f9',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
+  mHdr: { flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 14 },
+  mTtl: { fontSize: 16, fontWeight: '800', color: '#0f172a' },
+  mSub: { fontSize: 12, color: '#64748b', marginTop: 2 },
+  mClose: { width: 28, height: 28, borderRadius: 14, backgroundColor: '#f1f5f9', alignItems: 'center', justifyContent: 'center' },
 });
