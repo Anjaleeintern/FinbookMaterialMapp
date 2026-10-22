@@ -1,7 +1,7 @@
 import { Platform, NativeModules } from 'react-native';
 
 // Environment variables configured in frontend/.env (EXPO_PUBLIC_ prefix)
-const ENV_API_URL = process.env.EXPO_PUBLIC_API_URL;
+const ENV_API_URL = process.env.EXPO_PUBLIC_API_URL || 'https://finbookmaterialmapp.onrender.com';
 const ENV_BACKEND_HOST = process.env.EXPO_PUBLIC_BACKEND_HOST || '192.168.1.15';
 const ENV_BACKEND_PORT = process.env.EXPO_PUBLIC_BACKEND_PORT || '8000';
 const ENV_PROXY_PORT = process.env.EXPO_PUBLIC_PROXY_PORT || '8005';
