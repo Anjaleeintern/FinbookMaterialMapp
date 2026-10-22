@@ -485,7 +485,7 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   fullWidthCard: {
-    width: '100% !important',
+    width: '100%',
   },
   /* Challenge Card */
   challengeCard: {

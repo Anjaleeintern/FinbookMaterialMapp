@@ -674,8 +674,8 @@ export const MastersView = React.memo(({ masters, onRefresh }) => {
                   onPress={() => handleOpenImport(activeCategory)}
                   activeOpacity={0.8}
                 >
-                  <Ionicons name="cloud-upload-outline" size={15} color="#059669" style={{ marginRight: 4 }} />
-                  <Text style={styles.mobileImportBtnText} numberOfLines={1}>Import Excel</Text>
+                  <Ionicons name="cloud-upload-outline" size={17} color="#059669" />
+                  <Text style={styles.mobileImportBtnText} numberOfLines={2}>Import Excel</Text>
                 </TouchableOpacity>
 
                 <TouchableOpacity
@@ -683,7 +683,7 @@ export const MastersView = React.memo(({ masters, onRefresh }) => {
                   onPress={() => handleDownloadTemplate('xlsx')}
                   activeOpacity={0.8}
                 >
-                  <Ionicons name="download-outline" size={15} color="#0284c7" style={{ marginRight: 4 }} />
+                  <Ionicons name="download-outline" size={17} color="#0284c7" />
                   <Text style={styles.mobileTemplateBtnText} numberOfLines={1}>Template</Text>
                 </TouchableOpacity>
               </View>
@@ -1525,43 +1525,49 @@ const styles = StyleSheet.create({
     flex: 1,
     flexDirection: 'row',
     gap: 6,
-    alignItems: 'center',
+    alignItems: 'stretch',
   },
   mobileImportBtn: {
     flex: 1,
-    height: '100%',
     minHeight: 52,
-    flexDirection: 'row',
+    flexDirection: 'column',
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: '#ffffff',
-    borderWidth: 1,
+    borderWidth: 1.2,
     borderColor: '#6ee7b7',
     borderRadius: 9,
+    paddingVertical: 5,
     paddingHorizontal: 4,
   },
   mobileImportBtnText: {
-    fontSize: 11,
+    fontSize: 10,
     fontWeight: '700',
     color: '#059669',
+    textAlign: 'center',
+    marginTop: 2,
+    lineHeight: 12,
   },
   mobileTemplateBtn: {
     flex: 1,
-    height: '100%',
     minHeight: 52,
-    flexDirection: 'row',
+    flexDirection: 'column',
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: '#ffffff',
-    borderWidth: 1,
+    borderWidth: 1.2,
     borderColor: '#93c5fd',
     borderRadius: 9,
+    paddingVertical: 5,
     paddingHorizontal: 4,
   },
   mobileTemplateBtnText: {
-    fontSize: 11,
+    fontSize: 10,
     fontWeight: '700',
     color: '#0284c7',
+    textAlign: 'center',
+    marginTop: 2,
+    lineHeight: 12,
   },
   smallCard: {
     flex: 1,

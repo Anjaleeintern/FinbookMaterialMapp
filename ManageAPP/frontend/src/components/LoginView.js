@@ -12,10 +12,10 @@ import {
   Platform,
   Modal,
   KeyboardAvoidingView,
-  SafeAreaView,
   StatusBar,
   useWindowDimensions,
 } from 'react-native';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import Svg, { Path, Defs, LinearGradient as SvgLinearGradient, Stop } from 'react-native-svg';
 import { useAuth } from '../context/AuthContext';
@@ -26,6 +26,7 @@ const operationsHero = require('../../assets/operations_hero.jpg');
 
 export const LoginView = () => {
   const { login } = useAuth();
+  const insets = useSafeAreaInsets();
   const { width: winW, height: winH } = useWindowDimensions();
 
   // Screens: 'landing' | 'login' | 'register'
@@ -41,6 +42,11 @@ export const LoginView = () => {
   const [suc, setSuc] = useState('');
   const [focus, setFocus] = useState(null);
 
+  // Input refs for direct focus without re-render glitches
+  const emailRef = useRef(null);
+  const pwRef = useRef(null);
+  const nameRef = useRef(null);
+
   // OTP modal state
   const [otpVis, setOtpVis] = useState(false);
   const [otpPh, setOtpPh] = useState('');
@@ -49,43 +55,37 @@ export const LoginView = () => {
   const [otpLoad, setOtpLoad] = useState(false);
   const [otpMsg, setOtpMsg] = useState('');
 
-  // Animations
+  // Animations (use opacity-only transitions so Android coordinates are never altered)
   const fade = useRef(new Animated.Value(1)).current;
-  const slide = useRef(new Animated.Value(0)).current;
   const pulse = useRef(new Animated.Value(1)).current;
   const float = useRef(new Animated.Value(0)).current;
+
+  const useNative = Platform.OS !== 'web';
 
   useEffect(() => {
     // Pulse animation on logo
     Animated.loop(
       Animated.sequence([
-        Animated.timing(pulse, { toValue: 1.05, duration: 1600, useNativeDriver: true }),
-        Animated.timing(pulse, { toValue: 1, duration: 1600, useNativeDriver: true }),
+        Animated.timing(pulse, { toValue: 1.05, duration: 1600, useNativeDriver: useNative }),
+        Animated.timing(pulse, { toValue: 1, duration: 1600, useNativeDriver: useNative }),
       ])
     ).start();
 
     // Floating animation on hero images
     Animated.loop(
       Animated.sequence([
-        Animated.timing(float, { toValue: -6, duration: 2200, useNativeDriver: true }),
-        Animated.timing(float, { toValue: 0, duration: 2200, useNativeDriver: true }),
+        Animated.timing(float, { toValue: -6, duration: 2200, useNativeDriver: useNative }),
+        Animated.timing(float, { toValue: 0, duration: 2200, useNativeDriver: useNative }),
       ])
     ).start();
   }, []);
 
-  const go = (to, dir = 'next') => {
+  const go = (to) => {
     setErr('');
     setSuc('');
-    Animated.parallel([
-      Animated.timing(fade, { toValue: 0, duration: 120, useNativeDriver: true }),
-      Animated.timing(slide, { toValue: dir === 'next' ? -25 : 25, duration: 120, useNativeDriver: true }),
-    ]).start(() => {
+    Animated.timing(fade, { toValue: 0, duration: 120, useNativeDriver: useNative }).start(() => {
       setScreen(to);
-      slide.setValue(dir === 'next' ? 25 : -25);
-      Animated.parallel([
-        Animated.timing(fade, { toValue: 1, duration: 180, useNativeDriver: true }),
-        Animated.timing(slide, { toValue: 0, duration: 180, useNativeDriver: true }),
-      ]).start();
+      Animated.timing(fade, { toValue: 1, duration: 160, useNativeDriver: useNative }).start();
     });
   };
 
@@ -184,19 +184,29 @@ export const LoginView = () => {
   const isDesktop = winW >= 560;
   const heroHeight = Math.min(Math.max(winH * 0.28, 200), 260);
 
+  // Accurate Status Bar Top Padding for Phone (Android punch-hole, iOS notch, Web)
+  const androidStatusBar = Platform.OS === 'android' ? (StatusBar.currentHeight || 38) : 0;
+  const topSafePadding = Math.max(insets?.top || 0, androidStatusBar, Platform.OS === 'web' ? 14 : 0);
+  const bottomSafePadding = Math.max(insets?.bottom || 0, 24);
+
   return (
     <SafeAreaView style={st.outer}>
-      <StatusBar barStyle="dark-content" backgroundColor="#f0fdfa" />
+      <StatusBar barStyle="dark-content" backgroundColor="#f0fdfa" translucent />
       <KeyboardAvoidingView
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
         style={st.keyboardView}
       >
         {/* Device frame container for real app view */}
-        <View style={[st.deviceContainer, isDesktop && st.deviceDesktopFrame]}>
+        <View
+          style={[
+            st.deviceContainer,
+            isDesktop ? st.deviceDesktopFrame : { overflow: 'visible' },
+          ]}
+        >
           
-          {/* Subtle Background Waves (Full Screen) */}
+          {/* Subtle Background Waves (Full Screen - pointerEvents none ensures touches never get blocked) */}
           <View style={st.bgSvgWrapper} pointerEvents="none">
-            <Svg width="100%" height="100%" viewBox="0 0 400 900" preserveAspectRatio="none">
+            <Svg width="100%" height="100%" viewBox="0 0 400 900" preserveAspectRatio="none" pointerEvents="none">
               <Defs>
                 <SvgLinearGradient id="bgGrad" x1="0" y1="0" x2="0" y2="1">
                   <Stop offset="0" stopColor="#ffffff" stopOpacity="1" />
@@ -225,8 +235,8 @@ export const LoginView = () => {
             </Svg>
           </View>
 
-          {/* ════════════ TOP APP BAR ════════════ */}
-          <View style={st.topBar}>
+          {/* ════════════ TOP APP BAR (Padded below phone status bar) ════════════ */}
+          <View style={[st.topBar, { paddingTop: topSafePadding + 8 }]}>
             {screen === 'landing' ? (
               <>
                 <View style={st.brandMini}>
@@ -256,8 +266,8 @@ export const LoginView = () => {
               <>
                 <TouchableOpacity
                   style={st.backCircle}
-                  onPress={() => go('landing', 'back')}
-                  hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                  onPress={() => go('landing')}
+                  hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
                   activeOpacity={0.7}
                 >
                   <Ionicons name="chevron-back" size={22} color="#0f172a" />
@@ -279,8 +289,8 @@ export const LoginView = () => {
               <>
                 <TouchableOpacity
                   style={st.backCircle}
-                  onPress={() => go('login', 'back')}
-                  hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                  onPress={() => go('login')}
+                  hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
                   activeOpacity={0.7}
                 >
                   <Ionicons name="chevron-back" size={22} color="#0f172a" />
@@ -288,7 +298,7 @@ export const LoginView = () => {
                 <View style={st.topRightBtns}>
                   <TouchableOpacity
                     style={st.pillOutline}
-                    onPress={() => go('login', 'back')}
+                    onPress={() => go('login')}
                     activeOpacity={0.8}
                   >
                     <Text style={st.pillOutlineT}>Login</Text>
@@ -301,22 +311,16 @@ export const LoginView = () => {
           {/* ════════════ SCROLLABLE CONTENT ════════════ */}
           <ScrollView
             style={st.scroll}
-            contentContainerStyle={st.scrollContent}
-            keyboardShouldPersistTaps="handled"
+            contentContainerStyle={[st.scrollContent, { paddingBottom: bottomSafePadding }]}
+            keyboardShouldPersistTaps="always"
+            keyboardDismissMode="none"
             showsVerticalScrollIndicator={false}
             bounces={false}
           >
-            <Animated.View
-              style={[
-                st.animatedWrap,
-                { opacity: fade, transform: [{ translateX: slide }] },
-              ]}
-            >
+            <Animated.View style={[st.animatedWrap, { opacity: fade }]}>
 
               {/* ──────────────────────────────────────────────────────── */}
               {/* SCREEN 1: COMPLETE FIRST LANDING PAGE                   */}
-              {/* (Includes M Logo, Weighbridge Hero, Simplify Section,   */}
-              {/*  3 Feature Cards, Operations Hero & Get Started CTAs)    */}
               {/* ──────────────────────────────────────────────────────── */}
               {screen === 'landing' && (
                 <View style={st.landingContainer}>
@@ -505,36 +509,47 @@ export const LoginView = () => {
                   {/* Email Input */}
                   <View style={st.inputGroup}>
                     <Text style={st.inputLabel}>Email Address</Text>
-                    <View style={[st.inputBox, focus === 'email' && st.inputBoxFocused]}>
+                    <TouchableOpacity
+                      style={[st.inputBox, focus === 'email' && st.inputBoxFocused]}
+                      activeOpacity={1}
+                      onPress={() => emailRef.current?.focus()}
+                    >
                       <Ionicons name="mail-outline" size={18} color="#64748b" style={st.inputIcon} />
                       <TextInput
+                        ref={emailRef}
                         style={st.textInput}
-                        placeholder="admin@materialmapp.com"
+                        placeholder="Enter your email address"
                         placeholderTextColor="#94a3b8"
                         value={email}
                         onChangeText={setEmail}
                         keyboardType="email-address"
                         autoCapitalize="none"
+                        autoCorrect={false}
                         onFocus={() => setFocus('email')}
                         onBlur={() => setFocus(null)}
                       />
                       {email ? (
                         <TouchableOpacity
                           onPress={() => setEmail('')}
-                          hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                          hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
                         >
-                          <Ionicons name="close-circle" size={17} color="#94a3b8" />
+                          <Ionicons name="close-circle" size={18} color="#94a3b8" />
                         </TouchableOpacity>
                       ) : null}
-                    </View>
+                    </TouchableOpacity>
                   </View>
 
                   {/* Password Input */}
                   <View style={st.inputGroup}>
                     <Text style={st.inputLabel}>Password</Text>
-                    <View style={[st.inputBox, focus === 'pw' && st.inputBoxFocused]}>
+                    <TouchableOpacity
+                      style={[st.inputBox, focus === 'pw' && st.inputBoxFocused]}
+                      activeOpacity={1}
+                      onPress={() => pwRef.current?.focus()}
+                    >
                       <Ionicons name="lock-closed-outline" size={18} color="#64748b" style={st.inputIcon} />
                       <TextInput
+                        ref={pwRef}
                         style={st.textInput}
                         placeholder="Enter your password"
                         placeholderTextColor="#94a3b8"
@@ -542,20 +557,21 @@ export const LoginView = () => {
                         onChangeText={setPassword}
                         secureTextEntry={!showPw}
                         autoCapitalize="none"
+                        autoCorrect={false}
                         onFocus={() => setFocus('pw')}
                         onBlur={() => setFocus(null)}
                       />
                       <TouchableOpacity
                         onPress={() => setShowPw((v) => !v)}
-                        hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                        hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
                       >
                         <Ionicons
                           name={showPw ? 'eye-off-outline' : 'eye-outline'}
-                          size={19}
+                          size={20}
                           color="#64748b"
                         />
                       </TouchableOpacity>
-                    </View>
+                    </TouchableOpacity>
                   </View>
 
                   {/* Sign In Button */}
@@ -669,83 +685,101 @@ export const LoginView = () => {
                   {/* Full Name Input */}
                   <View style={st.inputGroup}>
                     <Text style={st.inputLabel}>Full Name</Text>
-                    <View style={[st.inputBox, focus === 'name' && st.inputBoxFocused]}>
+                    <TouchableOpacity
+                      style={[st.inputBox, focus === 'name' && st.inputBoxFocused]}
+                      activeOpacity={1}
+                      onPress={() => nameRef.current?.focus()}
+                    >
                       <Ionicons name="person-outline" size={18} color="#64748b" style={st.inputIcon} />
                       <TextInput
+                        ref={nameRef}
                         style={st.textInput}
-                        placeholder="Rahul Sharma"
+                        placeholder="Enter your name"
                         placeholderTextColor="#94a3b8"
                         value={name}
                         onChangeText={setName}
                         autoCapitalize="words"
+                        autoCorrect={false}
                         onFocus={() => setFocus('name')}
                         onBlur={() => setFocus(null)}
                       />
                       {name ? (
                         <TouchableOpacity
                           onPress={() => setName('')}
-                          hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                          hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
                         >
-                          <Ionicons name="close-circle" size={17} color="#94a3b8" />
+                          <Ionicons name="close-circle" size={18} color="#94a3b8" />
                         </TouchableOpacity>
                       ) : null}
-                    </View>
+                    </TouchableOpacity>
                   </View>
 
                   {/* Email Input */}
                   <View style={st.inputGroup}>
                     <Text style={st.inputLabel}>Email Address</Text>
-                    <View style={[st.inputBox, focus === 'regEmail' && st.inputBoxFocused]}>
+                    <TouchableOpacity
+                      style={[st.inputBox, focus === 'regEmail' && st.inputBoxFocused]}
+                      activeOpacity={1}
+                      onPress={() => emailRef.current?.focus()}
+                    >
                       <Ionicons name="mail-outline" size={18} color="#64748b" style={st.inputIcon} />
                       <TextInput
+                        ref={emailRef}
                         style={st.textInput}
-                        placeholder="rahul@finbookadvisors.com"
+                        placeholder="Enter your email"
                         placeholderTextColor="#94a3b8"
                         value={email}
                         onChangeText={setEmail}
                         keyboardType="email-address"
                         autoCapitalize="none"
+                        autoCorrect={false}
                         onFocus={() => setFocus('regEmail')}
                         onBlur={() => setFocus(null)}
                       />
                       {email ? (
                         <TouchableOpacity
                           onPress={() => setEmail('')}
-                          hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                          hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
                         >
-                          <Ionicons name="close-circle" size={17} color="#94a3b8" />
+                          <Ionicons name="close-circle" size={18} color="#94a3b8" />
                         </TouchableOpacity>
                       ) : null}
-                    </View>
+                    </TouchableOpacity>
                   </View>
 
                   {/* Password Input */}
                   <View style={st.inputGroup}>
                     <Text style={st.inputLabel}>Password</Text>
-                    <View style={[st.inputBox, focus === 'regPw' && st.inputBoxFocused]}>
+                    <TouchableOpacity
+                      style={[st.inputBox, focus === 'regPw' && st.inputBoxFocused]}
+                      activeOpacity={1}
+                      onPress={() => pwRef.current?.focus()}
+                    >
                       <Ionicons name="lock-closed-outline" size={18} color="#64748b" style={st.inputIcon} />
                       <TextInput
+                        ref={pwRef}
                         style={st.textInput}
-                        placeholder="Create a strong password"
+                        placeholder="Create a password"
                         placeholderTextColor="#94a3b8"
                         value={password}
                         onChangeText={setPassword}
                         secureTextEntry={!showPw}
                         autoCapitalize="none"
+                        autoCorrect={false}
                         onFocus={() => setFocus('regPw')}
                         onBlur={() => setFocus(null)}
                       />
                       <TouchableOpacity
                         onPress={() => setShowPw((v) => !v)}
-                        hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                        hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
                       >
                         <Ionicons
                           name={showPw ? 'eye-off-outline' : 'eye-outline'}
-                          size={19}
+                          size={20}
                           color="#64748b"
                         />
                       </TouchableOpacity>
-                    </View>
+                    </TouchableOpacity>
                   </View>
 
                   {/* Sign Up Button */}
@@ -775,7 +809,7 @@ export const LoginView = () => {
                   <View style={st.switchLinkBox}>
                     <Text style={st.switchLinkMuted}>Already have an account? </Text>
                     <TouchableOpacity
-                      onPress={() => go('login', 'back')}
+                      onPress={() => go('login')}
                       hitSlop={{ top: 8, bottom: 8, left: 4, right: 8 }}
                     >
                       <Text style={st.switchLinkActive}>Sign In</Text>
@@ -896,7 +930,6 @@ const st = StyleSheet.create({
     width: '100%',
     backgroundColor: '#ffffff',
     position: 'relative',
-    overflow: 'hidden',
   },
   deviceDesktopFrame: {
     maxWidth: 440,
@@ -909,6 +942,7 @@ const st = StyleSheet.create({
     shadowOpacity: 0.08,
     shadowRadius: 24,
     elevation: 8,
+    overflow: 'hidden',
   },
 
   /* Background Wave SVG */
@@ -927,11 +961,10 @@ const st = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: 20,
-    paddingTop: Platform.OS === 'web' ? 14 : 8,
     paddingBottom: 10,
-    minHeight: 56,
+    minHeight: 52,
     zIndex: 10,
-    backgroundColor: 'rgba(255,255,255,0.85)',
+    backgroundColor: 'rgba(255,255,255,0.92)',
     borderBottomWidth: 1,
     borderBottomColor: 'rgba(226,232,240,0.6)',
   },
@@ -965,9 +998,9 @@ const st = StyleSheet.create({
     gap: 10,
   },
   backCircle: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
+    width: 38,
+    height: 38,
+    borderRadius: 19,
     backgroundColor: '#f1f5f9',
     alignItems: 'center',
     justifyContent: 'center',
@@ -977,7 +1010,7 @@ const st = StyleSheet.create({
     borderColor: '#0284c7',
     backgroundColor: 'rgba(255,255,255,0.95)',
     paddingHorizontal: 16,
-    paddingVertical: 6,
+    paddingVertical: 7,
     borderRadius: 20,
   },
   pillOutlineT: {
@@ -990,7 +1023,7 @@ const st = StyleSheet.create({
     borderColor: '#0284c7',
     backgroundColor: '#f0f9ff',
     paddingHorizontal: 16,
-    paddingVertical: 6,
+    paddingVertical: 7,
     borderRadius: 20,
   },
   pillOutlineActiveT: {
@@ -1001,7 +1034,7 @@ const st = StyleSheet.create({
   pillFill: {
     backgroundColor: '#0284c7',
     paddingHorizontal: 16,
-    paddingVertical: 6,
+    paddingVertical: 7,
     borderRadius: 20,
     shadowColor: '#0284c7',
     shadowOffset: { width: 0, height: 2 },
@@ -1022,7 +1055,6 @@ const st = StyleSheet.create({
   },
   scrollContent: {
     flexGrow: 1,
-    paddingBottom: 40,
   },
   animatedWrap: {
     flex: 1,
@@ -1238,9 +1270,9 @@ const st = StyleSheet.create({
   },
   primaryButton: {
     width: '100%',
-    height: 50,
+    height: 52,
     backgroundColor: '#0284c7',
-    borderRadius: 25,
+    borderRadius: 26,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
@@ -1339,7 +1371,7 @@ const st = StyleSheet.create({
     marginTop: 3,
   },
 
-  /* Input fields */
+  /* Input fields - Constant 1.5px border ensures Android never re-layouts on focus */
   inputGroup: {
     marginBottom: 14,
   },
@@ -1353,28 +1385,24 @@ const st = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: '#ffffff',
-    borderWidth: 1.2,
+    borderWidth: 1.5,
     borderColor: '#e2e8f0',
     borderRadius: 14,
     paddingHorizontal: 14,
-    height: 50,
+    height: 52,
   },
   inputBoxFocused: {
     borderColor: '#0284c7',
-    borderWidth: 1.8,
     backgroundColor: '#f8fafc',
-    shadowColor: '#0284c7',
-    shadowOffset: { width: 0, height: 0 },
-    shadowOpacity: 0.12,
-    shadowRadius: 6,
   },
   inputIcon: {
     marginRight: 10,
   },
   textInput: {
     flex: 1,
-    height: 50,
-    fontSize: 14,
+    height: 52,
+    paddingVertical: 0,
+    fontSize: 15,
     color: '#0f172a',
     ...(Platform.OS === 'web' ? { outlineWidth: 0 } : {}),
   },
@@ -1388,7 +1416,7 @@ const st = StyleSheet.create({
     backgroundColor: '#f0f9ff',
     borderWidth: 1,
     borderColor: '#bae6fd',
-    paddingVertical: 8,
+    paddingVertical: 9,
     borderRadius: 20,
     marginTop: 10,
   },
@@ -1422,7 +1450,7 @@ const st = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    height: 48,
+    height: 50,
     borderRadius: 14,
     borderWidth: 1.5,
     borderColor: '#0284c7',

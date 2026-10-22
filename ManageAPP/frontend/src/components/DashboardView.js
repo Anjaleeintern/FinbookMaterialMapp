@@ -981,12 +981,13 @@ export const DashboardView = React.memo(({ entries = [], onOpenAddModal, onNavig
                         }).filter(Boolean);
 
                         const barTopY = currentY;
+                        const dateKey = d?.date || `date-${i}`;
 
                         return (
                           <G
-                            key={`col-${d.date}`}
-                            className={`bar-col-${i}`}
-                            style={{ cursor: 'pointer' }}
+                            key={`col-${dateKey}-${i}`}
+                            className={isWeb ? `bar-col-${i}` : undefined}
+                            style={isWeb ? { cursor: 'pointer' } : undefined}
                             onMouseEnter={isWeb ? () => setHoveredTrendIdx(i) : undefined}
                             onMouseLeave={isWeb ? () => setHoveredTrendIdx(null) : undefined}
                             onClick={isWeb ? () => setHoveredTrendIdx((prev) => (prev === i ? null : i)) : undefined}
@@ -1007,9 +1008,9 @@ export const DashboardView = React.memo(({ entries = [], onOpenAddModal, onNavig
 
                             {/* Stack segments with bold bar width & rounded top */}
                             {segments.map(({ mode, val, segY, segHeight, isTop }) => (
-                              <G key={`${d.date}-${mode.key}`}>
+                              <G key={`${dateKey}-${mode.key}`}>
                                 <Rect
-                                  className="stacked-bar-rect"
+                                  className={isWeb ? "stacked-bar-rect" : undefined}
                                   x={barLeft}
                                   y={segY}
                                   width={barWidth}
@@ -1030,9 +1031,9 @@ export const DashboardView = React.memo(({ entries = [], onOpenAddModal, onNavig
                                     fontSize="8.5"
                                     fontWeight="700"
                                     textAnchor="middle"
-                                    pointerEvents="none"
+                                    style={isWeb ? { pointerEvents: 'none' } : undefined}
                                   >
-                                    {formatCompactINR(val).replace('₹', '')}
+                                    {String(formatCompactINR(val) || '').replace('₹', '')}
                                   </SvgText>
                                 )}
                               </G>
@@ -1040,7 +1041,7 @@ export const DashboardView = React.memo(({ entries = [], onOpenAddModal, onNavig
 
                             {/* Direct Sales Value on top of bar - NO CLICK NEEDED ON PHONE! */}
                             {d.total > 0 ? (
-                              <G className="bar-value-pill">
+                              <G className={isWeb ? "bar-value-pill" : undefined}>
                                 <Rect
                                   x={colCenterX - 26}
                                   y={barTopY - 16}
@@ -1108,7 +1109,7 @@ export const DashboardView = React.memo(({ entries = [], onOpenAddModal, onNavig
                         const boxY = 20;
 
                         return (
-                          <G pointerEvents="none">
+                          <G style={isWeb ? { pointerEvents: 'none' } : undefined}>
                             <Line
                               x1={colCenterX}
                               y1="16"
@@ -1293,10 +1294,10 @@ export const DashboardView = React.memo(({ entries = [], onOpenAddModal, onNavig
                                 onMouseLeave={isWeb ? () => setHoveredModeKey(null) : undefined}
                                 onClick={isWeb ? () => setHoveredModeKey(slice.isHovered ? null : slice.key) : undefined}
                                 onPress={!isWeb ? () => setHoveredModeKey(slice.isHovered ? null : slice.key) : undefined}
-                                style={{
+                                style={isWeb ? {
                                   cursor: 'pointer',
                                   transition: 'all 0.25s ease',
-                                }}
+                                } : undefined}
                               />
                             );
                           })}
@@ -1464,7 +1465,7 @@ export const DashboardView = React.memo(({ entries = [], onOpenAddModal, onNavig
                         return (
                           <G
                             key={m.name}
-                            style={{ cursor: 'pointer' }}
+                            style={isWeb ? { cursor: 'pointer' } : undefined}
                             onMouseEnter={isWeb ? () => setHoveredMaterialIdx(idx) : undefined}
                             onMouseLeave={isWeb ? () => setHoveredMaterialIdx(null) : undefined}
                             onClick={isWeb ? () => setHoveredMaterialIdx(isHovered ? null : idx) : undefined}
@@ -1635,8 +1636,8 @@ export const DashboardView = React.memo(({ entries = [], onOpenAddModal, onNavig
 
                       return (
                         <G
-                          key={p.name}
-                          style={{ cursor: 'pointer' }}
+                          key={`party-bar-${p.name || i}`}
+                          style={isWeb ? { cursor: 'pointer' } : undefined}
                           onMouseEnter={isWeb ? () => setHoveredPartyIdx(i) : undefined}
                           onMouseLeave={isWeb ? () => setHoveredPartyIdx(null) : undefined}
                           onClick={isWeb ? () => setHoveredPartyIdx(isHovered ? null : i) : undefined}
@@ -2585,7 +2586,7 @@ const styles = StyleSheet.create({
     paddingVertical: 5,
     paddingHorizontal: 8,
     borderRadius: 6,
-    cursor: 'pointer',
+    ...(Platform.OS === 'web' ? { cursor: 'pointer' } : {}),
   },
   materialLegendItemHovered: {
     backgroundColor: '#f1f5f9',
@@ -2665,7 +2666,7 @@ const styles = StyleSheet.create({
     paddingVertical: 2.5,
     paddingHorizontal: 6,
     borderRadius: 6,
-    cursor: 'pointer',
+    ...(Platform.OS === 'web' ? { cursor: 'pointer' } : {}),
     borderWidth: 1,
     borderColor: 'transparent',
   },
