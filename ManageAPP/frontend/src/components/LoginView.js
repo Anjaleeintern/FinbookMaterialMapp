@@ -14,6 +14,7 @@ import {
   KeyboardAvoidingView,
   StatusBar,
   useWindowDimensions,
+  Keyboard,
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -39,12 +40,39 @@ export const LoginView = () => {
   const [loading, setLoading] = useState(false);
   const [err, setErr] = useState('');
   const [suc, setSuc] = useState('');
+  const [keyboardHeight, setKeyboardHeight] = useState(0);
 
   // Input refs for direct focus without re-render glitches
   const emailRef = useRef(null);
   const pwRef = useRef(null);
   const nameRef = useRef(null);
+  const scrollViewRef = useRef(null);
 
+  // Keyboard listener to keep password and action buttons visible when typing
+  useEffect(() => {
+    const showSub = Keyboard.addListener(
+      Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow',
+      (e) => {
+        setKeyboardHeight(e.endCoordinates?.height || 260);
+      }
+    );
+    const hideSub = Keyboard.addListener(
+      Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide',
+      () => {
+        setKeyboardHeight(0);
+      }
+    );
+    return () => {
+      showSub.remove();
+      hideSub.remove();
+    };
+  }, []);
+
+  const scrollToInput = (yOffset = 180) => {
+    setTimeout(() => {
+      scrollViewRef.current?.scrollTo({ y: yOffset, animated: true });
+    }, 100);
+  };
 
   // Debouncing ref to prevent multiple clicks / double execution
   const isSubmitting = useRef(false);
@@ -54,6 +82,7 @@ export const LoginView = () => {
     if (screen === to) return;
     setErr('');
     setSuc('');
+    setPassword('');
     setScreen(to);
   }, [screen]);
 
@@ -121,7 +150,8 @@ export const LoginView = () => {
     <SafeAreaView style={st.outer}>
       <StatusBar barStyle="dark-content" backgroundColor="#f0fdfa" translucent />
       <KeyboardAvoidingView
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        behavior={Platform.OS === 'ios' ? 'padding' : Platform.OS === 'android' ? 'height' : undefined}
+        keyboardVerticalOffset={Platform.OS === 'ios' ? 30 : 0}
         style={st.keyboardView}
       >
         {/* Device frame container for real app view */}
@@ -207,9 +237,17 @@ export const LoginView = () => {
 
           {/* ════════════ SCROLLABLE CONTENT ════════════ */}
           <ScrollView
+            ref={scrollViewRef}
             style={st.scroll}
-            contentContainerStyle={[st.scrollContent, { paddingBottom: bottomSafePadding }]}
-            keyboardShouldPersistTaps="always"
+            contentContainerStyle={[
+              st.scrollContent,
+              {
+                paddingBottom: keyboardHeight > 0
+                  ? keyboardHeight + 80
+                  : bottomSafePadding + 32,
+              },
+            ]}
+            keyboardShouldPersistTaps="handled"
             keyboardDismissMode="none"
             showsVerticalScrollIndicator={false}
             bounces={false}
@@ -414,6 +452,9 @@ export const LoginView = () => {
                         keyboardType="email-address"
                         autoCapitalize="none"
                         autoCorrect={false}
+                        returnKeyType="next"
+                        onSubmitEditing={() => pwRef.current?.focus()}
+                        onFocus={() => scrollToInput(60)}
                       />
                       {email ? (
                         <TouchableOpacity
@@ -441,6 +482,11 @@ export const LoginView = () => {
                         secureTextEntry={!showPw}
                         autoCapitalize="none"
                         autoCorrect={false}
+                        textContentType="password"
+                        autoComplete="current-password"
+                        returnKeyType="done"
+                        onSubmitEditing={doLogin}
+                        onFocus={() => scrollToInput(160)}
                       />
                       <TouchableOpacity
                         onPress={() => setShowPw((v) => !v)}
@@ -495,19 +541,21 @@ export const LoginView = () => {
                 <View style={st.formContainer}>
 
                   {/* Brand Block */}
-                  <View style={st.brandBlockCompact}>
-                    <View style={st.logoBadgeSmall}>
-                      <Text style={st.logoBadgeSmallText}>M</Text>
+                  <View style={[st.brandBlockCompact, keyboardHeight > 0 && { marginBottom: 6 }]}>
+                    <View style={[st.logoBadgeSmall, keyboardHeight > 0 && { width: 38, height: 38, marginBottom: 4 }]}>
+                      <Text style={[st.logoBadgeSmallText, keyboardHeight > 0 && { fontSize: 20 }]}>M</Text>
                     </View>
-                    <Text style={st.brandTitleSmall}>MaterialMApp</Text>
-                    <View style={st.tagPillSmall}>
-                      <Text style={st.tagPillSmallText}>Quarry & Weighbridge Dispatch</Text>
-                    </View>
+                    <Text style={[st.brandTitleSmall, keyboardHeight > 0 && { fontSize: 18 }]}>MaterialMApp</Text>
+                    {keyboardHeight === 0 && (
+                      <View style={st.tagPillSmall}>
+                        <Text style={st.tagPillSmallText}>Quarry & Weighbridge Dispatch</Text>
+                      </View>
+                    )}
                   </View>
 
                   {/* Heading */}
-                  <View style={st.formHeadingBox}>
-                    <Text style={st.formTitle}>Create Your Account</Text>
+                  <View style={[st.formHeadingBox, keyboardHeight > 0 && { marginBottom: 12, marginTop: 2 }]}>
+                    <Text style={[st.formTitle, keyboardHeight > 0 && { fontSize: 20 }]}>Create Your Account</Text>
                     <Text style={st.formSub}>Get started with your business account</Text>
                   </View>
 
@@ -539,6 +587,9 @@ export const LoginView = () => {
                         onChangeText={setName}
                         autoCapitalize="words"
                         autoCorrect={false}
+                        returnKeyType="next"
+                        onSubmitEditing={() => emailRef.current?.focus()}
+                        onFocus={() => scrollToInput(40)}
                       />
                       {name ? (
                         <TouchableOpacity
@@ -566,6 +617,9 @@ export const LoginView = () => {
                         keyboardType="email-address"
                         autoCapitalize="none"
                         autoCorrect={false}
+                        returnKeyType="next"
+                        onSubmitEditing={() => pwRef.current?.focus()}
+                        onFocus={() => scrollToInput(120)}
                       />
                       {email ? (
                         <TouchableOpacity
@@ -593,6 +647,11 @@ export const LoginView = () => {
                         secureTextEntry={!showPw}
                         autoCapitalize="none"
                         autoCorrect={false}
+                        textContentType="newPassword"
+                        autoComplete="new-password"
+                        returnKeyType="done"
+                        onSubmitEditing={doRegister}
+                        onFocus={() => scrollToInput(220)}
                       />
                       <TouchableOpacity
                         onPress={() => setShowPw((v) => !v)}
@@ -790,8 +849,8 @@ const st = StyleSheet.create({
     flexGrow: 1,
   },
   animatedWrap: {
-    flex: 1,
     width: '100%',
+    minHeight: '100%',
   },
 
   /* ── LANDING PAGE STYLES ── */

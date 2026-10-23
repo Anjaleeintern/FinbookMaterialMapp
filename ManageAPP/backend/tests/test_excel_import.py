@@ -1,12 +1,25 @@
 import pytest
+import pytest_asyncio
 import io
+import sys
+import os
 from httpx import AsyncClient, ASGITransport
+
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
+
 from main import app
+from database import connect_to_mongo, close_mongo_connection
 from services.excel_service import (
     generate_sample_excel_template,
     parse_excel_or_csv_bytes,
     process_raw_imported_rows,
 )
+
+@pytest_asyncio.fixture(autouse=True)
+async def setup_db():
+    await connect_to_mongo()
+    yield
+    await close_mongo_connection()
 
 @pytest.mark.asyncio
 async def test_generate_and_parse_template():
@@ -55,6 +68,15 @@ async def test_csv_parsing():
 async def test_api_template_and_preview():
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as ac:
+        # Login to get auth token
+        login_res = await ac.post("/api/auth/login", json={
+            "email": "admin@materialmapp.com",
+            "password": "admin123"
+        })
+        assert login_res.status_code == 200
+        token = login_res.json()["access_token"]
+        headers = {"Authorization": f"Bearer {token}"}
+
         # Template
         res_tpl = await ac.get("/api/entries/template")
         assert res_tpl.status_code == 200
@@ -64,7 +86,7 @@ async def test_api_template_and_preview():
         files = {
             "file": ("test_import.xlsx", res_tpl.content, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
         }
-        res_prev = await ac.post("/api/entries/import-excel?preview_only=true", files=files)
+        res_prev = await ac.post("/api/entries/import-excel?preview_only=true", files=files, headers=headers)
         assert res_prev.status_code == 200
         data = res_prev.json()
         assert data["preview"] is True

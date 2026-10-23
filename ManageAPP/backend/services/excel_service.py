@@ -499,10 +499,14 @@ def process_raw_imported_rows(
     valid_entries.sort(key=lambda x: x["_sort_date"])
     return valid_entries, errors
 
-async def execute_bulk_import_to_mongodb(valid_entries: List[Dict[str, Any]]) -> Dict[str, Any]:
+async def execute_bulk_import_to_mongodb(
+    valid_entries: List[Dict[str, Any]],
+    user_id: Optional[str] = None,
+    user_email: Optional[str] = None
+) -> Dict[str, Any]:
     """
     Saves entries one by one into MongoDB directly into their respective destination collections
-    with unique auto-incrementing challan sequences.
+    with unique auto-incrementing challan sequences for this user.
     """
     db = get_database()
     saved_count = 0
@@ -515,12 +519,16 @@ async def execute_bulk_import_to_mongodb(valid_entries: List[Dict[str, Any]]) ->
         row_num = entry.pop("row_number", None)
 
         # STRICT REQUIREMENT: Neglect any Excel challan number to maintain un-interrupted system series.
-        # Always generate atomic, unique, continuous challan sequence (001, 002, 003...) from MongoDB counters.
-        entry["challan_no"] = await get_next_challan_no()
+        # Always generate atomic, unique, continuous challan sequence (001, 002, 003...) from MongoDB counters for this user.
+        entry["challan_no"] = await get_next_challan_no(user_id=user_id)
 
         entry["created_at"] = datetime.utcnow()
         entry["saved_in"] = target_collection
         entry["entry_source"] = "excel"
+        if user_id:
+            entry["user_id"] = user_id
+        if user_email:
+            entry["user_email"] = user_email
 
         # Direct destination insert — zero staging
         result = await db[target_collection].insert_one(entry)

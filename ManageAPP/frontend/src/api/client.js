@@ -2,30 +2,51 @@ import { Platform, NativeModules } from 'react-native';
 import * as FileSystem from 'expo-file-system/legacy';
 
 // Environment variables configured in frontend/.env (EXPO_PUBLIC_ prefix)
-const ENV_API_URL = process.env.EXPO_PUBLIC_API_URL || 'https://finbookmaterialmapp.onrender.com';
-const ENV_BACKEND_HOST = process.env.EXPO_PUBLIC_BACKEND_HOST || '192.168.1.15';
-const ENV_BACKEND_PORT = process.env.EXPO_PUBLIC_BACKEND_PORT || '8000';
-const ENV_PROXY_PORT = process.env.EXPO_PUBLIC_PROXY_PORT || '8005';
+const DEPLOYED_PROD_URL = 'https://finbookmaterialmapp.onrender.com';
+const LOCAL_DEV_PORT = '8001';
+const PROXY_DEV_PORT = '8005';
+const LOCAL_PC_IP = '192.168.1.14';
+
+const ENV_BACKEND_HOST =
+  process.env.EXPO_PUBLIC_BACKEND_HOST && process.env.EXPO_PUBLIC_BACKEND_HOST !== '192.168.1.15'
+    ? process.env.EXPO_PUBLIC_BACKEND_HOST
+    : LOCAL_PC_IP;
+
+const ENV_BACKEND_PORT =
+  process.env.EXPO_PUBLIC_BACKEND_PORT && process.env.EXPO_PUBLIC_BACKEND_PORT !== '8000'
+    ? process.env.EXPO_PUBLIC_BACKEND_PORT
+    : LOCAL_DEV_PORT;
+
+const ENV_PROXY_PORT = process.env.EXPO_PUBLIC_PROXY_PORT || PROXY_DEV_PORT;
 
 const getBaseUrl = () => {
-  // If an explicit API URL is set in .env, prioritize it
-  if (ENV_API_URL && ENV_API_URL.trim()) {
-    return ENV_API_URL.trim().replace(/\/+$/, '');
+  const isDev = typeof __DEV__ !== 'undefined' ? Boolean(__DEV__) : process.env.NODE_ENV !== 'production';
+
+  // 1. PRODUCTION MODE: Always connect to the deployed backend URL
+  if (!isDev) {
+    const prodUrl =
+      process.env.EXPO_PUBLIC_PROD_API_URL ||
+      (process.env.EXPO_PUBLIC_API_URL &&
+       !process.env.EXPO_PUBLIC_API_URL.includes('localhost') &&
+       !process.env.EXPO_PUBLIC_API_URL.includes('127.0.0.1')
+        ? process.env.EXPO_PUBLIC_API_URL
+        : DEPLOYED_PROD_URL);
+    return prodUrl.trim().replace(/\/+$/, '');
   }
 
+  // 2. DEVELOPMENT MODE - Web:
   if (Platform.OS === 'web') {
     if (typeof window !== 'undefined' && window.location?.hostname) {
       const host = window.location.hostname;
       if (host === 'localhost' || host === '127.0.0.1') {
         return `http://localhost:${ENV_BACKEND_PORT}`;
       }
-      // When opened on mobile browser using PC's Wi-Fi IP
-      return `http://${host}:${ENV_PROXY_PORT}`;
+      return `http://${host}:${ENV_BACKEND_PORT}`;
     }
     return `http://localhost:${ENV_BACKEND_PORT}`;
   }
 
-  // Real Android / iOS phone in Expo Go:
+  // 3. DEVELOPMENT MODE - Mobile (Expo Go / Emulator / Physical Device):
   let hostIp = null;
 
   // 1. Auto-detect host IP from Metro bundler's scriptURL (Guaranteed in React Native / Expo Go)
@@ -53,17 +74,23 @@ const getBaseUrl = () => {
     } catch (e) {}
   }
 
-  // 3. Fallback to host configured in .env
-  if (!hostIp) {
-    hostIp = ENV_BACKEND_HOST;
+  // 3. Fallback to current laptop IP (192.168.1.14)
+  if (!hostIp || hostIp === '192.168.1.15') {
+    hostIp = LOCAL_PC_IP;
   }
 
-  // Connect to port configured in .env
+  // Android Emulator standard loopback mapping
+  if (Platform.OS === 'android' && (hostIp === 'localhost' || hostIp === '127.0.0.1')) {
+    return `http://10.0.2.2:${ENV_BACKEND_PORT}`;
+  }
+
+  // For physical phones on Wi-Fi, connect through Bridge Proxy (8005) or Backend Port (8001)
+  // Proxy 8005 runs on Node.js and reliably bypasses Windows Firewall
   return `http://${hostIp}:${ENV_PROXY_PORT}`;
 };
 
-const BASE_URL = getBaseUrl();
-console.log('[API] Connecting to backend at:', BASE_URL);
+let activeBaseUrl = getBaseUrl();
+console.log(`[API] Mode: ${typeof __DEV__ !== 'undefined' && __DEV__ ? 'Development (Local)' : 'Production (Deployed)'} | Connecting to:`, activeBaseUrl);
 
 let authToken = null;
 
@@ -73,6 +100,19 @@ export const setAuthToken = (token) => {
 
 export const getAuthToken = () => authToken;
 
+const fetchWithTimeout = async (url, options, timeoutMs = 6000) => {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    const res = await fetch(url, { ...options, signal: controller.signal });
+    clearTimeout(timer);
+    return res;
+  } catch (err) {
+    clearTimeout(timer);
+    throw err;
+  }
+};
+
 const request = async (endpoint, options = {}) => {
   const isFormData = typeof FormData !== 'undefined' && options.body instanceof FormData;
   const headers = {
@@ -81,10 +121,33 @@ const request = async (endpoint, options = {}) => {
     ...options.headers,
   };
 
-  const response = await fetch(`${BASE_URL}${endpoint}`, {
-    ...options,
-    headers,
-  });
+  let response;
+  try {
+    response = await fetchWithTimeout(`${activeBaseUrl}${endpoint}`, {
+      ...options,
+      headers,
+    }, 6000);
+  } catch (err) {
+    // If on mobile and connection to primary port timed out or failed, try the alternate port
+    if (Platform.OS !== 'web' && activeBaseUrl.includes('192.168.')) {
+      const fallbackUrl = activeBaseUrl.includes(`:${ENV_PROXY_PORT}`)
+        ? activeBaseUrl.replace(`:${ENV_PROXY_PORT}`, `:${ENV_BACKEND_PORT}`)
+        : activeBaseUrl.replace(`:${ENV_BACKEND_PORT}`, `:${ENV_PROXY_PORT}`);
+      console.warn(`[API] Connection to ${activeBaseUrl} failed (${err.message}), trying fallback: ${fallbackUrl}`);
+      try {
+        response = await fetchWithTimeout(`${fallbackUrl}${endpoint}`, {
+          ...options,
+          headers,
+        }, 6000);
+        // Switch to working URL for future calls
+        activeBaseUrl = fallbackUrl;
+      } catch (fallbackErr) {
+        throw new Error(`Mobile connection failed. Please ensure your phone is connected to the same Wi-Fi as your laptop (${LOCAL_PC_IP}).`);
+      }
+    } else {
+      throw err;
+    }
+  }
 
   const data = await response.json().catch(() => null);
 
@@ -235,7 +298,7 @@ export const api = {
       body: JSON.stringify({ category, items, status }),
     }),
   importMasterFile: (file, preview = true, defaultCategory = 'VehicleNo') => {
-    const url = `${BASE_URL}/api/masters/import-file?preview=${preview ? 'true' : 'false'}&default_category=${encodeURIComponent(defaultCategory)}`;
+    const url = `${activeBaseUrl}/api/masters/import-file?preview=${preview ? 'true' : 'false'}&default_category=${encodeURIComponent(defaultCategory)}`;
     return uploadMultipartFile(url, file, {
       preview: preview ? 'true' : 'false',
       default_category: defaultCategory,
@@ -250,7 +313,7 @@ export const api = {
         preview: !!preview,
       }),
     }),
-  getMasterTemplateUrl: (format = 'xlsx') => `${BASE_URL}/api/masters/template?format=${format}`,
+  getMasterTemplateUrl: (format = 'xlsx') => `${activeBaseUrl}/api/masters/template?format=${format}`,
   bulkDeleteMasters: (ids) =>
     request('/api/masters/bulk-delete', {
       method: 'POST',
@@ -282,9 +345,9 @@ export const api = {
     }),
 
   // Excel Bulk Import & Template
-  getTemplateDownloadUrl: () => `${BASE_URL}/api/entries/template`,
+  getTemplateDownloadUrl: () => `${activeBaseUrl}/api/entries/template`,
   importExcel: async (file, previewOnly = false, defaultTypeMode = null, selectedSheets = null) => {
-    let url = `${BASE_URL}/api/entries/import-excel?preview_only=${previewOnly ? 'true' : 'false'}`;
+    let url = `${activeBaseUrl}/api/entries/import-excel?preview_only=${previewOnly ? 'true' : 'false'}`;
     if (defaultTypeMode && defaultTypeMode !== 'auto') {
       url += `&default_type_mode=${encodeURIComponent(defaultTypeMode)}`;
     }

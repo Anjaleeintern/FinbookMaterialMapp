@@ -18,7 +18,7 @@ if (fs.existsSync(envPath)) {
 
 const PORT = parseInt(process.env.EXPO_PUBLIC_PROXY_PORT || process.env.PROXY_PORT || '8005', 10);
 const TARGET_HOST = process.env.BACKEND_HOST || '127.0.0.1';
-const TARGET_PORT = parseInt(process.env.EXPO_PUBLIC_BACKEND_PORT || process.env.BACKEND_PORT || '8000', 10);
+const TARGET_PORT = parseInt(process.env.EXPO_PUBLIC_BACKEND_PORT || process.env.BACKEND_PORT || '8001', 10);
 
 const server = http.createServer((req, res) => {
   // Global CORS headers for mobile and web

@@ -14,7 +14,8 @@
         "buildType": "apk"
       },
       "env": {
-        "EXPO_PUBLIC_API_URL": "https://finbookmaterialmapp.onrender.com"
+        "EXPO_PUBLIC_API_URL": "https://finbookmaterialmapp.onrender.com",
+        "EXPO_PUBLIC_PROD_API_URL": "https://finbookmaterialmapp.onrender.com"
       }
     },
     "preview-simulator": {
@@ -23,13 +24,15 @@
         "simulator": true
       },
       "env": {
-        "EXPO_PUBLIC_API_URL": "https://finbookmaterialmapp.onrender.com"
+        "EXPO_PUBLIC_API_URL": "https://finbookmaterialmapp.onrender.com",
+        "EXPO_PUBLIC_PROD_API_URL": "https://finbookmaterialmapp.onrender.com"
       }
     },
     "production": {
       "autoIncrement": true,
       "env": {
-        "EXPO_PUBLIC_API_URL": "https://finbookmaterialmapp.onrender.com"
+        "EXPO_PUBLIC_API_URL": "https://finbookmaterialmapp.onrender.com",
+        "EXPO_PUBLIC_PROD_API_URL": "https://finbookmaterialmapp.onrender.com"
       }
     }
   },

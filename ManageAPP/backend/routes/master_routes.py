@@ -3,7 +3,7 @@ import csv
 import re
 from datetime import datetime, timezone
 from typing import List, Optional, Dict, Any, Set
-from fastapi import APIRouter, HTTPException, status, Query, UploadFile, File, Form
+from fastapi import APIRouter, HTTPException, status, Query, UploadFile, File, Form, Depends
 from fastapi.responses import Response
 from bson import ObjectId
 import openpyxl
@@ -19,6 +19,7 @@ from models.master_models import (
     PasteMasterImportRequest,
 )
 from database import get_database
+from services.auth_service import get_current_user
 
 router = APIRouter(prefix="/api/masters", tags=["Masters"])
 
@@ -51,13 +52,20 @@ def format_iso_now():
     return datetime.now(timezone.utc).isoformat()
 
 @router.get("", response_model=MasterListResponse)
-async def get_all_masters():
+async def get_all_masters(current_user: dict = Depends(get_current_user)):
     """
     Returns string arrays per category for form dropdowns.
-    Only returns Active items (or items where status is not 'Inactive').
+    Only returns Active items belonging to current user or system defaults.
     """
     db = get_database()
-    cursor = db.masters.find({"status": {"$ne": "Inactive"}}, {"_id": 0, "category": 1, "value": 1})
+    user_id = current_user["id"]
+    cursor = db.masters.find(
+        {
+            "status": {"$ne": "Inactive"},
+            "$or": [{"user_id": user_id}, {"is_system": True}]
+        },
+        {"_id": 0, "category": 1, "value": 1}
+    )
     items = await cursor.to_list(length=3000)
 
     result = {
@@ -95,13 +103,15 @@ async def get_masters_details(
     category: Optional[str] = Query(None, description="Filter by category"),
     search: Optional[str] = Query(None, description="Search by value"),
     status_filter: Optional[str] = Query(None, alias="status", description="Filter by Active/Inactive"),
+    current_user: dict = Depends(get_current_user)
 ):
     """
     Full detail master list for the Enterprise Masters Management Table.
-    Includes ID, Category, Value, Status, CreatedAt, UpdatedAt.
+    Includes ID, Category, Value, Status, CreatedAt, UpdatedAt for current user.
     """
     db = get_database()
-    query = {}
+    user_id = current_user["id"]
+    query = {"$or": [{"user_id": user_id}, {"is_system": True}]}
     if category and category != "All":
         query["category"] = category
     if status_filter and status_filter != "All":
@@ -126,7 +136,7 @@ async def get_masters_details(
         status_val = doc.get("status") or "Active"
         cat = doc.get("category", "")
         val = doc.get("value", "")
-        is_static = cat in ["Type/Mode", "TypeMode"] and val in STATIC_TYPE_MODES
+        is_static = doc.get("is_system", False) or (cat in ["Type/Mode", "TypeMode"] and val in STATIC_TYPE_MODES)
         sub_types = HR_LOADING_SUB_TYPES if (cat in ["Type/Mode", "TypeMode"] and val == "HR Loading") else None
 
         results.append(
@@ -142,50 +152,42 @@ async def get_masters_details(
             )
         )
 
-    # If category is Type/Mode or empty, ensure standard modes are seeded/visible in table
+    # If category is Type/Mode or empty, ensure standard modes are visible in table
     if not category or category == "Type/Mode" or category == "All":
         existing_type_modes = {
             r.value.strip().lower() for r in results if r.category == "Type/Mode"
         }
         for std in STANDARD_TYPE_MODES:
             if std.lower() not in existing_type_modes:
-                # Upsert standard mode into DB so it has persistent ID and timestamps
-                std_doc = {
-                    "category": "Type/Mode",
-                    "value": std,
-                    "status": "Active",
-                    "is_static": True,
-                    "created_at": format_iso_now(),
-                    "updated_at": format_iso_now(),
-                }
-                ins = await db.masters.insert_one(std_doc)
                 results.append(
                     MasterItemDetail(
-                        id=str(ins.inserted_id),
+                        id=f"std_{std.lower().replace(' ', '_')}",
                         category="Type/Mode",
                         value=std,
                         status="Active",
                         is_static=True,
                         sub_types=HR_LOADING_SUB_TYPES if std == "HR Loading" else None,
-                        created_at=std_doc["created_at"],
-                        updated_at=std_doc["updated_at"],
+                        created_at=format_iso_now(),
+                        updated_at=format_iso_now(),
                     )
                 )
 
     return results
 
 @router.post("", response_model=MasterItemOut)
-async def add_master_item(item: MasterItemCreate):
+async def add_master_item(item: MasterItemCreate, current_user: dict = Depends(get_current_user)):
     db = get_database()
+    user_id = current_user["id"]
     category = item.category.strip()
     value = item.value.strip()
     status_val = (item.status or "Active").strip()
 
-    # Case-insensitive duplicate check within this category
+    # Case-insensitive duplicate check within this category for this user
     regex_pattern = f"^{re.escape(value)}$"
     existing = await db.masters.find_one({
         "category": category,
-        "value": {"$regex": regex_pattern, "$options": "i"}
+        "value": {"$regex": regex_pattern, "$options": "i"},
+        "$or": [{"user_id": user_id}, {"is_system": True}]
     })
 
     now_iso = format_iso_now()
@@ -197,6 +199,7 @@ async def add_master_item(item: MasterItemCreate):
         )
 
     doc = {
+        "user_id": user_id,
         "category": category,
         "value": value,
         "status": status_val,
@@ -215,15 +218,19 @@ async def add_master_item(item: MasterItemCreate):
     }
 
 @router.put("/{item_id}", response_model=MasterItemDetail)
-async def update_master_item(item_id: str, payload: MasterItemUpdate):
+async def update_master_item(item_id: str, payload: MasterItemUpdate, current_user: dict = Depends(get_current_user)):
     db = get_database()
+    user_id = current_user["id"]
     try:
         obj_id = ObjectId(item_id)
     except Exception:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid master ID format")
 
-    doc = await db.masters.find_one({"_id": obj_id})
+    doc = await db.masters.find_one({"_id": obj_id, "user_id": user_id})
     if not doc:
+        sys_doc = await db.masters.find_one({"_id": obj_id, "is_system": True})
+        if sys_doc:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Cannot edit default system Type/Mode.")
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Master item not found")
 
     update_fields = {"updated_at": format_iso_now()}
@@ -239,6 +246,7 @@ async def update_master_item(item_id: str, payload: MasterItemUpdate):
             existing = await db.masters.find_one({
                 "category": doc.get("category"),
                 "value": {"$regex": regex_pattern, "$options": "i"},
+                "$or": [{"user_id": user_id}, {"is_system": True}],
                 "_id": {"$ne": obj_id}
             })
             if existing:
@@ -254,7 +262,7 @@ async def update_master_item(item_id: str, payload: MasterItemUpdate):
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Status must be 'Active' or 'Inactive'")
         update_fields["status"] = st
 
-    await db.masters.update_one({"_id": obj_id}, {"$set": update_fields})
+    await db.masters.update_one({"_id": obj_id, "user_id": user_id}, {"$set": update_fields})
     updated_doc = await db.masters.find_one({"_id": obj_id})
 
     return MasterItemDetail(
@@ -267,8 +275,9 @@ async def update_master_item(item_id: str, payload: MasterItemUpdate):
     )
 
 @router.post("/bulk")
-async def bulk_add_masters(payload: BulkMasterCreate):
+async def bulk_add_masters(payload: BulkMasterCreate, current_user: dict = Depends(get_current_user)):
     db = get_database()
+    user_id = current_user["id"]
     category = payload.category.strip()
     status_val = payload.status or "Active"
     now_iso = format_iso_now()
@@ -283,12 +292,14 @@ async def bulk_add_masters(payload: BulkMasterCreate):
         regex_pattern = f"^{re.escape(val)}$"
         existing = await db.masters.find_one({
             "category": category,
-            "value": {"$regex": regex_pattern, "$options": "i"}
+            "value": {"$regex": regex_pattern, "$options": "i"},
+            "$or": [{"user_id": user_id}, {"is_system": True}]
         })
         if existing:
             skipped.append(val)
         else:
             doc = {
+                "user_id": user_id,
                 "category": category,
                 "value": val,
                 "status": status_val,
@@ -308,8 +319,9 @@ async def bulk_add_masters(payload: BulkMasterCreate):
     }
 
 @router.post("/bulk-delete")
-async def bulk_delete_masters(payload: BulkDeleteRequest):
+async def bulk_delete_masters(payload: BulkDeleteRequest, current_user: dict = Depends(get_current_user)):
     db = get_database()
+    user_id = current_user["id"]
     deleted_count = 0
 
     if payload.ids:
@@ -320,17 +332,19 @@ async def bulk_delete_masters(payload: BulkDeleteRequest):
             except Exception:
                 pass
         if valid_ids:
-            # Protect static Type/Mode items from being deleted by ID
+            # Protect static system Type/Mode items from being deleted by ID
             protected_docs = await db.masters.find({
                 "_id": {"$in": valid_ids},
-                "category": {"$in": ["Type/Mode", "TypeMode"]},
-                "value": {"$in": list(STATIC_TYPE_MODES)}
+                "$or": [
+                    {"is_system": True},
+                    {"category": {"$in": ["Type/Mode", "TypeMode"]}, "value": {"$in": list(STATIC_TYPE_MODES)}}
+                ]
             }, {"_id": 1}).to_list(length=100)
             protected_id_set = {d["_id"] for d in protected_docs}
             deletable_ids = [i for i in valid_ids if i not in protected_id_set]
 
             if deletable_ids:
-                res = await db.masters.delete_many({"_id": {"$in": deletable_ids}})
+                res = await db.masters.delete_many({"_id": {"$in": deletable_ids}, "user_id": user_id})
                 deleted_count += res.deleted_count
 
     if payload.category and payload.values:
@@ -341,13 +355,14 @@ async def bulk_delete_masters(payload: BulkDeleteRequest):
         if deletable_values:
             res = await db.masters.delete_many({
                 "category": cat,
-                "value": {"$in": deletable_values}
+                "value": {"$in": deletable_values},
+                "user_id": user_id
             })
             deleted_count += res.deleted_count
 
     return {"success": True, "deleted_count": deleted_count}
 
-async def remove_master_logic(category: str, value: str):
+async def remove_master_logic(category: str, value: str, user_id: str):
     db = get_database()
     category = category.strip()
     value = value.strip()
@@ -362,7 +377,8 @@ async def remove_master_logic(category: str, value: str):
     regex_pattern = f"^{re.escape(value)}$"
     result = await db.masters.delete_one({
         "category": category,
-        "value": {"$regex": regex_pattern, "$options": "i"}
+        "value": {"$regex": regex_pattern, "$options": "i"},
+        "user_id": user_id
     })
 
     if result.deleted_count == 0:
@@ -374,12 +390,12 @@ async def remove_master_logic(category: str, value: str):
     return {"message": f"Successfully deleted '{value}' from '{category}'"}
 
 @router.delete("")
-async def delete_master_query(category: str = Query(...), value: str = Query(...)):
-    return await remove_master_logic(category, value)
+async def delete_master_query(category: str = Query(...), value: str = Query(...), current_user: dict = Depends(get_current_user)):
+    return await remove_master_logic(category, value, user_id=current_user["id"])
 
 @router.delete("/{category:path}/{value}")
-async def delete_master_path(category: str, value: str):
-    return await remove_master_logic(category, value)
+async def delete_master_path(category: str, value: str, current_user: dict = Depends(get_current_user)):
+    return await remove_master_logic(category, value, user_id=current_user["id"])
 
 # =============================================================================
 # MULTI-COLUMN EXCEL / CSV MASTER DATA IMPORT ENGINE
@@ -688,7 +704,7 @@ def parse_pasted_text_to_rows(raw_text: str) -> List[List[Any]]:
         rows.append(parts)
     return rows
 
-async def process_master_extracted(extracted: Dict[str, List[str]], preview_only: bool, filename: str):
+async def process_master_extracted(extracted: Dict[str, List[str]], preview_only: bool, filename: str, user_id: str = None):
     db = get_database()
     now_iso = format_iso_now()
 
@@ -710,7 +726,10 @@ async def process_master_extracted(extracted: Dict[str, List[str]], preview_only
         if not items:
             continue
 
-        cursor = db.masters.find({"category": cat}, {"value": 1})
+        query = {"category": cat}
+        if user_id:
+            query["$or"] = [{"user_id": user_id}, {"is_system": True}]
+        cursor = db.masters.find(query, {"value": 1})
         existing_docs = await cursor.to_list(length=10000)
         existing_set = {d.get("value", "").strip().lower() for d in existing_docs}
 
@@ -741,13 +760,16 @@ async def process_master_extracted(extracted: Dict[str, List[str]], preview_only
         docs_to_insert = []
         for cat, items_list in to_insert_by_cat.items():
             for val in items_list:
-                docs_to_insert.append({
+                doc_to_save = {
                     "category": cat,
                     "value": val,
                     "status": "Active",
                     "created_at": now_iso,
                     "updated_at": now_iso,
-                })
+                }
+                if user_id:
+                    doc_to_save["user_id"] = user_id
+                docs_to_insert.append(doc_to_save)
         if docs_to_insert:
             await db.masters.insert_many(docs_to_insert)
 
@@ -835,7 +857,8 @@ async def import_masters_from_file(
     preview: Optional[bool] = Form(None),
     preview_only: Optional[bool] = Query(None),
     default_category: Optional[str] = Form(None),
-    default_cat_query: Optional[str] = Query(None, alias="default_category")
+    default_cat_query: Optional[str] = Query(None, alias="default_category"),
+    current_user: dict = Depends(get_current_user)
 ):
     if not file.filename:
         raise HTTPException(status_code=400, detail="No file selected")
@@ -875,12 +898,13 @@ async def import_masters_from_file(
     if not extracted:
         raise HTTPException(status_code=400, detail="No valid master items found in the file.")
 
-    return await process_master_extracted(extracted, is_preview, file.filename)
+    return await process_master_extracted(extracted, is_preview, file.filename, user_id=current_user["id"])
 
 @router.post("/import-pasted")
 async def import_masters_from_pasted(
     payload: PasteMasterImportRequest,
-    preview_only: Optional[bool] = Query(None)
+    preview_only: Optional[bool] = Query(None),
+    current_user: dict = Depends(get_current_user)
 ):
     is_preview = payload.preview if payload.preview is not None else (preview_only if preview_only is not None else True)
     raw_text = payload.raw_text.strip()
@@ -895,4 +919,4 @@ async def import_masters_from_pasted(
     if not extracted:
         raise HTTPException(status_code=400, detail="No valid master items detected in pasted text.")
 
-    return await process_master_extracted(extracted, preview_only, "pasted_text")
+    return await process_master_extracted(extracted, is_preview, "pasted_text", user_id=current_user["id"])
