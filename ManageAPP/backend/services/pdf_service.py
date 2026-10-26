@@ -1,6 +1,14 @@
 import io
 import os
-from xhtml2pdf import pisa
+import logging
+
+logger = logging.getLogger(__name__)
+
+try:
+    from xhtml2pdf import pisa
+except Exception as e:
+    logger.warning("xhtml2pdf could not be imported at startup: %s", e)
+    pisa = None
 
 def number_to_indian_words(num):
     """
@@ -451,7 +459,18 @@ def generate_tally_invoice_pdf(entry: dict, company_name: str = "") -> bytes:
     """
     Renders the Tally invoice HTML and compiles it to raw PDF bytes.
     """
+    global pisa
+    if pisa is None:
+        try:
+            from xhtml2pdf import pisa as _pisa
+            pisa = _pisa
+        except Exception as e:
+            raise RuntimeError(f"xhtml2pdf library is not available on this server: {e}")
+
     html_code = generate_tally_invoice_html(entry, company_name)
     out = io.BytesIO()
-    pisa.CreatePDF(html_code, dest=out)
+    pstatus = pisa.CreatePDF(html_code, dest=out)
+    if hasattr(pstatus, 'err') and pstatus.err:
+        raise RuntimeError(f"PDF compilation error: {pstatus.err}")
     return out.getvalue()
+

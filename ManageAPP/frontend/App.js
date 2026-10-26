@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
   View,
   Text,
@@ -7,6 +7,8 @@ import {
   ActivityIndicator,
   useWindowDimensions,
   Platform,
+  Animated,
+  Image,
 } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { Ionicons } from '@expo/vector-icons';
@@ -25,6 +27,63 @@ import { PartyWiseSalesModal } from './src/components/PartyWiseSalesModal';
 import { EntryInvoicePdfModal } from './src/components/EntryInvoicePdfModal';
 import { api } from './src/api/client';
 import './style.css';
+
+const AppLoadingScreen = () => {
+  const pulseAnim = useRef(new Animated.Value(1)).current;
+  const fadeAnim = useRef(new Animated.Value(0.65)).current;
+
+  useEffect(() => {
+    const animation = Animated.loop(
+      Animated.sequence([
+        Animated.parallel([
+          Animated.timing(pulseAnim, {
+            toValue: 1.05,
+            duration: 900,
+            useNativeDriver: true,
+          }),
+          Animated.timing(fadeAnim, {
+            toValue: 1,
+            duration: 900,
+            useNativeDriver: true,
+          }),
+        ]),
+        Animated.parallel([
+          Animated.timing(pulseAnim, {
+            toValue: 0.97,
+            duration: 900,
+            useNativeDriver: true,
+          }),
+          Animated.timing(fadeAnim, {
+            toValue: 0.65,
+            duration: 900,
+            useNativeDriver: true,
+          }),
+        ]),
+      ])
+    );
+    animation.start();
+    return () => animation.stop();
+  }, [pulseAnim, fadeAnim]);
+
+  return (
+    <View style={styles.loadingScreenRoot}>
+      <StatusBar style="dark" backgroundColor="#ffffff" />
+      <View style={styles.loadingScreenContent}>
+        <Animated.View style={{ transform: [{ scale: pulseAnim }], alignItems: 'center' }}>
+          <Image
+            source={require('./assets/app-logo.png')}
+            style={styles.loadingLogoImage}
+            resizeMode="contain"
+          />
+        </Animated.View>
+        <ActivityIndicator size="large" color="#0284c7" style={{ marginTop: 24 }} />
+        <Animated.Text style={[styles.loadingScreenText, { opacity: fadeAnim }]}>
+          Loading MaterialMApp...
+        </Animated.Text>
+      </View>
+    </View>
+  );
+};
 
 const MainApp = () => {
   const { user, loading: authLoading } = useAuth();
@@ -150,11 +209,7 @@ const MainApp = () => {
   }, []);
 
   if (authLoading) {
-    return (
-      <View style={styles.centerContainer}>
-        <ActivityIndicator size="large" color="#0284c7" />
-      </View>
-    );
+    return <AppLoadingScreen />;
   }
 
   if (!user) {
@@ -450,5 +505,27 @@ const styles = StyleSheet.create({
     backgroundColor: '#0284c7',
     borderRadius: 2,
     marginTop: 4,
+  },
+  loadingScreenRoot: {
+    flex: 1,
+    backgroundColor: '#ffffff',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  loadingScreenContent: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 20,
+  },
+  loadingLogoImage: {
+    width: 200,
+    height: 138,
+  },
+  loadingScreenText: {
+    marginTop: 14,
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#64748b',
+    letterSpacing: 0.3,
   },
 });

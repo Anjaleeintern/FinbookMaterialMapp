@@ -722,7 +722,10 @@ async def download_entry_pdf_direct(payload: DownloadPdfPayload):
     """
     entry_dict = payload.entry
     challan_no = entry_dict.get("challan_no") or entry_dict.get("serial_no") or entry_dict.get("id") or "slip"
-    pdf_bytes = generate_tally_invoice_pdf(entry_dict, payload.company_name or "")
+    try:
+        pdf_bytes = generate_tally_invoice_pdf(entry_dict, payload.company_name or "")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to generate invoice PDF: {str(e)}")
 
     return Response(
         content=pdf_bytes,
