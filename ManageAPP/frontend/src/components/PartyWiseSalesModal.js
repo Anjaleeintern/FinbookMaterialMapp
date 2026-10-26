@@ -10,8 +10,10 @@ import {
   useWindowDimensions,
   Platform,
   ActivityIndicator,
+  StatusBar,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { api } from '../api/client';
 
 const isWeb = Platform.OS === 'web';
@@ -80,6 +82,14 @@ export const PartyWiseSalesModal = ({
   const { width } = useWindowDimensions();
   const screenW = isWeb && typeof window !== 'undefined' ? window.innerWidth : width;
   const isMobile = screenW < 768;
+
+  const insets = useSafeAreaInsets();
+  const topSafe = Platform.OS === 'web'
+    ? 0
+    : Math.max(insets?.top || 0, Platform.OS === 'android' ? (StatusBar.currentHeight || 28) : 24);
+  const bottomSafe = Platform.OS === 'web'
+    ? 0
+    : Math.max(insets?.bottom || 0, 10);
 
   const monthNames = [
     'January', 'February', 'March', 'April', 'May', 'June',
@@ -416,7 +426,11 @@ export const PartyWiseSalesModal = ({
   );
 
   if (isDirectPage) {
-    return <View style={styles.directPageRoot}>{content}</View>;
+    return (
+      <View style={[styles.directPageRoot, { paddingTop: topSafe, paddingBottom: bottomSafe }]}>
+        {content}
+      </View>
+    );
   }
 
   return (
@@ -425,8 +439,17 @@ export const PartyWiseSalesModal = ({
       animationType="slide"
       transparent={true}
       onRequestClose={onClose}
+      statusBarTranslucent={true}
     >
-      <View style={styles.backdrop}>
+      <View
+        style={[
+          styles.backdrop,
+          {
+            paddingTop: topSafe + (isMobile ? 8 : 16),
+            paddingBottom: bottomSafe + (isMobile ? 8 : 16),
+          },
+        ]}
+      >
         {content}
       </View>
     </Modal>
@@ -436,31 +459,37 @@ export const PartyWiseSalesModal = ({
 const styles = StyleSheet.create({
   backdrop: {
     flex: 1,
-    backgroundColor: 'rgba(15, 23, 42, 0.6)',
+    backgroundColor: 'rgba(15, 23, 42, 0.65)',
     justifyContent: 'center',
     alignItems: 'center',
-    padding: Platform.OS === 'web' ? 14 : 0,
+    paddingHorizontal: 12,
   },
   directPageRoot: {
     flex: 1,
     backgroundColor: '#f8fafc',
+    alignItems: 'center',
   },
   card: {
     width: '100%',
     maxWidth: 720,
-    height: Platform.OS === 'web' ? '90%' : '100%',
-    maxHeight: 820,
+    height: '86%',
+    maxHeight: 780,
     backgroundColor: '#ffffff',
-    borderRadius: Platform.OS === 'web' ? 14 : 0,
+    borderRadius: 14,
     overflow: 'hidden',
     display: 'flex',
     flexDirection: 'column',
-    boxShadow: '0 16px 40px rgba(15, 23, 42, 0.18)',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.25,
+    shadowRadius: 20,
+    elevation: 20,
   },
   cardMobile: {
-    height: '100%',
-    maxHeight: '100%',
-    borderRadius: 0,
+    width: '100%',
+    height: '86%',
+    maxHeight: '88%',
+    borderRadius: 14,
   },
 
   // Header

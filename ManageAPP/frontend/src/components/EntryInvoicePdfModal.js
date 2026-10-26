@@ -10,8 +10,10 @@ import {
   Platform,
   ActivityIndicator,
   Share as RNShare,
+  StatusBar,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as Print from 'expo-print';
 import * as Sharing from 'expo-sharing';
 import * as FileSystem from 'expo-file-system';
@@ -444,6 +446,14 @@ export const EntryInvoicePdfModal = ({ visible, entry, company, user, onClose })
   const { width } = useWindowDimensions();
   const isMobile = width < 768;
 
+  const insets = useSafeAreaInsets();
+  const topSafe = Platform.OS === 'web'
+    ? 0
+    : Math.max(insets?.top || 0, Platform.OS === 'android' ? (StatusBar.currentHeight || 28) : 24);
+  const bottomSafe = Platform.OS === 'web'
+    ? 0
+    : Math.max(insets?.bottom || 0, 10);
+
   const [toastMsg, setToastMsg] = useState('');
   const [downloading, setDownloading] = useState(false);
   // Default to 'simple' view so user gets Full Simple View immediately
@@ -673,8 +683,16 @@ ${companyName}`;
   };
 
   return (
-    <Modal visible={visible} animationType="slide" transparent={true} onRequestClose={onClose}>
-      <View style={styles.modalOverlay}>
+    <Modal visible={visible} animationType="slide" transparent={true} onRequestClose={onClose} statusBarTranslucent={true}>
+      <View
+        style={[
+          styles.modalOverlay,
+          {
+            paddingTop: topSafe + (isMobile ? 8 : 16),
+            paddingBottom: bottomSafe + (isMobile ? 8 : 16),
+          },
+        ]}
+      >
         <View style={[styles.modalCard, isMobile && styles.modalCardMobile]}>
           {/* Header Bar with Action Buttons */}
           <View style={styles.headerBar}>
@@ -1219,15 +1237,15 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(15, 23, 42, 0.75)',
     justifyContent: 'center',
     alignItems: 'center',
-    padding: 8,
+    paddingHorizontal: 10,
   },
   modalCard: {
     backgroundColor: '#f8fafc',
-    borderRadius: 12,
+    borderRadius: 14,
     width: '100%',
     maxWidth: 820,
-    height: '92%',
-    maxHeight: '94%',
+    height: '86%',
+    maxHeight: 780,
     overflow: 'hidden',
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 10 },
@@ -1239,9 +1257,9 @@ const styles = StyleSheet.create({
   },
   modalCardMobile: {
     width: '100%',
-    height: '96%',
-    maxHeight: '98%',
-    borderRadius: 8,
+    height: '86%',
+    maxHeight: '88%',
+    borderRadius: 14,
   },
   headerBar: {
     flexDirection: 'row',
