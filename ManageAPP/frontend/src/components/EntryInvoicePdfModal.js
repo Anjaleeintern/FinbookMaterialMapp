@@ -446,6 +446,8 @@ export const EntryInvoicePdfModal = ({ visible, entry, company, user, onClose })
 
   const [toastMsg, setToastMsg] = useState('');
   const [downloading, setDownloading] = useState(false);
+  // Default to 'simple' view so user gets Full Simple View immediately
+  const [viewMode, setViewMode] = useState('simple'); // 'simple' | 'a4'
 
   const showToast = (msg) => {
     setToastMsg(msg);
@@ -479,13 +481,25 @@ export const EntryInvoicePdfModal = ({ visible, entry, company, user, onClose })
   const handleView = async () => {
     if (Platform.OS === 'web' && typeof window !== 'undefined') {
       const html = generateTallyInvoiceHtml(entry, companyName);
-      const printWin = window.open('', '_blank');
-      if (printWin) {
-        printWin.document.open();
-        printWin.document.write(html);
-        printWin.document.close();
-      } else {
-        showToast('Please allow popups to view invoice in new window');
+      try {
+        const blob = new Blob([html], { type: 'text/html' });
+        const url = URL.createObjectURL(blob);
+        const win = window.open(url, '_blank');
+        if (!win) {
+          const a = document.createElement('a');
+          a.href = url;
+          a.target = '_blank';
+          a.click();
+        }
+      } catch (e) {
+        const printWin = window.open('', '_blank');
+        if (printWin) {
+          printWin.document.open();
+          printWin.document.write(html);
+          printWin.document.close();
+        } else {
+          showToast('Please allow popups to view invoice');
+        }
       }
     } else {
       try {
@@ -666,11 +680,11 @@ ${companyName}`;
           <View style={styles.headerBar}>
             <View style={styles.headerLeft}>
               <View style={styles.badgeSuccess}>
-                <Ionicons name="checkmark-circle" size={15} color="#059669" style={{ marginRight: 5 }} />
+                <Ionicons name="checkmark-circle" size={13} color="#059669" style={{ marginRight: 4 }} />
                 <Text style={styles.badgeSuccessText}>Saved Successfully</Text>
               </View>
               <Text style={styles.headerTitle} numberOfLines={1}>
-                Invoice #{challanNo}
+                #{challanNo}
               </Text>
             </View>
 
@@ -681,7 +695,7 @@ ${companyName}`;
                 onPress={handleView}
                 activeOpacity={0.8}
               >
-                <Ionicons name="eye-outline" size={15} color="#0284c7" style={{ marginRight: 5 }} />
+                <Ionicons name="eye-outline" size={14} color="#0284c7" style={{ marginRight: 4 }} />
                 <Text style={[styles.actionBtnText, { color: '#0284c7' }]}>View</Text>
               </TouchableOpacity>
 
@@ -693,12 +707,12 @@ ${companyName}`;
                 activeOpacity={0.8}
               >
                 {downloading ? (
-                  <ActivityIndicator size="small" color="#ffffff" style={{ marginRight: 5 }} />
+                  <ActivityIndicator size="small" color="#ffffff" style={{ marginRight: 4 }} />
                 ) : (
-                  <Ionicons name="download-outline" size={15} color="#ffffff" style={{ marginRight: 5 }} />
+                  <Ionicons name="download-outline" size={14} color="#ffffff" style={{ marginRight: 4 }} />
                 )}
                 <Text style={[styles.actionBtnText, { color: '#ffffff', fontWeight: 'bold' }]}>
-                  {downloading ? 'Downloading...' : 'Download PDF'}
+                  {downloading ? 'PDF...' : 'PDF'}
                 </Text>
               </TouchableOpacity>
 
@@ -708,7 +722,7 @@ ${companyName}`;
                 onPress={handleShare}
                 activeOpacity={0.8}
               >
-                <Ionicons name="share-social-outline" size={15} color="#059669" style={{ marginRight: 5 }} />
+                <Ionicons name="share-social-outline" size={14} color="#059669" style={{ marginRight: 4 }} />
                 <Text style={[styles.actionBtnText, { color: '#059669' }]}>Share</Text>
               </TouchableOpacity>
 
@@ -719,280 +733,479 @@ ${companyName}`;
                 activeOpacity={0.7}
                 hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
               >
-                <Ionicons name="close" size={20} color="#64748b" />
+                <Ionicons name="close" size={18} color="#64748b" />
               </TouchableOpacity>
             </View>
+          </View>
+
+          {/* View Mode Switcher Tabs */}
+          <View style={styles.tabContainer}>
+            <TouchableOpacity
+              style={[styles.tabItem, viewMode === 'simple' && styles.tabItemActive]}
+              onPress={() => setViewMode('simple')}
+              activeOpacity={0.8}
+            >
+              <Ionicons
+                name="receipt-outline"
+                size={14}
+                color={viewMode === 'simple' ? '#0284c7' : '#64748b'}
+                style={{ marginRight: 6 }}
+              />
+              <Text style={[styles.tabItemText, viewMode === 'simple' && styles.tabItemTextActive]}>
+                Full Simple View
+              </Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={[styles.tabItem, viewMode === 'a4' && styles.tabItemActive]}
+              onPress={() => setViewMode('a4')}
+              activeOpacity={0.8}
+            >
+              <Ionicons
+                name="newspaper-outline"
+                size={14}
+                color={viewMode === 'a4' ? '#0284c7' : '#64748b'}
+                style={{ marginRight: 6 }}
+              />
+              <Text style={[styles.tabItemText, viewMode === 'a4' && styles.tabItemTextActive]}>
+                Official A4 Sheet
+              </Text>
+            </TouchableOpacity>
           </View>
 
           {/* Toast Notification */}
           {toastMsg ? (
             <View style={styles.toastContainer}>
-              <Ionicons name="information-circle" size={16} color="#ffffff" style={{ marginRight: 6 }} />
+              <Ionicons name="information-circle" size={15} color="#ffffff" style={{ marginRight: 6 }} />
               <Text style={styles.toastText}>{toastMsg}</Text>
             </View>
           ) : null}
 
-          {/* Authentic Tally Invoice Sheet Preview */}
+          {/* Main Content Area */}
           <ScrollView
             style={styles.scrollArea}
-            contentContainerStyle={styles.scrollContent}
+            contentContainerStyle={[
+              styles.scrollContent,
+              { alignItems: viewMode === 'simple' ? 'stretch' : (isMobile ? 'flex-start' : 'center') }
+            ]}
             showsVerticalScrollIndicator={true}
           >
-            <ScrollView
-              horizontal={true}
-              showsHorizontalScrollIndicator={true}
-              contentContainerStyle={isMobile ? { minWidth: 620 } : { width: '100%', alignItems: 'center' }}
-            >
-              <View style={[styles.tallySheet, isMobile && { width: 620, minWidth: 620 }]}>
-                {/* Header Title */}
-                <Text style={styles.tallyTitle}>INVOICE</Text>
-
-              {/* Outer Tally Box */}
-              <View style={styles.tallyOuterBox}>
-                {/* Top Section: Left 50% Company/Buyer, Right 50% Details Grid */}
-                <View style={styles.tallyTopRow}>
-                  {/* Left Column: Company & Buyer */}
-                  <View style={styles.tallyLeftCol}>
-                    <View style={styles.tallyCompanyBox}>
-                      <Text style={styles.tallyCompName}>{companyName}</Text>
-                      {compAddress ? <Text style={styles.tallyValText}>{compAddress}</Text> : null}
-                      {compEmail ? <Text style={styles.tallyValText}>E-Mail : {compEmail}</Text> : null}
+            {viewMode === 'simple' ? (
+              /* FULL SIMPLE VIEW: 100% full-width, clean, readable cards without horizontal clipping */
+              <View style={styles.mobileSlipContainer}>
+                {/* 1. Company & Slip Title */}
+                <View style={styles.msHeaderCard}>
+                  <Text style={styles.msCompName}>{companyName}</Text>
+                  {compAddress ? <Text style={styles.msCompSub}>{compAddress}</Text> : null}
+                  {compEmail ? <Text style={styles.msCompSub}>E-Mail: {compEmail}</Text> : null}
+                  <View style={styles.msDivider} />
+                  <View style={styles.msRowBetween}>
+                    <View>
+                      <Text style={styles.msLabel}>INVOICE NO.</Text>
+                      <Text style={styles.msInvoiceNum}>#{challanNo}</Text>
                     </View>
-                    <View style={styles.tallyBuyerBox}>
-                      <Text style={styles.tallyLblText}>Buyer (Bill to)</Text>
-                      <Text style={styles.tallyBuyerName}>{partyName}</Text>
-                      {partyAddress ? <Text style={styles.tallyValText}>{partyAddress}</Text> : null}
+                    <View style={{ alignItems: 'center' }}>
+                      <Text style={styles.msLabel}>DATE</Text>
+                      <Text style={styles.msDateVal}>{dateStr || '-'}</Text>
                     </View>
-                  </View>
-
-                  {/* Right Column: 9-row boxed grid */}
-                  <View style={styles.tallyRightCol}>
-                    {/* Row 1: Invoice No. | Dated */}
-                    <View style={styles.gridRow}>
-                      <View style={[styles.gridCell, { width: '50%' }]}>
-                        <Text style={styles.tallyLblText}>Invoice No.</Text>
-                        <Text style={styles.tallyBoldVal}>{challanNo}</Text>
-                      </View>
-                      <View style={[styles.gridCell, { width: '50%', borderRightWidth: 0 }]}>
-                        <Text style={styles.tallyLblText}>Dated</Text>
-                        <Text style={styles.tallyBoldVal}>{dateStr}</Text>
-                      </View>
-                    </View>
-
-                    {/* Row 2: Delivery Note | Mode/Terms of Payment */}
-                    <View style={styles.gridRow}>
-                      <View style={[styles.gridCell, { width: '50%' }]}>
-                        <Text style={styles.tallyLblText}>Delivery Note</Text>
-                        <Text style={styles.tallyValText}>-</Text>
-                      </View>
-                      <View style={[styles.gridCell, { width: '50%', borderRightWidth: 0 }]}>
-                        <Text style={styles.tallyLblText}>Mode/Terms of Payment</Text>
-                        <Text style={styles.tallyValText}>{paymentMode}</Text>
-                      </View>
-                    </View>
-
-                    {/* Row 3: Reference No. & Date. | Other References */}
-                    <View style={styles.gridRow}>
-                      <View style={[styles.gridCell, { width: '50%' }]}>
-                        <Text style={styles.tallyLblText}>Reference No. & Date.</Text>
-                        <Text style={styles.tallyValText}>-</Text>
-                      </View>
-                      <View style={[styles.gridCell, { width: '50%', borderRightWidth: 0 }]}>
-                        <Text style={styles.tallyLblText}>Other References</Text>
-                        <Text style={styles.tallyValText}>-</Text>
-                      </View>
-                    </View>
-
-                    {/* Row 4: Buyer's Order No. | Dated */}
-                    <View style={styles.gridRow}>
-                      <View style={[styles.gridCell, { width: '50%' }]}>
-                        <Text style={styles.tallyLblText}>Buyer's Order No.</Text>
-                        <Text style={styles.tallyValText}>-</Text>
-                      </View>
-                      <View style={[styles.gridCell, { width: '50%', borderRightWidth: 0 }]}>
-                        <Text style={styles.tallyLblText}>Dated</Text>
-                        <Text style={styles.tallyValText}>-</Text>
-                      </View>
-                    </View>
-
-                    {/* Row 5: Dispatch Doc No. | Delivery Note Date */}
-                    <View style={styles.gridRow}>
-                      <View style={[styles.gridCell, { width: '50%' }]}>
-                        <Text style={styles.tallyLblText}>Dispatch Doc No.</Text>
-                        <Text style={styles.tallyBoldVal}>{vehicleNo}</Text>
-                      </View>
-                      <View style={[styles.gridCell, { width: '50%', borderRightWidth: 0 }]}>
-                        <Text style={styles.tallyLblText}>Delivery Note Date</Text>
-                        <Text style={styles.tallyValText}>{dateStr}</Text>
-                      </View>
-                    </View>
-
-                    {/* Row 6: Dispatched through | Destination */}
-                    <View style={styles.gridRow}>
-                      <View style={[styles.gridCell, { width: '50%' }]}>
-                        <Text style={styles.tallyLblText}>Dispatched through</Text>
-                        <Text style={styles.tallyBoldVal}>{transportName}</Text>
-                      </View>
-                      <View style={[styles.gridCell, { width: '50%', borderRightWidth: 0 }]}>
-                        <Text style={styles.tallyLblText}>Destination</Text>
-                        <Text style={styles.tallyBoldVal}>{destination}</Text>
-                      </View>
-                    </View>
-
-                    {/* Row 7: Vessel/Flight No. | Place of receipt by shipper */}
-                    <View style={styles.gridRow}>
-                      <View style={[styles.gridCell, { width: '50%' }]}>
-                        <Text style={styles.tallyLblText}>Vessel/Flight No.</Text>
-                        <Text style={styles.tallyBoldVal}>{vehicleNo}</Text>
-                      </View>
-                      <View style={[styles.gridCell, { width: '50%', borderRightWidth: 0 }]}>
-                        <Text style={styles.tallyLblText}>Place of receipt by shipper:</Text>
-                        <Text style={styles.tallyBoldVal}>Quarry / Crusher</Text>
-                      </View>
-                    </View>
-
-                    {/* Row 8: City/Port of Loading | City/Port of Discharge */}
-                    <View style={styles.gridRow}>
-                      <View style={[styles.gridCell, { width: '50%' }]}>
-                        <Text style={styles.tallyLblText}>City/Port of Loading</Text>
-                        <Text style={styles.tallyBoldVal}>Crusher Site</Text>
-                      </View>
-                      <View style={[styles.gridCell, { width: '50%', borderRightWidth: 0 }]}>
-                        <Text style={styles.tallyLblText}>City/Port of Discharge</Text>
-                        <Text style={styles.tallyBoldVal}>{destination}</Text>
-                      </View>
-                    </View>
-
-                    {/* Row 9: Terms of Delivery */}
-                    <View style={[styles.gridRow, { borderBottomWidth: 0 }]}>
-                      <View style={[styles.gridCell, { width: '100%', borderRightWidth: 0 }]}>
-                        <Text style={styles.tallyLblText}>Terms of Delivery</Text>
-                        <Text style={styles.tallyValText}>-</Text>
+                    <View style={{ alignItems: 'flex-end' }}>
+                      <Text style={styles.msLabel}>PAYMENT</Text>
+                      <View style={styles.msBadge}>
+                        <Text style={styles.msBadgeText}>{paymentMode}</Text>
                       </View>
                     </View>
                   </View>
                 </View>
 
-                {/* Goods Table Header */}
-                <View style={styles.tableHeaderRow}>
-                  <Text style={[styles.thText, { width: '6%', textAlign: 'center' }]}>Sl{"\n"}No.</Text>
-                  <Text style={[styles.thText, { width: '48%', textAlign: 'left' }]}>Description of Goods</Text>
-                  <Text style={[styles.thText, { width: '14%', textAlign: 'right' }]}>Quantity</Text>
-                  <Text style={[styles.thText, { width: '14%', textAlign: 'right' }]}>Rate</Text>
-                  <Text style={[styles.thText, { width: '6%', textAlign: 'center' }]}>per</Text>
-                  <Text style={[styles.thText, { width: '12%', textAlign: 'right', borderRightWidth: 0 }]}>Amount</Text>
+                {/* 2. Buyer (Bill To) */}
+                <View style={styles.msCard}>
+                  <View style={styles.msCardHeaderRow}>
+                    <Ionicons name="business-outline" size={15} color="#0284c7" style={{ marginRight: 6 }} />
+                    <Text style={styles.msCardTitle}>BUYER (BILLED TO)</Text>
+                  </View>
+                  <Text style={styles.msBuyerName}>{partyName}</Text>
+                  {partyAddress ? <Text style={styles.msBuyerSub}>{partyAddress}</Text> : null}
                 </View>
 
-                {/* Goods Table Body with Tall Blank Space */}
-                <View style={styles.tableBodyArea}>
-                  {/* Item 1 */}
-                  <View style={styles.tableItemRow}>
-                    <Text style={[styles.tdText, { width: '6%', textAlign: 'center', fontWeight: 'bold' }]}>1</Text>
-                    <View style={[styles.tdCol, { width: '48%' }]}>
-                      <Text style={styles.itemTitle}>{materialName}</Text>
+                {/* 3. Transport & Dispatch Details */}
+                <View style={styles.msCard}>
+                  <View style={styles.msCardHeaderRow}>
+                    <Ionicons name="car-outline" size={15} color="#0284c7" style={{ marginRight: 6 }} />
+                    <Text style={styles.msCardTitle}>DISPATCH & TRANSPORT</Text>
+                  </View>
+                  <View style={styles.msGrid}>
+                    <View style={styles.msGridCol}>
+                      <Text style={styles.msLabel}>Vehicle No:</Text>
+                      <Text style={styles.msValBold}>{vehicleNo}</Text>
                     </View>
-                    <Text style={[styles.tdText, { width: '14%', textAlign: 'right', fontWeight: 'bold' }]}>
-                      {netWt} {unit}
-                    </Text>
-                    <Text style={[styles.tdText, { width: '14%', textAlign: 'right' }]}>
-                      {formatINR(rate)}
-                    </Text>
-                    <Text style={[styles.tdText, { width: '6%', textAlign: 'center' }]}>
-                      {unit}
-                    </Text>
-                    <Text style={[styles.tdText, { width: '12%', textAlign: 'right', fontWeight: 'bold', borderRightWidth: 0 }]}>
-                      {formatINR(amount)}
-                    </Text>
+                    <View style={styles.msGridCol}>
+                      <Text style={styles.msLabel}>Transport:</Text>
+                      <Text style={styles.msVal}>{transportName}</Text>
+                    </View>
+                  </View>
+                  <View style={[styles.msGrid, { marginTop: 8 }]}>
+                    <View style={styles.msGridCol}>
+                      <Text style={styles.msLabel}>Destination:</Text>
+                      <Text style={styles.msVal}>{destination}</Text>
+                    </View>
+                    <View style={styles.msGridCol}>
+                      <Text style={styles.msLabel}>Dispatch Doc No:</Text>
+                      <Text style={styles.msVal}>{vehicleNo}</Text>
+                    </View>
+                  </View>
+                  <View style={[styles.msGrid, { marginTop: 8 }]}>
+                    <View style={styles.msGridCol}>
+                      <Text style={styles.msLabel}>City / Loading:</Text>
+                      <Text style={styles.msVal}>Crusher Site</Text>
+                    </View>
+                    <View style={styles.msGridCol}>
+                      <Text style={styles.msLabel}>Place of Receipt:</Text>
+                      <Text style={styles.msVal}>Quarry / Crusher</Text>
+                    </View>
+                  </View>
+                </View>
+
+                {/* 4. Material & Pricing Details */}
+                <View style={styles.msCard}>
+                  <View style={styles.msCardHeaderRow}>
+                    <Ionicons name="cube-outline" size={15} color="#0284c7" style={{ marginRight: 6 }} />
+                    <Text style={styles.msCardTitle}>MATERIAL & PRICING</Text>
+                  </View>
+                  <View style={styles.msItemBox}>
+                    <Text style={styles.msItemName}>{materialName}</Text>
+                    <View style={styles.msRowBetween}>
+                      <Text style={styles.msLabel}>Quantity:</Text>
+                      <Text style={styles.msValBold}>{netWt} {unit}</Text>
+                    </View>
+                    <View style={styles.msRowBetween}>
+                      <Text style={styles.msLabel}>Rate:</Text>
+                      <Text style={styles.msVal}>₹{formatINR(rate)} / {unit}</Text>
+                    </View>
+                    <View style={[styles.msRowBetween, { borderTopWidth: 1, borderTopColor: '#e2e8f0', paddingTop: 6, marginTop: 4 }]}>
+                      <Text style={styles.msLabelBold}>Base Amount:</Text>
+                      <Text style={styles.msValBold}>₹{formatINR(amount)}</Text>
+                    </View>
                   </View>
 
                   {/* Additional Charge Row (if any) */}
                   {entry.additional_charge_amount > 0 && (
-                    <View style={styles.tableItemRow}>
-                      <Text style={[styles.tdText, { width: '6%' }]}> </Text>
-                      <View style={[styles.tdCol, { width: '48%' }]}>
-                        <Text style={styles.itemSubtitle}>{entry.additional_charge_name || 'Royalty / Freight Charges'}</Text>
-                      </View>
-                      <Text style={[styles.tdText, { width: '14%' }]}> </Text>
-                      <Text style={[styles.tdText, { width: '14%' }]}> </Text>
-                      <Text style={[styles.tdText, { width: '6%' }]}> </Text>
-                      <Text style={[styles.tdText, { width: '12%', textAlign: 'right', fontWeight: 'bold', borderRightWidth: 0 }]}>
-                        {formatINR(entry.additional_charge_amount)}
-                      </Text>
+                    <View style={[styles.msRowBetween, { marginTop: 8, paddingHorizontal: 4 }]}>
+                      <Text style={styles.msLabel}>{entry.additional_charge_name || 'Royalty/Freight Charges'}:</Text>
+                      <Text style={styles.msValBold}>₹{formatINR(entry.additional_charge_amount)}</Text>
                     </View>
                   )}
 
-                  {/* GST Rows (if any) */}
+                  {/* Taxes */}
                   {entry.cgst_amount > 0 && (
-                    <View style={styles.tableItemRow}>
-                      <Text style={[styles.tdText, { width: '6%' }]}> </Text>
-                      <View style={[styles.tdCol, { width: '48%' }]}>
-                        <Text style={styles.itemSubtitle}>Output CGST @ {entry.cgst_rate}%</Text>
-                      </View>
-                      <Text style={[styles.tdText, { width: '14%' }]}> </Text>
-                      <Text style={[styles.tdText, { width: '14%' }]}> </Text>
-                      <Text style={[styles.tdText, { width: '6%' }]}> </Text>
-                      <Text style={[styles.tdText, { width: '12%', textAlign: 'right', fontWeight: 'bold', borderRightWidth: 0 }]}>
-                        {formatINR(entry.cgst_amount)}
-                      </Text>
+                    <View style={[styles.msRowBetween, { marginTop: 6, paddingHorizontal: 4 }]}>
+                      <Text style={styles.msLabel}>Output CGST @ {entry.cgst_rate || '2.5'}%:</Text>
+                      <Text style={styles.msVal}>₹{formatINR(entry.cgst_amount)}</Text>
                     </View>
                   )}
                   {entry.sgst_amount > 0 && (
-                    <View style={styles.tableItemRow}>
-                      <Text style={[styles.tdText, { width: '6%' }]}> </Text>
-                      <View style={[styles.tdCol, { width: '48%' }]}>
-                        <Text style={styles.itemSubtitle}>Output SGST @ {entry.sgst_rate}%</Text>
-                      </View>
-                      <Text style={[styles.tdText, { width: '14%' }]}> </Text>
-                      <Text style={[styles.tdText, { width: '14%' }]}> </Text>
-                      <Text style={[styles.tdText, { width: '6%' }]}> </Text>
-                      <Text style={[styles.tdText, { width: '12%', textAlign: 'right', fontWeight: 'bold', borderRightWidth: 0 }]}>
-                        {formatINR(entry.sgst_amount)}
-                      </Text>
+                    <View style={[styles.msRowBetween, { marginTop: 4, paddingHorizontal: 4 }]}>
+                      <Text style={styles.msLabel}>Output SGST @ {entry.sgst_rate || '2.5'}%:</Text>
+                      <Text style={styles.msVal}>₹{formatINR(entry.sgst_amount)}</Text>
+                    </View>
+                  )}
+                  {entry.igst_amount > 0 && (
+                    <View style={[styles.msRowBetween, { marginTop: 4, paddingHorizontal: 4 }]}>
+                      <Text style={styles.msLabel}>Output IGST @ {entry.igst_rate || '5'}%:</Text>
+                      <Text style={styles.msVal}>₹{formatINR(entry.igst_amount)}</Text>
                     </View>
                   )}
                 </View>
 
-                {/* Table Total Row */}
-                <View style={styles.tableTotalRow}>
-                  <Text style={[styles.totalCell, { width: '54%', textAlign: 'right', fontWeight: 'bold' }]}>
-                    Total
-                  </Text>
-                  <Text style={[styles.totalCell, { width: '14%', textAlign: 'right', fontWeight: 'bold' }]}>
-                    {netWt} {unit}
-                  </Text>
-                  <Text style={[styles.totalCell, { width: '14%' }]}> </Text>
-                  <Text style={[styles.totalCell, { width: '6%' }]}> </Text>
-                  <Text style={[styles.totalCell, { width: '12%', textAlign: 'right', fontWeight: 'bold', borderRightWidth: 0 }]}>
-                    ₹ {formatINR(totalAmount)}
-                  </Text>
+                {/* 5. Total & In Words Card */}
+                <View style={styles.msTotalCard}>
+                  <View style={styles.msRowBetween}>
+                    <Text style={styles.msTotalLabel}>TOTAL AMOUNT</Text>
+                    <Text style={styles.msTotalVal}>₹{formatINR(totalAmount)}</Text>
+                  </View>
+                  <View style={[styles.msDivider, { marginVertical: 8, backgroundColor: '#a7f3d0' }]} />
+                  <Text style={styles.msLabelDark}>Amount in Words:</Text>
+                  <Text style={styles.msWordsText}>{amountWords}</Text>
                 </View>
 
-                {/* Amount in words & E.&O.E. */}
-                <View style={styles.amountWordsRow}>
-                  <View style={{ flex: 1 }}>
-                    <Text style={styles.tallyLblText}>Amount Chargeable (in words)</Text>
-                    <Text style={styles.amountWordsBold}>{amountWords}</Text>
-                  </View>
-                  <Text style={styles.eoeText}>E. & O.E</Text>
-                </View>
-
-                {/* Bottom Declaration & Signatures */}
-                <View style={styles.bottomSection}>
-                  <View style={styles.declarationBox}>
-                    <Text style={styles.declHeader}>Declaration</Text>
-                    <Text style={styles.declBody}>
-                      We declare that this invoice shows the actual price of the goods described and that all particulars are true and correct.
-                    </Text>
-                  </View>
-                  <View style={styles.signatureBox}>
-                    <Text style={styles.forCompanyText}>for {companyName}</Text>
-                    <View style={{ height: 40 }} />
-                    <Text style={styles.authorisedSignText}>Authorised Signatory</Text>
+                {/* 6. Signatory */}
+                <View style={styles.msFooterCard}>
+                  <Text style={styles.msDeclarationText}>
+                    Declaration: We declare that this invoice shows the actual price of the goods described and that all particulars are true and correct.
+                  </Text>
+                  <View style={{ alignItems: 'flex-end', marginTop: 12 }}>
+                    <Text style={styles.msSignComp}>for {companyName}</Text>
+                    <View style={{ height: 28 }} />
+                    <Text style={styles.msSignText}>Authorised Signatory</Text>
                   </View>
                 </View>
               </View>
-            </View>
-            </ScrollView>
+            ) : (
+              /* OFFICIAL A4 SHEET VIEW */
+              <View style={{ width: '100%', alignItems: isMobile ? 'flex-start' : 'center' }}>
+                {isMobile ? (
+                  <Text style={styles.a4TipText}>
+                    👈 Scroll horizontally to view full A4 sheet 👉
+                  </Text>
+                ) : null}
+
+                <ScrollView
+                  horizontal={isMobile}
+                  showsHorizontalScrollIndicator={true}
+                  contentContainerStyle={{ alignItems: 'flex-start' }}
+                  style={{ width: '100%' }}
+                >
+                  <View style={[styles.tallySheet, isMobile && { width: 660, minWidth: 660 }]}>
+                    {/* Header Title */}
+                    <Text style={styles.tallyTitle}>INVOICE</Text>
+
+                    {/* Outer Tally Box */}
+                    <View style={styles.tallyOuterBox}>
+                      {/* Top Section: Left 50% Company/Buyer, Right 50% Details Grid */}
+                      <View style={styles.tallyTopRow}>
+                        {/* Left Column: Company & Buyer */}
+                        <View style={styles.tallyLeftCol}>
+                          <View style={styles.tallyCompanyBox}>
+                            <Text style={styles.tallyCompName}>{companyName}</Text>
+                            {compAddress ? <Text style={styles.tallyValText}>{compAddress}</Text> : null}
+                            {compEmail ? <Text style={styles.tallyValText}>E-Mail : {compEmail}</Text> : null}
+                          </View>
+                          <View style={styles.tallyBuyerBox}>
+                            <Text style={styles.tallyLblText}>Buyer (Bill to)</Text>
+                            <Text style={styles.tallyBuyerName}>{partyName}</Text>
+                            {partyAddress ? <Text style={styles.tallyValText}>{partyAddress}</Text> : null}
+                          </View>
+                        </View>
+
+                        {/* Right Column: 9-row boxed grid */}
+                        <View style={styles.tallyRightCol}>
+                          {/* Row 1: Invoice No. | Dated */}
+                          <View style={styles.gridRow}>
+                            <View style={[styles.gridCell, { width: '50%' }]}>
+                              <Text style={styles.tallyLblText}>Invoice No.</Text>
+                              <Text style={styles.tallyBoldVal}>{challanNo}</Text>
+                            </View>
+                            <View style={[styles.gridCell, { width: '50%', borderRightWidth: 0 }]}>
+                              <Text style={styles.tallyLblText}>Dated</Text>
+                              <Text style={styles.tallyBoldVal}>{dateStr}</Text>
+                            </View>
+                          </View>
+
+                          {/* Row 2: Delivery Note | Mode/Terms of Payment */}
+                          <View style={styles.gridRow}>
+                            <View style={[styles.gridCell, { width: '50%' }]}>
+                              <Text style={styles.tallyLblText}>Delivery Note</Text>
+                              <Text style={styles.tallyValText}>-</Text>
+                            </View>
+                            <View style={[styles.gridCell, { width: '50%', borderRightWidth: 0 }]}>
+                              <Text style={styles.tallyLblText}>Mode/Terms of Payment</Text>
+                              <Text style={styles.tallyValText}>{paymentMode}</Text>
+                            </View>
+                          </View>
+
+                          {/* Row 3: Reference No. & Date. | Other References */}
+                          <View style={styles.gridRow}>
+                            <View style={[styles.gridCell, { width: '50%' }]}>
+                              <Text style={styles.tallyLblText}>Reference No. & Date.</Text>
+                              <Text style={styles.tallyValText}>-</Text>
+                            </View>
+                            <View style={[styles.gridCell, { width: '50%', borderRightWidth: 0 }]}>
+                              <Text style={styles.tallyLblText}>Other References</Text>
+                              <Text style={styles.tallyValText}>-</Text>
+                            </View>
+                          </View>
+
+                          {/* Row 4: Buyer's Order No. | Dated */}
+                          <View style={styles.gridRow}>
+                            <View style={[styles.gridCell, { width: '50%' }]}>
+                              <Text style={styles.tallyLblText}>Buyer's Order No.</Text>
+                              <Text style={styles.tallyValText}>-</Text>
+                            </View>
+                            <View style={[styles.gridCell, { width: '50%', borderRightWidth: 0 }]}>
+                              <Text style={styles.tallyLblText}>Dated</Text>
+                              <Text style={styles.tallyValText}>-</Text>
+                            </View>
+                          </View>
+
+                          {/* Row 5: Dispatch Doc No. | Delivery Note Date */}
+                          <View style={styles.gridRow}>
+                            <View style={[styles.gridCell, { width: '50%' }]}>
+                              <Text style={styles.tallyLblText}>Dispatch Doc No.</Text>
+                              <Text style={styles.tallyBoldVal}>{vehicleNo}</Text>
+                            </View>
+                            <View style={[styles.gridCell, { width: '50%', borderRightWidth: 0 }]}>
+                              <Text style={styles.tallyLblText}>Delivery Note Date</Text>
+                              <Text style={styles.tallyValText}>{dateStr}</Text>
+                            </View>
+                          </View>
+
+                          {/* Row 6: Dispatched through | Destination */}
+                          <View style={styles.gridRow}>
+                            <View style={[styles.gridCell, { width: '50%' }]}>
+                              <Text style={styles.tallyLblText}>Dispatched through</Text>
+                              <Text style={styles.tallyBoldVal}>{transportName}</Text>
+                            </View>
+                            <View style={[styles.gridCell, { width: '50%', borderRightWidth: 0 }]}>
+                              <Text style={styles.tallyLblText}>Destination</Text>
+                              <Text style={styles.tallyBoldVal}>{destination}</Text>
+                            </View>
+                          </View>
+
+                          {/* Row 7: Vessel/Flight No. | Place of receipt by shipper */}
+                          <View style={styles.gridRow}>
+                            <View style={[styles.gridCell, { width: '50%' }]}>
+                              <Text style={styles.tallyLblText}>Vessel/Flight No.</Text>
+                              <Text style={styles.tallyBoldVal}>{vehicleNo}</Text>
+                            </View>
+                            <View style={[styles.gridCell, { width: '50%', borderRightWidth: 0 }]}>
+                              <Text style={styles.tallyLblText}>Place of receipt by shipper:</Text>
+                              <Text style={styles.tallyBoldVal}>Quarry / Crusher</Text>
+                            </View>
+                          </View>
+
+                          {/* Row 8: City/Port of Loading | City/Port of Discharge */}
+                          <View style={styles.gridRow}>
+                            <View style={[styles.gridCell, { width: '50%' }]}>
+                              <Text style={styles.tallyLblText}>City/Port of Loading</Text>
+                              <Text style={styles.tallyBoldVal}>Crusher Site</Text>
+                            </View>
+                            <View style={[styles.gridCell, { width: '50%', borderRightWidth: 0 }]}>
+                              <Text style={styles.tallyLblText}>City/Port of Discharge</Text>
+                              <Text style={styles.tallyBoldVal}>{destination}</Text>
+                            </View>
+                          </View>
+
+                          {/* Row 9: Terms of Delivery */}
+                          <View style={[styles.gridRow, { borderBottomWidth: 0 }]}>
+                            <View style={[styles.gridCell, { width: '100%', borderRightWidth: 0 }]}>
+                              <Text style={styles.tallyLblText}>Terms of Delivery</Text>
+                              <Text style={styles.tallyValText}>-</Text>
+                            </View>
+                          </View>
+                        </View>
+                      </View>
+
+                      {/* Goods Table Header */}
+                      <View style={styles.tableHeaderRow}>
+                        <Text style={[styles.thText, { width: '6%', textAlign: 'center' }]}>Sl{"\n"}No.</Text>
+                        <Text style={[styles.thText, { width: '48%', textAlign: 'left' }]}>Description of Goods</Text>
+                        <Text style={[styles.thText, { width: '14%', textAlign: 'right' }]}>Quantity</Text>
+                        <Text style={[styles.thText, { width: '14%', textAlign: 'right' }]}>Rate</Text>
+                        <Text style={[styles.thText, { width: '6%', textAlign: 'center' }]}>per</Text>
+                        <Text style={[styles.thText, { width: '12%', textAlign: 'right', borderRightWidth: 0 }]}>Amount</Text>
+                      </View>
+
+                      {/* Goods Table Body with Tall Blank Space */}
+                      <View style={styles.tableBodyArea}>
+                        {/* Item 1 */}
+                        <View style={styles.tableItemRow}>
+                          <Text style={[styles.tdText, { width: '6%', textAlign: 'center', fontWeight: 'bold' }]}>1</Text>
+                          <View style={[styles.tdCol, { width: '48%' }]}>
+                            <Text style={styles.itemTitle}>{materialName}</Text>
+                          </View>
+                          <Text style={[styles.tdText, { width: '14%', textAlign: 'right', fontWeight: 'bold' }]}>
+                            {netWt} {unit}
+                          </Text>
+                          <Text style={[styles.tdText, { width: '14%', textAlign: 'right' }]}>
+                            {formatINR(rate)}
+                          </Text>
+                          <Text style={[styles.tdText, { width: '6%', textAlign: 'center' }]}>
+                            {unit}
+                          </Text>
+                          <Text style={[styles.tdText, { width: '12%', textAlign: 'right', fontWeight: 'bold', borderRightWidth: 0 }]}>
+                            {formatINR(amount)}
+                          </Text>
+                        </View>
+
+                        {/* Additional Charge Row (if any) */}
+                        {entry.additional_charge_amount > 0 && (
+                          <View style={styles.tableItemRow}>
+                            <Text style={[styles.tdText, { width: '6%' }]}> </Text>
+                            <View style={[styles.tdCol, { width: '48%' }]}>
+                              <Text style={styles.itemSubtitle}>{entry.additional_charge_name || 'Royalty / Freight Charges'}</Text>
+                            </View>
+                            <Text style={[styles.tdText, { width: '14%' }]}> </Text>
+                            <Text style={[styles.tdText, { width: '14%' }]}> </Text>
+                            <Text style={[styles.tdText, { width: '6%' }]}> </Text>
+                            <Text style={[styles.tdText, { width: '12%', textAlign: 'right', fontWeight: 'bold', borderRightWidth: 0 }]}>
+                              {formatINR(entry.additional_charge_amount)}
+                            </Text>
+                          </View>
+                        )}
+
+                        {/* GST Rows (if any) */}
+                        {entry.cgst_amount > 0 && (
+                          <View style={styles.tableItemRow}>
+                            <Text style={[styles.tdText, { width: '6%' }]}> </Text>
+                            <View style={[styles.tdCol, { width: '48%' }]}>
+                              <Text style={styles.itemSubtitle}>Output CGST @ {entry.cgst_rate}%</Text>
+                            </View>
+                            <Text style={[styles.tdText, { width: '14%' }]}> </Text>
+                            <Text style={[styles.tdText, { width: '14%' }]}> </Text>
+                            <Text style={[styles.tdText, { width: '6%' }]}> </Text>
+                            <Text style={[styles.tdText, { width: '12%', textAlign: 'right', fontWeight: 'bold', borderRightWidth: 0 }]}>
+                              {formatINR(entry.cgst_amount)}
+                            </Text>
+                          </View>
+                        )}
+                        {entry.sgst_amount > 0 && (
+                          <View style={styles.tableItemRow}>
+                            <Text style={[styles.tdText, { width: '6%' }]}> </Text>
+                            <View style={[styles.tdCol, { width: '48%' }]}>
+                              <Text style={styles.itemSubtitle}>Output SGST @ {entry.sgst_rate}%</Text>
+                            </View>
+                            <Text style={[styles.tdText, { width: '14%' }]}> </Text>
+                            <Text style={[styles.tdText, { width: '14%' }]}> </Text>
+                            <Text style={[styles.tdText, { width: '6%' }]}> </Text>
+                            <Text style={[styles.tdText, { width: '12%', textAlign: 'right', fontWeight: 'bold', borderRightWidth: 0 }]}>
+                              {formatINR(entry.sgst_amount)}
+                            </Text>
+                          </View>
+                        )}
+                      </View>
+
+                      {/* Table Total Row */}
+                      <View style={styles.tableTotalRow}>
+                        <Text style={[styles.totalCell, { width: '54%', textAlign: 'right', fontWeight: 'bold' }]}>
+                          Total
+                        </Text>
+                        <Text style={[styles.totalCell, { width: '14%', textAlign: 'right', fontWeight: 'bold' }]}>
+                          {netWt} {unit}
+                        </Text>
+                        <Text style={[styles.totalCell, { width: '14%' }]}> </Text>
+                        <Text style={[styles.totalCell, { width: '6%' }]}> </Text>
+                        <Text style={[styles.totalCell, { width: '12%', textAlign: 'right', fontWeight: 'bold', borderRightWidth: 0 }]}>
+                          ₹ {formatINR(totalAmount)}
+                        </Text>
+                      </View>
+
+                      {/* Amount in words & E.&O.E. */}
+                      <View style={styles.amountWordsRow}>
+                        <View style={{ flex: 1 }}>
+                          <Text style={styles.tallyLblText}>Amount Chargeable (in words)</Text>
+                          <Text style={styles.amountWordsBold}>{amountWords}</Text>
+                        </View>
+                        <Text style={styles.eoeText}>E. & O.E</Text>
+                      </View>
+
+                      {/* Bottom Declaration & Signatures */}
+                      <View style={styles.bottomSection}>
+                        <View style={styles.declarationBox}>
+                          <Text style={styles.declHeader}>Declaration</Text>
+                          <Text style={styles.declBody}>
+                            We declare that this invoice shows the actual price of the goods described and that all particulars are true and correct.
+                          </Text>
+                        </View>
+                        <View style={styles.signatureBox}>
+                          <Text style={styles.forCompanyText}>for {companyName}</Text>
+                          <View style={{ height: 40 }} />
+                          <Text style={styles.authorisedSignText}>Authorised Signatory</Text>
+                        </View>
+                      </View>
+                    </View>
+                  </View>
+                </ScrollView>
+              </View>
+            )}
           </ScrollView>
         </View>
       </View>
@@ -1006,11 +1219,11 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(15, 23, 42, 0.75)',
     justifyContent: 'center',
     alignItems: 'center',
-    padding: 10,
+    padding: 8,
   },
   modalCard: {
-    backgroundColor: '#f1f5f9',
-    borderRadius: 10,
+    backgroundColor: '#f8fafc',
+    borderRadius: 12,
     width: '100%',
     maxWidth: 820,
     height: '92%',
@@ -1026,7 +1239,7 @@ const styles = StyleSheet.create({
   },
   modalCardMobile: {
     width: '100%',
-    height: '95%',
+    height: '96%',
     maxHeight: '98%',
     borderRadius: 8,
   },
@@ -1034,18 +1247,18 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: 14,
+    paddingHorizontal: 12,
     paddingVertical: 10,
     backgroundColor: '#ffffff',
     borderBottomWidth: 1,
     borderBottomColor: '#e2e8f0',
     flexWrap: 'wrap',
-    gap: 8,
+    gap: 6,
   },
   headerLeft: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
+    gap: 6,
   },
   badgeSuccess: {
     flexDirection: 'row',
@@ -1054,7 +1267,7 @@ const styles = StyleSheet.create({
     borderColor: '#a7f3d0',
     borderWidth: 1,
     paddingVertical: 3,
-    paddingHorizontal: 8,
+    paddingHorizontal: 7,
     borderRadius: 12,
   },
   badgeSuccessText: {
@@ -1070,7 +1283,7 @@ const styles = StyleSheet.create({
   actionButtonsRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
+    gap: 6,
   },
   actionBtn: {
     flexDirection: 'row',
@@ -1078,8 +1291,8 @@ const styles = StyleSheet.create({
     backgroundColor: '#f8fafc',
     borderWidth: 1,
     borderColor: '#cbd5e1',
-    paddingVertical: 6,
-    paddingHorizontal: 12,
+    paddingVertical: 5,
+    paddingHorizontal: 9,
     borderRadius: 6,
   },
   downloadBtn: {
@@ -1087,36 +1300,258 @@ const styles = StyleSheet.create({
     borderColor: '#0284c7',
   },
   actionBtnText: {
-    fontSize: 12,
+    fontSize: 11.5,
     fontWeight: '600',
   },
   closeBtn: {
     padding: 6,
     borderRadius: 6,
     backgroundColor: '#f1f5f9',
-    marginLeft: 4,
+    marginLeft: 2,
+  },
+  tabContainer: {
+    flexDirection: 'row',
+    backgroundColor: '#f1f5f9',
+    borderBottomWidth: 1,
+    borderBottomColor: '#e2e8f0',
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    gap: 8,
+  },
+  tabItem: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 7,
+    borderRadius: 6,
+    backgroundColor: '#ffffff',
+    borderWidth: 1,
+    borderColor: '#cbd5e1',
+  },
+  tabItemActive: {
+    backgroundColor: '#e0f2fe',
+    borderColor: '#0284c7',
+  },
+  tabItemText: {
+    fontSize: 11.5,
+    fontWeight: '600',
+    color: '#64748b',
+  },
+  tabItemTextActive: {
+    color: '#0284c7',
+    fontWeight: '700',
   },
   toastContainer: {
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: '#0f172a',
     paddingVertical: 7,
-    paddingHorizontal: 14,
-    marginHorizontal: 12,
-    marginTop: 8,
+    paddingHorizontal: 12,
+    marginHorizontal: 10,
+    marginTop: 6,
     borderRadius: 6,
   },
   toastText: {
     color: '#ffffff',
-    fontSize: 12,
+    fontSize: 11.5,
     fontWeight: '500',
   },
   scrollArea: {
     flex: 1,
+    width: '100%',
   },
   scrollContent: {
+    padding: 10,
+  },
+  a4TipText: {
+    fontSize: 11,
+    color: '#64748b',
+    textAlign: 'center',
+    marginBottom: 8,
+    fontStyle: 'italic',
+  },
+  // Mobile Full Simple View Styles
+  mobileSlipContainer: {
+    width: '100%',
+    paddingBottom: 20,
+    gap: 10,
+  },
+  msCard: {
+    backgroundColor: '#ffffff',
+    borderRadius: 8,
     padding: 12,
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+  },
+  msHeaderCard: {
+    backgroundColor: '#ffffff',
+    borderRadius: 8,
+    padding: 12,
+    borderWidth: 1,
+    borderColor: '#cbd5e1',
+  },
+  msCompName: {
+    fontSize: 15,
+    fontWeight: 'bold',
+    color: '#0f172a',
+    textAlign: 'center',
+  },
+  msCompSub: {
+    fontSize: 11,
+    color: '#64748b',
+    textAlign: 'center',
+    marginTop: 2,
+  },
+  msDivider: {
+    height: 1,
+    backgroundColor: '#e2e8f0',
+    marginVertical: 10,
+  },
+  msRowBetween: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
     alignItems: 'center',
+  },
+  msCardHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  msLabel: {
+    fontSize: 11,
+    color: '#64748b',
+    fontWeight: '500',
+  },
+  msLabelBold: {
+    fontSize: 11.5,
+    color: '#334155',
+    fontWeight: '700',
+  },
+  msLabelDark: {
+    fontSize: 11,
+    color: '#047857',
+    fontWeight: '600',
+  },
+  msInvoiceNum: {
+    fontSize: 15,
+    fontWeight: 'bold',
+    color: '#0284c7',
+  },
+  msDateVal: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#1e293b',
+  },
+  msCardTitle: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#0284c7',
+    letterSpacing: 0.8,
+    textTransform: 'uppercase',
+  },
+  msBuyerName: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#0f172a',
+  },
+  msBuyerSub: {
+    fontSize: 11,
+    color: '#64748b',
+    marginTop: 3,
+  },
+  msBadge: {
+    backgroundColor: '#f1f5f9',
+    borderColor: '#cbd5e1',
+    borderWidth: 1,
+    borderRadius: 4,
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+  },
+  msBadgeText: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: '#334155',
+  },
+  msGrid: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+  },
+  msGridCol: {
+    width: '48%',
+  },
+  msVal: {
+    fontSize: 12,
+    color: '#1e293b',
+    marginTop: 2,
+  },
+  msValBold: {
+    fontSize: 12.5,
+    fontWeight: '700',
+    color: '#0f172a',
+    marginTop: 2,
+  },
+  msItemBox: {
+    backgroundColor: '#f8fafc',
+    borderRadius: 6,
+    padding: 10,
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+    gap: 5,
+  },
+  msItemName: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#0284c7',
+    marginBottom: 4,
+  },
+  msTotalCard: {
+    backgroundColor: '#ecfdf5',
+    borderRadius: 8,
+    padding: 12,
+    borderWidth: 1,
+    borderColor: '#a7f3d0',
+  },
+  msTotalLabel: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#065f46',
+    letterSpacing: 0.5,
+  },
+  msTotalVal: {
+    fontSize: 19,
+    fontWeight: 'bold',
+    color: '#059669',
+  },
+  msWordsText: {
+    fontSize: 11.5,
+    fontWeight: '600',
+    color: '#047857',
+    marginTop: 2,
+    fontStyle: 'italic',
+  },
+  msFooterCard: {
+    backgroundColor: '#ffffff',
+    borderRadius: 8,
+    padding: 12,
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+  },
+  msDeclarationText: {
+    fontSize: 10,
+    color: '#64748b',
+    lineHeight: 14,
+    fontStyle: 'italic',
+  },
+  msSignComp: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#0f172a',
+  },
+  msSignText: {
+    fontSize: 10,
+    color: '#64748b',
+    fontWeight: '500',
   },
   tallySheet: {
     backgroundColor: '#ffffff',
@@ -1315,3 +1750,4 @@ const styles = StyleSheet.create({
     color: '#000000',
   },
 });
+
