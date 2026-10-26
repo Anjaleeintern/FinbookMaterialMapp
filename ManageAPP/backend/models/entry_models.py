@@ -8,9 +8,7 @@ ALLOWED_MODES = [
     "Credit Sale",
     "Cash Sale",
     "Case Sale",
-    "Case sale",
-    "QR Sale",
-    "HR Loading"
+    "Case sale"
 ]
 
 class EntryCreate(BaseModel):
@@ -19,19 +17,33 @@ class EntryCreate(BaseModel):
     vehicle_no: str
     transport_type: str
     type_mode: str
+    sale_type: Optional[str] = None
     hr_loading_type: Optional[str] = None
     material_name: str
-    party_name: str
+    party_name: Optional[str] = None
+    customer_name: Optional[str] = None
+    party_state: Optional[str] = None
     cum: float = 0.0
     etp_no: Optional[str] = ""
     g_wt: float = 0.0
     t_wt: float = 0.0
     net_wt: Optional[float] = None
     rate: float = 0.0
+    rate_calc_unit: Optional[str] = "MT"
+    additional_charge_name: Optional[str] = None
+    additional_charge_amount: Optional[float] = 0.0
+    additional_charges: Optional[list] = None
+    taxable_amount: Optional[float] = None
     amount: Optional[float] = None
     payment_mode: Optional[str] = None
     gst_rate: Optional[float] = 0.0
     gst_amount: Optional[float] = None
+    cgst_rate: Optional[float] = 0.0
+    cgst_amount: Optional[float] = 0.0
+    sgst_rate: Optional[float] = 0.0
+    sgst_amount: Optional[float] = 0.0
+    igst_rate: Optional[float] = 0.0
+    igst_amount: Optional[float] = 0.0
     total_amount: Optional[float] = None
     entry_source: Optional[str] = "manual"
 
@@ -43,26 +55,20 @@ class EntryCreate(BaseModel):
             raise ValueError("Type/Mode cannot be empty")
         return trimmed
 
-    @field_validator('hr_loading_type')
-    @classmethod
-    def validate_hr_loading_type(cls, v: Optional[str]) -> Optional[str]:
-        if v:
-            trimmed = v.strip()
-            if trimmed not in ["Royalty Sale", "With Royalty", "Without Royalty"]:
-                raise ValueError("HR Loading Type must be 'Royalty Sale', 'With Royalty', or 'Without Royalty'")
-            return trimmed
-        return None
 
     @field_validator('payment_mode')
     @classmethod
     def validate_payment_mode(cls, v: Optional[str]) -> Optional[str]:
         if v:
             trimmed = v.strip()
-            if trimmed.lower() == "cash":
+            low = trimmed.lower()
+            if low == "cash":
                 return "Cash"
-            if trimmed.lower() == "qr":
+            if low == "qr":
                 return "QR"
-            raise ValueError("Payment Mode must be 'Cash' or 'QR'")
+            if low == "bank":
+                return "Bank"
+            raise ValueError("Payment Mode must be 'Cash', 'QR', or 'Bank'")
         return None
 
 class EntryOut(BaseModel):
@@ -72,19 +78,33 @@ class EntryOut(BaseModel):
     vehicle_no: str
     transport_type: str
     type_mode: str
+    sale_type: Optional[str] = None
     hr_loading_type: Optional[str] = None
     material_name: str
     party_name: str
+    customer_name: Optional[str] = None
+    party_state: Optional[str] = None
     cum: float
     etp_no: Optional[str] = ""
     g_wt: float
     t_wt: float
     net_wt: float
     rate: float
+    rate_calc_unit: Optional[str] = "MT"
+    additional_charge_name: Optional[str] = None
+    additional_charge_amount: Optional[float] = 0.0
+    additional_charges: Optional[list] = None
+    taxable_amount: Optional[float] = None
     amount: float
     payment_mode: Optional[str] = None
     gst_rate: float
     gst_amount: float
+    cgst_rate: Optional[float] = 0.0
+    cgst_amount: Optional[float] = 0.0
+    sgst_rate: Optional[float] = 0.0
+    sgst_amount: Optional[float] = 0.0
+    igst_rate: Optional[float] = 0.0
+    igst_amount: Optional[float] = 0.0
     total_amount: float
     saved_in: str
     entry_source: Optional[str] = "manual"

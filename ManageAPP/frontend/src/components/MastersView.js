@@ -21,7 +21,46 @@ const CATEGORIES = [
   { id: 'TransportName', label: 'Transport', singular: 'Transport Name', icon: 'bus-outline', sample: 'VMPL' },
   { id: 'MaterialName', label: 'Material', singular: 'Material Name', icon: 'cube-outline', sample: '20MM' },
   { id: 'PartyName', label: 'Party Name', singular: 'Party Name', icon: 'people-outline', sample: 'NAWAZ KHAN' },
-  { id: 'Type/Mode', label: 'Type / Mode', singular: 'Type / Mode', icon: 'git-branch-outline', sample: 'Cash Sale' },
+  { id: 'AdditionalCharges', label: 'Additional Charges', singular: 'Additional Charge', icon: 'receipt-outline', sample: 'Freight' },
+];
+
+const INDIAN_STATES = [
+  'Madhya Pradesh',
+  'Maharashtra',
+  'Gujarat',
+  'Rajasthan',
+  'Uttar Pradesh',
+  'Delhi',
+  'Andhra Pradesh',
+  'Arunachal Pradesh',
+  'Assam',
+  'Bihar',
+  'Chhattisgarh',
+  'Goa',
+  'Haryana',
+  'Himachal Pradesh',
+  'Jharkhand',
+  'Karnataka',
+  'Kerala',
+  'Manipur',
+  'Meghalaya',
+  'Mizoram',
+  'Nagaland',
+  'Odisha',
+  'Punjab',
+  'Sikkim',
+  'Tamil Nadu',
+  'Telangana',
+  'Tripura',
+  'Uttarakhand',
+  'West Bengal',
+  'Andaman and Nicobar Islands',
+  'Chandigarh',
+  'Dadra and Nagar Haveli and Daman and Diu',
+  'Jammu and Kashmir',
+  'Ladakh',
+  'Lakshadweep',
+  'Puducherry',
 ];
 
 const STATIC_TYPE_MODES = [
@@ -100,6 +139,51 @@ export const MastersView = React.memo(({ masters, onRefresh }) => {
   const [formStatus, setFormStatus] = useState('Active');
   const [formSubmitting, setFormSubmitting] = useState(false);
   const [modalError, setModalError] = useState('');
+
+  // Party Master Specific Fields
+  const [formAddress1, setFormAddress1] = useState('');
+  const [formAddress2, setFormAddress2] = useState('');
+  const [formCity, setFormCity] = useState('');
+  const [formState, setFormState] = useState('Madhya Pradesh');
+  const [formPinCode, setFormPinCode] = useState('');
+  const [formMobileNo, setFormMobileNo] = useState('');
+  const [formEmailId, setFormEmailId] = useState('');
+  const [formGstType, setFormGstType] = useState('Unregistered'); // 'Registered' | 'Unregistered'
+  const [formGstNo, setFormGstNo] = useState('');
+  const [stateDropdownOpen, setStateDropdownOpen] = useState(false);
+  const [stateList, setStateList] = useState(INDIAN_STATES);
+  const [stateSearchText, setStateSearchText] = useState('');
+  const [isAddingNewState, setIsAddingNewState] = useState(false);
+  const [newStateInput, setNewStateInput] = useState('');
+
+  // Sync custom/database states from masters prop whenever it updates
+  useEffect(() => {
+    if (masters?.State && Array.isArray(masters.State) && masters.State.length > 0) {
+      setStateList((prev) => Array.from(new Set([...prev, ...masters.State])));
+    }
+  }, [masters?.State]);
+
+  // Handler to add a new state to dropdown and save to master
+  const handleAddNewState = async (customName = null) => {
+    const trimmed = (typeof customName === 'string' ? customName : newStateInput).trim();
+    if (!trimmed) return;
+
+    // Immediately add to dropdown list and select
+    setStateList((prev) => (prev.includes(trimmed) ? prev : [trimmed, ...prev]));
+    setFormState(trimmed);
+    setNewStateInput('');
+    setStateSearchText('');
+    setIsAddingNewState(false);
+    setStateDropdownOpen(false);
+
+    // Save to master database
+    try {
+      await api.addMasterItem('State', trimmed);
+      if (onRefresh) onRefresh();
+    } catch (err) {
+      console.warn('Note: State added locally (or already exists in master):', err.message);
+    }
+  };
 
   // Import / Bulk Modal (Multi-column Excel & CSV support)
   const [importModalVisible, setImportModalVisible] = useState(false);
@@ -184,6 +268,15 @@ export const MastersView = React.memo(({ masters, onRefresh }) => {
         sub_types: m.sub_types,
         created_at: m.created_at,
         updated_at: m.updated_at,
+        address_1: m.address_1,
+        address_2: m.address_2,
+        city: m.city,
+        state: m.state,
+        pin_code: m.pin_code,
+        mobile_no: m.mobile_no,
+        email_id: m.email_id,
+        gst_type: m.gst_type,
+        gst_no: m.gst_no,
       }));
     } else {
       const fallbackStrings = masters?.[catKey] || [];
@@ -215,11 +308,17 @@ export const MastersView = React.memo(({ masters, onRefresh }) => {
       });
     }
 
-    // Apply Search Filter (searches both top-level value and sub-types)
+    // Apply Search Filter across all fields for all master categories
     if (searchQuery.trim()) {
       const q = searchQuery.trim().toLowerCase();
       items = items.filter((item) => {
-        if (String(item.value).toLowerCase().includes(q)) return true;
+        if (String(item.value || '').toLowerCase().includes(q)) return true;
+        if (item.city && String(item.city).toLowerCase().includes(q)) return true;
+        if (item.state && String(item.state).toLowerCase().includes(q)) return true;
+        if (item.gst_no && String(item.gst_no).toLowerCase().includes(q)) return true;
+        if (item.mobile_no && String(item.mobile_no).toLowerCase().includes(q)) return true;
+        if (item.email_id && String(item.email_id).toLowerCase().includes(q)) return true;
+        if (item.address_1 && String(item.address_1).toLowerCase().includes(q)) return true;
         if (item.sub_types && item.sub_types.some((s) => s.label.toLowerCase().includes(q) || s.value.toLowerCase().includes(q))) {
           return true;
         }
@@ -292,6 +391,19 @@ export const MastersView = React.memo(({ masters, onRefresh }) => {
     setFormCategory(category);
     setFormValue('');
     setFormStatus('Active');
+    setFormAddress1('');
+    setFormAddress2('');
+    setFormCity('');
+    setFormState('Madhya Pradesh');
+    setFormPinCode('');
+    setFormMobileNo('');
+    setFormEmailId('');
+    setFormGstType('Unregistered');
+    setFormGstNo('');
+    setStateDropdownOpen(false);
+    setIsAddingNewState(false);
+    setNewStateInput('');
+    setStateSearchText('');
     setModalError('');
     setEditModalVisible(true);
   };
@@ -302,6 +414,19 @@ export const MastersView = React.memo(({ masters, onRefresh }) => {
     setFormCategory(item.category);
     setFormValue(item.value);
     setFormStatus(item.status || 'Active');
+    setFormAddress1(item.address_1 || '');
+    setFormAddress2(item.address_2 || '');
+    setFormCity(item.city || '');
+    setFormState(item.state || 'Madhya Pradesh');
+    setFormPinCode(item.pin_code || '');
+    setFormMobileNo(item.mobile_no || '');
+    setFormEmailId(item.email_id || '');
+    setFormGstType(item.gst_type || (item.gst_no ? 'Registered' : 'Unregistered'));
+    setFormGstNo(item.gst_no || '');
+    setStateDropdownOpen(false);
+    setIsAddingNewState(false);
+    setNewStateInput('');
+    setStateSearchText('');
     setModalError('');
     setEditModalVisible(true);
   };
@@ -309,21 +434,56 @@ export const MastersView = React.memo(({ masters, onRefresh }) => {
   // Save Add / Edit
   const handleSaveItem = async () => {
     if (!formValue.trim()) {
-      setModalError('Please enter a value');
+      setModalError(formCategory === 'PartyName' ? 'Party Name is required (*)' : 'Please enter a value');
       return;
+    }
+
+    if (formCategory === 'PartyName') {
+      if (!formCity.trim()) {
+        setModalError('City is required (*)');
+        return;
+      }
+      if (!formState.trim()) {
+        setModalError('State is required (*)');
+        return;
+      }
+      if (formGstType === 'Registered') {
+        if (!formGstNo.trim()) {
+          setModalError('GSTIN Number is mandatory when GST Type is Registered (*)');
+          return;
+        }
+      }
     }
 
     setFormSubmitting(true);
     setModalError('');
 
     try {
+      const partyData = formCategory === 'PartyName' ? {
+        address_1: formAddress1.trim(),
+        address_2: formAddress2.trim(),
+        city: formCity.trim(),
+        state: formState.trim(),
+        pin_code: formPinCode.trim(),
+        mobile_no: formMobileNo.trim(),
+        email_id: formEmailId.trim(),
+        gst_type: formGstType,
+        gst_no: formGstType === 'Registered' ? formGstNo.trim().toUpperCase() : '',
+      } : {};
+
       if (editingItem && editingItem.id && !editingItem.id.startsWith('fb_')) {
         await api.updateMasterItem(editingItem.id, {
           value: formValue.trim(),
           status: formStatus,
+          ...partyData,
         });
       } else {
-        await api.addMasterItem(formCategory, formValue.trim(), formStatus);
+        await api.addMasterItem({
+          category: formCategory,
+          value: formValue.trim(),
+          status: formStatus,
+          ...partyData,
+        });
       }
       setEditModalVisible(false);
       await loadMasterDetails();
@@ -894,6 +1054,18 @@ export const MastersView = React.memo(({ masters, onRefresh }) => {
                         <Text style={styles.mobileItemValueText} numberOfLines={2}>
                           {item.value}
                         </Text>
+                        {item.category === 'PartyName' && (item.city || item.state) ? (
+                          <Text style={styles.partyCardSubText} numberOfLines={1}>
+                            <Ionicons name="location-outline" size={11} color="#64748b" /> {item.city ? `${item.city}, ${item.state || ''}` : item.state}
+                          </Text>
+                        ) : null}
+                        {item.category === 'PartyName' && item.gst_type === 'Registered' && item.gst_no ? (
+                          <View style={styles.partyGstBadgeRd}>
+                            <Text style={styles.partyGstBadgeRdText}>
+                              GST: {item.gst_no}
+                            </Text>
+                          </View>
+                        ) : null}
                         {item.created_at ? (
                           <Text style={styles.mobileItemDateText}>
                             Added {formatDate(item.created_at)}
@@ -1043,7 +1215,7 @@ export const MastersView = React.memo(({ masters, onRefresh }) => {
                       {cat.id === 'TransportName' && 'Logistics & transport agencies'}
                       {cat.id === 'MaterialName' && 'Aggregates, stones & raw materials'}
                       {cat.id === 'PartyName' && 'Registered buyers & customers'}
-                      {cat.id === 'Type/Mode' && 'Sale types & loading modes'}
+                      {cat.id === 'AdditionalCharges' && 'Freight, loading, toll & extra levies'}
                     </Text>
                   </View>
 
@@ -1404,16 +1576,25 @@ export const MastersView = React.memo(({ masters, onRefresh }) => {
                               {rowNumber}
                             </Text>
 
-                            <Text
-                              style={[
-                                styles.tdCell,
-                                styles.boldCell,
-                                { flex: 1, minWidth: 180, paddingHorizontal: 6, fontSize: 13 },
-                              ]}
-                              numberOfLines={1}
-                            >
-                              {item.value}
-                            </Text>
+                            <View style={[styles.tdCell, { flex: 1, minWidth: 180, paddingHorizontal: 6, justifyContent: 'center' }]}>
+                              <Text style={[styles.boldCell, { fontSize: 13, color: '#0f172a' }]} numberOfLines={1}>
+                                {item.value}
+                              </Text>
+                              {item.category === 'PartyName' && (item.city || item.state || (item.gst_type === 'Registered' && item.gst_no)) ? (
+                                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 2, flexWrap: 'wrap' }}>
+                                  {(item.city || item.state) ? (
+                                    <Text style={{ fontSize: 11, color: '#64748b' }}>
+                                      📍 {item.city ? `${item.city}, ${item.state || ''}` : item.state}
+                                    </Text>
+                                  ) : null}
+                                  {item.gst_type === 'Registered' && item.gst_no ? (
+                                    <View style={styles.partyGstBadgeRd}>
+                                      <Text style={styles.partyGstBadgeRdText}>GST: {item.gst_no}</Text>
+                                    </View>
+                                  ) : null}
+                                </View>
+                              ) : null}
+                            </View>
 
                             <View style={[styles.tdCell, { width: 110, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 1 }]}>
                               <TouchableOpacity
@@ -1558,17 +1739,19 @@ export const MastersView = React.memo(({ masters, onRefresh }) => {
       {/* MODAL 1: ADD / EDIT MASTER ITEM */}
       <Modal visible={editModalVisible} transparent animationType="slide" onRequestClose={() => setEditModalVisible(false)}>
         <View style={styles.modalBackdrop}>
-          <View style={styles.modalDialog}>
+          <View style={[styles.modalDialog, formCategory === 'PartyName' && { maxWidth: 580 }]}>
             <View style={styles.modalHeader}>
               <Text style={styles.modalTitle}>
-                {editingItem ? `Edit ${currentCatConfig.singular}` : `Add ${currentCatConfig.singular}`}
+                {editingItem
+                  ? (formCategory === 'PartyName' ? 'Edit Party Name' : `Edit ${currentCatConfig.singular}`)
+                  : (formCategory === 'PartyName' ? 'Add Party Name' : `Add ${currentCatConfig.singular}`)}
               </Text>
               <TouchableOpacity onPress={() => setEditModalVisible(false)}>
                 <Ionicons name="close" size={20} color="#64748b" />
               </TouchableOpacity>
             </View>
 
-            <View style={styles.modalBody}>
+            <View style={[styles.modalBody, formCategory === 'PartyName' && { maxHeight: isMobile ? 480 : 560 }]}>
               {modalError ? (
                 <View style={styles.errorBanner}>
                   <Ionicons name="alert-circle" size={15} color="#b91c1c" />
@@ -1576,132 +1759,513 @@ export const MastersView = React.memo(({ masters, onRefresh }) => {
                 </View>
               ) : null}
 
-              {/* Category selector */}
-              <View style={styles.formGroup}>
-                <Text style={styles.formLabel}>Category</Text>
-                {editingItem ? (
-                  <View style={[styles.formInput, { justifyContent: 'center', backgroundColor: '#f8fafc' }]}>
-                    <Text style={{ color: '#334155', fontWeight: '600', fontSize: 13 }}>
-                      {(CATEGORIES.find((c) => c.id === formCategory) || currentCatConfig).label}
+              {formCategory === 'PartyName' ? (
+                <ScrollView
+                  style={{ maxHeight: isMobile ? 380 : 460 }}
+                  contentContainerStyle={{ paddingBottom: 40 }}
+                  showsVerticalScrollIndicator={true}
+                  nestedScrollEnabled
+                  keyboardShouldPersistTaps="handled"
+                >
+                  {/* Party Name * */}
+                  <View style={styles.formGroup}>
+                    <Text style={styles.formLabel}>
+                      Party Name <Text style={{ color: '#ef4444' }}>*</Text>
                     </Text>
-                  </View>
-                ) : (
-                  <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 6, paddingVertical: 2 }}>
-                    {CATEGORIES.map((c) => {
-                      const isCatActive = formCategory === c.id;
-                      return (
-                        <TouchableOpacity
-                          key={c.id}
-                          style={[
-                            styles.catSelectChip,
-                            isCatActive && styles.catSelectChipActive,
-                          ]}
-                          onPress={() => setFormCategory(c.id)}
-                        >
-                          <Ionicons
-                            name={c.icon}
-                            size={13}
-                            color={isCatActive ? '#ffffff' : '#475569'}
-                            style={{ marginRight: 4 }}
-                          />
-                          <Text
-                            style={[
-                              styles.catSelectChipText,
-                              isCatActive && styles.catSelectChipTextActive,
-                            ]}
-                          >
-                            {c.label}
-                          </Text>
-                        </TouchableOpacity>
-                      );
-                    })}
-                  </ScrollView>
-                )}
-              </View>
-
-              {/* Value input */}
-              <View style={styles.formGroup}>
-                <Text style={styles.formLabel}>
-                  {(CATEGORIES.find((c) => c.id === formCategory) || currentCatConfig).singular} <Text style={{ color: '#ef4444' }}>*</Text>
-                </Text>
-                <TextInput
-                  style={styles.formInput}
-                  placeholder={`Enter ${(CATEGORIES.find((c) => c.id === formCategory) || currentCatConfig).singular.toLowerCase()} (e.g. ${(CATEGORIES.find((c) => c.id === formCategory) || currentCatConfig).sample})`}
-                  placeholderTextColor="#94a3b8"
-                  value={formValue}
-                  onChangeText={setFormValue}
-                  autoFocus
-                />
-              </View>
-
-              {/* Status Selector */}
-              <View style={styles.formGroup}>
-                <Text style={styles.formLabel}>Status</Text>
-                <View style={styles.statusToggleRow}>
-                  <TouchableOpacity
-                    style={[styles.statusToggleBtn, formStatus === 'Active' && styles.statusToggleBtnActive]}
-                    onPress={() => setFormStatus('Active')}
-                  >
-                    <Ionicons
-                      name="checkmark-circle"
-                      size={15}
-                      color={formStatus === 'Active' ? '#16a34a' : '#94a3b8'}
-                      style={{ marginRight: 6 }}
+                    <TextInput
+                      style={styles.formInput}
+                      placeholder="Enter Party Name (e.g. NAWAZ KHAN)"
+                      placeholderTextColor="#94a3b8"
+                      value={formValue}
+                      onChangeText={setFormValue}
+                      autoFocus
                     />
-                    <Text
-                      style={[
-                        styles.statusToggleBtnText,
-                        formStatus === 'Active' && styles.statusToggleBtnTextActive,
-                      ]}
-                    >
-                      Active
+                  </View>
+
+                  {/* Address 1 */}
+                  <View style={styles.formGroup}>
+                    <Text style={styles.formLabel}>Address 1</Text>
+                    <TextInput
+                      style={styles.formInput}
+                      placeholder="Building No., Street, Area"
+                      placeholderTextColor="#94a3b8"
+                      value={formAddress1}
+                      onChangeText={setFormAddress1}
+                    />
+                  </View>
+
+                  {/* Address 2 */}
+                  <View style={styles.formGroup}>
+                    <Text style={styles.formLabel}>Address 2</Text>
+                    <TextInput
+                      style={styles.formInput}
+                      placeholder="Landmark, Locality (Optional)"
+                      placeholderTextColor="#94a3b8"
+                      value={formAddress2}
+                      onChangeText={setFormAddress2}
+                    />
+                  </View>
+
+                  {/* City * (Clean standalone field - ZERO blank gap) */}
+                  <View style={styles.formGroup}>
+                    <Text style={styles.formLabel}>
+                      City <Text style={{ color: '#ef4444' }}>*</Text>
                     </Text>
+                    <TextInput
+                      style={styles.formInput}
+                      placeholder="e.g. Indore"
+                      placeholderTextColor="#94a3b8"
+                      value={formCity}
+                      onChangeText={setFormCity}
+                    />
+                  </View>
+
+                  {/* State * (Simple Dropdown on form - FLOATS over PIN code without layout shift) */}
+                  <View style={[styles.formGroup, { position: 'relative', zIndex: stateDropdownOpen ? 9999 : 20, elevation: stateDropdownOpen ? 50 : 1 }]}>
+                    <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 5 }}>
+                      <Text style={styles.formLabel}>
+                        State <Text style={{ color: '#ef4444' }}>*</Text>
+                      </Text>
+                      <TouchableOpacity
+                        onPress={() => {
+                          setStateDropdownOpen(true);
+                          setIsAddingNewState(true);
+                        }}
+                        activeOpacity={0.7}
+                      >
+                        <Text style={{ fontSize: 11.5, color: '#0284c7', fontWeight: '700' }}>
+                          + Add New State
+                        </Text>
+                      </TouchableOpacity>
+                    </View>
+
+                    {/* Dropdown Trigger Box */}
+                    <TouchableOpacity
+                      style={[
+                        styles.formInput,
+                        {
+                          flexDirection: 'row',
+                          alignItems: 'center',
+                          justifyContent: 'space-between',
+                          backgroundColor: '#ffffff',
+                          borderColor: stateDropdownOpen ? '#0284c7' : '#cbd5e1',
+                        },
+                      ]}
+                      onPress={() => {
+                        setStateDropdownOpen(!stateDropdownOpen);
+                        if (!stateDropdownOpen) {
+                          setStateSearchText('');
+                          setIsAddingNewState(false);
+                        }
+                      }}
+                      activeOpacity={0.8}
+                    >
+                      <View style={{ flexDirection: 'row', alignItems: 'center', flex: 1 }}>
+                        <Ionicons name="location-outline" size={15} color="#0284c7" style={{ marginRight: 8 }} />
+                        <Text style={{ fontSize: 13, color: formState ? '#0f172a' : '#94a3b8', fontWeight: '500' }} numberOfLines={1}>
+                          {formState || 'Select State'}
+                        </Text>
+                      </View>
+                      <Ionicons
+                        name={stateDropdownOpen ? 'chevron-up' : 'chevron-down'}
+                        size={16}
+                        color={stateDropdownOpen ? '#0284c7' : '#64748b'}
+                      />
+                    </TouchableOpacity>
+
+                    <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 4, gap: 4 }}>
+                      <Ionicons name="information-circle-outline" size={12} color="#0284c7" />
+                      <Text style={{ fontSize: 10.5, color: '#0369a1', fontStyle: 'italic' }}>
+                        State se we need to calculate C/S or IGST
+                      </Text>
+                    </View>
+
+                    {/* Floating Dropdown Menu (Overlays PIN code without moving form elements) */}
+                    {stateDropdownOpen && (
+                      <View style={styles.stateDropdownFloatingMenu}>
+                        {/* Search Input */}
+                        <View style={styles.stateDropdownSearchWrap}>
+                          <Ionicons name="search" size={14} color="#0284c7" style={{ marginRight: 6 }} />
+                          <TextInput
+                            style={styles.stateDropdownSearchInput}
+                            placeholder="Search state..."
+                            placeholderTextColor="#94a3b8"
+                            value={stateSearchText}
+                            onChangeText={setStateSearchText}
+                            autoFocus={!isAddingNewState}
+                          />
+                          {stateSearchText ? (
+                            <TouchableOpacity onPress={() => setStateSearchText('')} style={{ padding: 4 }}>
+                              <Ionicons name="close-circle" size={15} color="#94a3b8" />
+                            </TouchableOpacity>
+                          ) : (
+                            <TouchableOpacity onPress={() => setStateDropdownOpen(false)} style={{ padding: 4 }}>
+                              <Ionicons name="close" size={16} color="#64748b" />
+                            </TouchableOpacity>
+                          )}
+                        </View>
+
+                        {/* Add New State Row */}
+                        {!isAddingNewState ? (
+                          <TouchableOpacity
+                            style={styles.stateDropdownAddRow}
+                            onPress={() => setIsAddingNewState(true)}
+                            activeOpacity={0.8}
+                          >
+                            <Ionicons name="add-circle-outline" size={15} color="#0284c7" style={{ marginRight: 6 }} />
+                            <Text style={styles.stateDropdownAddRowText}>+ Add New State to Master</Text>
+                          </TouchableOpacity>
+                        ) : (
+                          <View style={styles.stateDropdownInlineAddBox}>
+                            <Text style={{ fontSize: 11, fontWeight: '700', color: '#0369a1', marginBottom: 4 }}>
+                              Add State to Master Database:
+                            </Text>
+                            <View style={{ flexDirection: 'row', gap: 6, alignItems: 'center' }}>
+                              <TextInput
+                                style={[styles.formInput, { flex: 1, height: 32, fontSize: 12, paddingHorizontal: 8 }]}
+                                placeholder="Enter state name (e.g. Goa, Ladakh)"
+                                placeholderTextColor="#94a3b8"
+                                value={newStateInput}
+                                onChangeText={setNewStateInput}
+                                autoFocus
+                              />
+                              <TouchableOpacity
+                                style={styles.stateDropdownAddSubmitBtn}
+                                onPress={() => handleAddNewState()}
+                              >
+                                <Text style={styles.stateDropdownAddSubmitBtnText}>Add</Text>
+                              </TouchableOpacity>
+                              <TouchableOpacity
+                                style={styles.stateDropdownAddCancelBtn}
+                                onPress={() => setIsAddingNewState(false)}
+                              >
+                                <Ionicons name="close" size={16} color="#64748b" />
+                              </TouchableOpacity>
+                            </View>
+                          </View>
+                        )}
+
+                        {/* Scrollable list of Indian States */}
+                        <ScrollView
+                          style={{ maxHeight: 180 }}
+                          contentContainerStyle={{ paddingVertical: 2 }}
+                          showsVerticalScrollIndicator={true}
+                          keyboardShouldPersistTaps="handled"
+                          nestedScrollEnabled={true}
+                        >
+                          {(() => {
+                            const filtered = stateList.filter(
+                              (st) => !stateSearchText.trim() || st.toLowerCase().includes(stateSearchText.trim().toLowerCase())
+                            );
+
+                            if (filtered.length === 0) {
+                              return (
+                                <View style={{ padding: 12, alignItems: 'center' }}>
+                                  <Text style={{ fontSize: 12, color: '#64748b', marginBottom: 6 }}>
+                                    No state found matching "{stateSearchText}"
+                                  </Text>
+                                  <TouchableOpacity
+                                    style={styles.stateDropdownAddSubmitBtn}
+                                    onPress={() => handleAddNewState(stateSearchText)}
+                                  >
+                                    <Text style={styles.stateDropdownAddSubmitBtnText}>
+                                      + Add "{stateSearchText}"
+                                    </Text>
+                                  </TouchableOpacity>
+                                </View>
+                              );
+                            }
+
+                            return filtered.map((st) => {
+                              const isSelected = formState === st;
+                              return (
+                                <TouchableOpacity
+                                  key={st}
+                                  style={[
+                                    styles.stateDropdownItem,
+                                    isSelected && styles.stateDropdownItemActive,
+                                  ]}
+                                  onPress={() => {
+                                    setFormState(st);
+                                    setStateDropdownOpen(false);
+                                    setStateSearchText('');
+                                    setIsAddingNewState(false);
+                                  }}
+                                  activeOpacity={0.7}
+                                >
+                                  <Text
+                                    style={[
+                                      styles.stateDropdownItemText,
+                                      isSelected && styles.stateDropdownItemTextActive,
+                                    ]}
+                                  >
+                                    {st}
+                                  </Text>
+                                  {isSelected && (
+                                    <Ionicons name="checkmark" size={15} color="#0284c7" />
+                                  )}
+                                </TouchableOpacity>
+                              );
+                            });
+                          })()}
+                        </ScrollView>
+                      </View>
+                    )}
+                  </View>
+
+                  {/* PIN Code (zIndex: 1 with relative position so dropdown floats OVER it) */}
+                  <View style={[styles.formGroup, { position: 'relative', zIndex: 1 }]}>
+                    <Text style={styles.formLabel}>PIN Code</Text>
+                    <TextInput
+                      style={styles.formInput}
+                      placeholder="e.g. 452001"
+                      placeholderTextColor="#94a3b8"
+                      value={formPinCode}
+                      onChangeText={setFormPinCode}
+                      keyboardType="numeric"
+                      maxLength={6}
+                    />
+                  </View>
+
+                      {/* Mobile No. & Email ID Row */}
+                      <View style={{ flexDirection: isMobile ? 'column' : 'row', gap: 10, position: 'relative', zIndex: 1 }}>
+                        <View style={[styles.formGroup, { flex: 1 }]}>
+                          <Text style={styles.formLabel}>Mobile No.</Text>
+                          <TextInput
+                            style={styles.formInput}
+                            placeholder="10-digit mobile number"
+                            placeholderTextColor="#94a3b8"
+                            value={formMobileNo}
+                            onChangeText={setFormMobileNo}
+                            keyboardType="phone-pad"
+                            maxLength={10}
+                          />
+                        </View>
+
+                        <View style={[styles.formGroup, { flex: 1 }]}>
+                          <Text style={styles.formLabel}>Email ID</Text>
+                          <TextInput
+                            style={styles.formInput}
+                            placeholder="party@example.com"
+                            placeholderTextColor="#94a3b8"
+                            value={formEmailId}
+                            onChangeText={setFormEmailId}
+                            keyboardType="email-address"
+                            autoCapitalize="none"
+                          />
+                        </View>
+                      </View>
+
+                      {/* GST Details */}
+                      <View style={styles.formGroup}>
+                        <Text style={styles.formLabel}>GST Type</Text>
+                        <View style={styles.gstTypeToggleRow}>
+                          <TouchableOpacity
+                            style={[
+                              styles.gstTypeBtn,
+                              formGstType === 'Unregistered' && styles.gstTypeBtnActiveUnreg,
+                            ]}
+                            onPress={() => {
+                              setFormGstType('Unregistered');
+                              setFormGstNo('');
+                            }}
+                          >
+                            <Ionicons
+                              name="close-circle-outline"
+                              size={14}
+                              color={formGstType === 'Unregistered' ? '#0284c7' : '#94a3b8'}
+                              style={{ marginRight: 6 }}
+                            />
+                            <Text
+                              style={[
+                                styles.gstTypeBtnText,
+                                formGstType === 'Unregistered' && styles.gstTypeBtnTextActiveUnreg,
+                              ]}
+                            >
+                              Unregistered
+                            </Text>
+                          </TouchableOpacity>
+
+                          <TouchableOpacity
+                            style={[
+                              styles.gstTypeBtn,
+                              formGstType === 'Registered' && styles.gstTypeBtnActiveReg,
+                            ]}
+                            onPress={() => {
+                              setFormGstType('Registered');
+                            }}
+                          >
+                            <Ionicons
+                              name="checkmark-circle-outline"
+                              size={14}
+                              color={formGstType === 'Registered' ? '#16a34a' : '#94a3b8'}
+                              style={{ marginRight: 6 }}
+                            />
+                            <Text
+                              style={[
+                                styles.gstTypeBtnText,
+                                formGstType === 'Registered' && styles.gstTypeBtnTextActiveReg,
+                              ]}
+                            >
+                              Registered
+                            </Text>
+                          </TouchableOpacity>
+                        </View>
+                      </View>
+
+                      {/* GSTIN Number: Shown ONLY if Registered (if Unregistered, kuch nhi) */}
+                      {formGstType === 'Registered' && (
+                        <View style={styles.formGroup}>
+                          <Text style={styles.formLabel}>
+                            GSTIN Number <Text style={{ color: '#ef4444' }}>*</Text>
+                          </Text>
+                          <TextInput
+                            style={styles.formInput}
+                            placeholder="Enter GSTIN Number (e.g. 23AAAAA0000A1Z5)"
+                            placeholderTextColor="#94a3b8"
+                            value={formGstNo}
+                            onChangeText={(t) => setFormGstNo(t.toUpperCase())}
+                            autoCapitalize="characters"
+                            maxLength={15}
+                            autoFocus
+                          />
+                        </View>
+                      )}
+
+                      {/* Status Selector */}
+                      <View style={styles.formGroup}>
+                        <Text style={styles.formLabel}>Status</Text>
+                        <View style={styles.statusToggleRow}>
+                          <TouchableOpacity
+                            style={[styles.statusToggleBtn, formStatus === 'Active' && styles.statusToggleBtnActive]}
+                            onPress={() => setFormStatus('Active')}
+                          >
+                            <Ionicons
+                              name="checkmark-circle"
+                              size={15}
+                              color={formStatus === 'Active' ? '#16a34a' : '#94a3b8'}
+                              style={{ marginRight: 6 }}
+                            />
+                            <Text
+                              style={[
+                                styles.statusToggleBtnText,
+                                formStatus === 'Active' && styles.statusToggleBtnTextActive,
+                              ]}
+                            >
+                              Active
+                            </Text>
+                          </TouchableOpacity>
+
+                          <TouchableOpacity
+                            style={[styles.statusToggleBtn, formStatus === 'Inactive' && styles.statusToggleBtnInactive]}
+                            onPress={() => setFormStatus('Inactive')}
+                          >
+                            <Ionicons
+                              name="pause-circle"
+                              size={15}
+                              color={formStatus === 'Inactive' ? '#eab308' : '#94a3b8'}
+                              style={{ marginRight: 6 }}
+                            />
+                            <Text
+                              style={[
+                                styles.statusToggleBtnText,
+                                formStatus === 'Inactive' && { color: '#ca8a04', fontWeight: '700' },
+                              ]}
+                            >
+                              Inactive
+                            </Text>
+                          </TouchableOpacity>
+                        </View>
+                      </View>
+                    </ScrollView>
+                  ) : (
+                    /* For all other categories: simple single input */
+                    <>
+                      {/* Value input */}
+                      <View style={styles.formGroup}>
+                        <Text style={styles.formLabel}>
+                          {(CATEGORIES.find((c) => c.id === formCategory) || currentCatConfig).singular} <Text style={{ color: '#ef4444' }}>*</Text>
+                        </Text>
+                        <TextInput
+                          style={styles.formInput}
+                          placeholder={`Enter ${(CATEGORIES.find((c) => c.id === formCategory) || currentCatConfig).singular.toLowerCase()} (e.g. ${(CATEGORIES.find((c) => c.id === formCategory) || currentCatConfig).sample})`}
+                          placeholderTextColor="#94a3b8"
+                          value={formValue}
+                          onChangeText={setFormValue}
+                          autoFocus
+                        />
+                      </View>
+
+                      {/* Status Selector */}
+                      <View style={styles.formGroup}>
+                        <Text style={styles.formLabel}>Status</Text>
+                        <View style={styles.statusToggleRow}>
+                          <TouchableOpacity
+                            style={[styles.statusToggleBtn, formStatus === 'Active' && styles.statusToggleBtnActive]}
+                            onPress={() => setFormStatus('Active')}
+                          >
+                            <Ionicons
+                              name="checkmark-circle"
+                              size={15}
+                              color={formStatus === 'Active' ? '#16a34a' : '#94a3b8'}
+                              style={{ marginRight: 6 }}
+                            />
+                            <Text
+                              style={[
+                                styles.statusToggleBtnText,
+                                formStatus === 'Active' && styles.statusToggleBtnTextActive,
+                              ]}
+                            >
+                              Active
+                            </Text>
+                          </TouchableOpacity>
+
+                          <TouchableOpacity
+                            style={[styles.statusToggleBtn, formStatus === 'Inactive' && styles.statusToggleBtnInactive]}
+                            onPress={() => setFormStatus('Inactive')}
+                          >
+                            <Ionicons
+                              name="pause-circle"
+                              size={15}
+                              color={formStatus === 'Inactive' ? '#eab308' : '#94a3b8'}
+                              style={{ marginRight: 6 }}
+                            />
+                            <Text
+                              style={[
+                                styles.statusToggleBtnText,
+                                formStatus === 'Inactive' && { color: '#ca8a04', fontWeight: '700' },
+                              ]}
+                            >
+                              Inactive
+                            </Text>
+                          </TouchableOpacity>
+                        </View>
+                      </View>
+                    </>
+                  )}
+                </View>
+
+                <View style={styles.modalFooter}>
+                  <TouchableOpacity
+                    style={styles.modalCancelBtn}
+                    onPress={() => setEditModalVisible(false)}
+                    disabled={formSubmitting}
+                  >
+                    <Text style={styles.modalCancelBtnText}>Cancel</Text>
                   </TouchableOpacity>
 
                   <TouchableOpacity
-                    style={[styles.statusToggleBtn, formStatus === 'Inactive' && styles.statusToggleBtnInactive]}
-                    onPress={() => setFormStatus('Inactive')}
+                    style={[styles.modalSaveBtn, formSubmitting && { opacity: 0.7 }]}
+                    onPress={handleSaveItem}
+                    disabled={formSubmitting}
                   >
-                    <Ionicons
-                      name="pause-circle"
-                      size={15}
-                      color={formStatus === 'Inactive' ? '#eab308' : '#94a3b8'}
-                      style={{ marginRight: 6 }}
-                    />
-                    <Text
-                      style={[
-                        styles.statusToggleBtnText,
-                        formStatus === 'Inactive' && { color: '#ca8a04', fontWeight: '700' },
-                      ]}
-                    >
-                      Inactive
-                    </Text>
+                    {formSubmitting ? (
+                      <ActivityIndicator size="small" color="#ffffff" />
+                    ) : (
+                      <Text style={styles.modalSaveBtnText}>Save</Text>
+                    )}
                   </TouchableOpacity>
                 </View>
-              </View>
-            </View>
-
-            <View style={styles.modalFooter}>
-              <TouchableOpacity
-                style={styles.modalCancelBtn}
-                onPress={() => setEditModalVisible(false)}
-                disabled={formSubmitting}
-              >
-                <Text style={styles.modalCancelBtnText}>Cancel</Text>
-              </TouchableOpacity>
-
-              <TouchableOpacity
-                style={[styles.modalSaveBtn, formSubmitting && { opacity: 0.7 }]}
-                onPress={handleSaveItem}
-                disabled={formSubmitting}
-              >
-                {formSubmitting ? (
-                  <ActivityIndicator size="small" color="#ffffff" />
-                ) : (
-                  <Text style={styles.modalSaveBtnText}>Save</Text>
-                )}
-              </TouchableOpacity>
-            </View>
           </View>
         </View>
       </Modal>
@@ -2780,6 +3344,171 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   statusToggleBtnTextActive: {
+    color: '#15803d',
+    fontWeight: '700',
+  },
+  gstTypeToggleRow: {
+    flexDirection: 'row',
+    gap: 8,
+  },
+  gstTypeBtn: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    height: 38,
+    borderWidth: 1,
+    borderColor: '#cbd5e1',
+    borderRadius: 7,
+    backgroundColor: '#ffffff',
+  },
+  gstTypeBtnActiveUnreg: {
+    borderColor: '#0284c7',
+    backgroundColor: '#f0f9ff',
+  },
+  gstTypeBtnActiveReg: {
+    borderColor: '#16a34a',
+    backgroundColor: '#f0fdf4',
+  },
+  gstTypeBtnTextActiveUnreg: {
+    color: '#0284c7',
+    fontWeight: '700',
+  },
+  gstTypeBtnTextActiveReg: {
+    color: '#15803d',
+    fontWeight: '700',
+  },
+  // Floating State Dropdown Styles
+  stateDropdownFloatingMenu: {
+    position: 'absolute',
+    top: 64,
+    left: 0,
+    right: 0,
+    backgroundColor: '#ffffff',
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#cbd5e1',
+    shadowColor: '#0f172a',
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.2,
+    shadowRadius: 12,
+    elevation: 99,
+    zIndex: 99999,
+    overflow: 'hidden',
+  },
+  stateDropdownSearchWrap: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 10,
+    height: 38,
+    borderBottomWidth: 1,
+    borderBottomColor: '#e2e8f0',
+    backgroundColor: '#f8fafc',
+  },
+  stateDropdownSearchInput: {
+    flex: 1,
+    fontSize: 12.5,
+    color: '#0f172a',
+    paddingVertical: 4,
+  },
+  stateDropdownAddRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 12,
+    paddingVertical: 9,
+    backgroundColor: '#f0f9ff',
+    borderBottomWidth: 1,
+    borderBottomColor: '#e0f2fe',
+  },
+  stateDropdownAddRowText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#0284c7',
+  },
+  stateDropdownInlineAddBox: {
+    padding: 10,
+    backgroundColor: '#eff6ff',
+    borderBottomWidth: 1,
+    borderBottomColor: '#dbeafe',
+  },
+  stateDropdownAddSubmitBtn: {
+    backgroundColor: '#0284c7',
+    paddingHorizontal: 12,
+    height: 32,
+    borderRadius: 6,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  stateDropdownAddSubmitBtnText: {
+    color: '#ffffff',
+    fontSize: 11.5,
+    fontWeight: '700',
+  },
+  stateDropdownAddCancelBtn: {
+    width: 32,
+    height: 32,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 6,
+    borderWidth: 1,
+    borderColor: '#cbd5e1',
+    backgroundColor: '#ffffff',
+  },
+  stateDropdownItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: '#f1f5f9',
+  },
+  stateDropdownItemActive: {
+    backgroundColor: '#f0f9ff',
+  },
+  stateDropdownItemText: {
+    fontSize: 12.5,
+    color: '#334155',
+    fontWeight: '500',
+  },
+  stateDropdownItemTextActive: {
+    color: '#0284c7',
+    fontWeight: '700',
+  },
+  partyCardSubText: {
+    fontSize: 11,
+    color: '#64748b',
+    marginTop: 2,
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  partyGstBadgeUrd: {
+    backgroundColor: '#f1f5f9',
+    borderWidth: 1,
+    borderColor: '#cbd5e1',
+    borderRadius: 4,
+    paddingHorizontal: 5,
+    paddingVertical: 1,
+    alignSelf: 'flex-start',
+    marginTop: 3,
+  },
+  partyGstBadgeUrdText: {
+    fontSize: 9.5,
+    color: '#64748b',
+    fontWeight: '600',
+  },
+  partyGstBadgeRd: {
+    backgroundColor: '#f0fdf4',
+    borderWidth: 1,
+    borderColor: '#bbf7d0',
+    borderRadius: 4,
+    paddingHorizontal: 5,
+    paddingVertical: 1,
+    alignSelf: 'flex-start',
+    marginTop: 3,
+  },
+  partyGstBadgeRdText: {
+    fontSize: 9.5,
     color: '#15803d',
     fontWeight: '700',
   },

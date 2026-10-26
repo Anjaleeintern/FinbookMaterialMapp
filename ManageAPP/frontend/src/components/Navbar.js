@@ -14,7 +14,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAuth } from '../context/AuthContext';
 
-export const Navbar = ({ search, setSearch, onRefresh, toggleSidebar }) => {
+export const Navbar = ({ search, setSearch, onRefresh, toggleSidebar, onNavigateProfile }) => {
   const { user, logout } = useAuth();
   const { width } = useWindowDimensions();
   const insets = useSafeAreaInsets();
@@ -29,13 +29,15 @@ export const Navbar = ({ search, setSearch, onRefresh, toggleSidebar }) => {
   return (
     <View style={styles.wrapper}>
       <View style={styles.header}>
-        {/* Left: Hamburger & Brand Logo */}
+        {/* Left: Hamburger (Desktop only) & Brand Logo */}
         <View style={styles.leftSection}>
-          <TouchableOpacity onPress={toggleSidebar} style={styles.iconButton}>
-            <Ionicons name="menu" size={24} color="#ffffff" />
-          </TouchableOpacity>
+          {!isMobile && (
+            <TouchableOpacity onPress={toggleSidebar} style={styles.iconButton}>
+              <Ionicons name="menu" size={24} color="#ffffff" />
+            </TouchableOpacity>
+          )}
 
-          <View style={styles.brandContainer}>
+          <View style={[styles.brandContainer, isMobile && { marginLeft: 0 }]}>
             <View style={styles.logoBadge}>
               <Text style={styles.logoLetter}>M</Text>
             </View>
@@ -120,6 +122,19 @@ export const Navbar = ({ search, setSearch, onRefresh, toggleSidebar }) => {
                     <Text style={styles.roleText}>{user?.role || 'operator'}</Text>
                   </View>
                 </View>
+
+                {onNavigateProfile && (
+                  <TouchableOpacity
+                    style={styles.profileNavButton}
+                    onPress={() => {
+                      setShowProfileMenu(false);
+                      onNavigateProfile();
+                    }}
+                  >
+                    <Ionicons name="person-circle-outline" size={20} color="#0284c7" />
+                    <Text style={styles.profileNavText}>My Profile</Text>
+                  </TouchableOpacity>
+                )}
 
                 <TouchableOpacity
                   style={styles.logoutButton}
@@ -318,6 +333,21 @@ const styles = StyleSheet.create({
     color: '#0369a1',
     fontWeight: '700',
     textTransform: 'uppercase',
+  },
+  profileNavButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 10,
+    borderRadius: 6,
+    borderBottomWidth: 1,
+    borderBottomColor: '#f1f5f9',
+    marginBottom: 4,
+  },
+  profileNavText: {
+    marginLeft: 10,
+    color: '#0284c7',
+    fontSize: 15,
+    fontWeight: '600',
   },
   logoutButton: {
     flexDirection: 'row',

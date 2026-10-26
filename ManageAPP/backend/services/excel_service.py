@@ -36,47 +36,57 @@ HEADER_MAP = {
     "truck_no": "vehicle_no",
     "gadi_no": "vehicle_no",
 
-    # Transport
-    "transport_type": "transport_type",
-    "transporttype": "transport_type",
-    "transport_name": "transport_type",
-    "transportname": "transport_type",
-    "transport": "transport_type",
-    "transporter": "transport_type",
+    # Transport Name
+    "transport_name": "transport_name",
+    "transportname": "transport_name",
+    "transport_type": "transport_name",
+    "transporttype": "transport_name",
+    "transport": "transport_name",
+    "transporter": "transport_name",
+    "transport_own_vehicle": "transport_name",
+    "transport_ownvehicle": "transport_name",
 
-    # Type / Mode
-    "type_mode": "type_mode",
-    "typemode": "type_mode",
-    "type": "type_mode",
-    "mode": "type_mode",
-    "sale_type": "type_mode",
-    "saletype": "type_mode",
+    # Sales Mode
+    "sales_mode": "sales_mode",
+    "salesmode": "sales_mode",
+    "sale_mode": "sales_mode",
+    "salemode": "sales_mode",
+    "sales_mode_type": "sales_mode",
+    "type_mode": "sales_mode",
+    "typemode": "sales_mode",
+    "type": "sales_mode",
+    "mode": "sales_mode",
 
-    # HR Loading Type
-    "hr_loading_type": "hr_loading_type",
-    "hrloadingtype": "hr_loading_type",
-    "hr_type": "hr_loading_type",
-    "hrloading": "hr_loading_type",
-    "hr_loading": "hr_loading_type",
+    # Payment Mode
+    "payment_mode": "payment_mode",
+    "paymentmode": "payment_mode",
+    "payment": "payment_mode",
+    "pay_mode": "payment_mode",
 
-    # Material
+    # Customer Name (Cash Sale)
+    "customer_name": "customer_name",
+    "customername": "customer_name",
+    "customer": "customer_name",
+
+    # Party Name (Credit Sale)
+    "party_name": "party_name",
+    "partyname": "party_name",
+    "party": "party_name",
+    "parties": "party_name",
+    "client": "party_name",
+    "buyer": "party_name",
+
+    # Sale Type (Royalty Sale / Without Royalty)
+    "sale_type": "sale_type",
+    "saletype": "sale_type",
+    "royalty_type": "sale_type",
+
+    # Material Name
     "material_name": "material_name",
     "materialname": "material_name",
     "material": "material_name",
     "item": "material_name",
     "item_name": "material_name",
-
-    # Party
-    "party_name": "party_name",
-    "partyname": "party_name",
-    "party_ame": "party_name",
-    "party": "party_name",
-    "customer": "party_name",
-    "customer_name": "party_name",
-
-    # Transport
-    "transport_own_vehicle": "transport_type",
-    "transport_ownvehicle": "transport_type",
 
     # CUM
     "cum": "cum",
@@ -107,6 +117,12 @@ HEADER_MAP = {
     "net_wt_after_moisture": "net_wt",
     "net_weight_after_moisture": "net_wt",
 
+    # Rate Calculation Unit
+    "rate_calc_unit": "rate_calc_unit",
+    "rate_calculation_unit": "rate_calc_unit",
+    "rate_unit": "rate_calc_unit",
+    "unit": "rate_calc_unit",
+
     # Rate
     "rate": "rate",
     "rate_without_gst": "rate",
@@ -114,10 +130,31 @@ HEADER_MAP = {
     "bhav": "rate",
     "price": "rate",
 
-    # Payment Mode
-    "payment_mode": "payment_mode",
-    "paymentmode": "payment_mode",
-    "payment": "payment_mode",
+    # Amount
+    "amount": "amount",
+    "material_amount": "amount",
+    "amt": "amount",
+
+    # Additional Charge
+    "additional_charge_name": "additional_charge_name",
+    "additional_charge": "additional_charge_name",
+    "additionalcharge": "additional_charge_name",
+    "charge_name": "additional_charge_name",
+    "other_charges_name": "additional_charge_name",
+
+    "additional_charge_amount": "additional_charge_amount",
+    "additional_charge_amt": "additional_charge_amount",
+    "charge_amount": "additional_charge_amount",
+    "other_charges": "additional_charge_amount",
+
+    # Party State
+    "party_state": "party_state",
+    "state": "party_state",
+
+    # Taxable Base Amount
+    "taxable_amount": "taxable_amount",
+    "taxable_base_amount": "taxable_amount",
+    "taxable_value": "taxable_amount",
 
     # GST Rate
     "gst_rate": "gst_rate",
@@ -125,8 +162,22 @@ HEADER_MAP = {
     "gst": "gst_rate",
     "gst_percent": "gst_rate",
     "gst_%": "gst_rate",
+    "gst_rate_%": "gst_rate",
     "gst_5": "gst_rate",
     "gst_18": "gst_rate",
+
+    # CGST, SGST, IGST Amounts
+    "cgst_amount": "cgst_amount",
+    "cgst": "cgst_amount",
+    "sgst_amount": "sgst_amount",
+    "sgst": "sgst_amount",
+    "igst_amount": "igst_amount",
+    "igst": "igst_amount",
+
+    # Total Amount
+    "total_amount": "total_amount",
+    "total": "total_amount",
+    "grand_total": "total_amount",
 }
 
 def clean_header_name(header: Any) -> str:
@@ -175,43 +226,29 @@ def parse_float_val(val: Any, default: float = 0.0) -> float:
 
 def detect_mode_and_sub(sheet_title: Any, banner_text: Any = "") -> Tuple[str, Optional[str]]:
     """
-    Intelligently detect (type_mode, hr_loading_type) from sheet title and optional header banner.
-    Accurately distinguishes HR Loading (which has its own Royalty Sale / Without Royalty sub-types)
-    from main Royalty Sale and main Without Royalty.
+    Intelligently detect (type_mode, None) from sheet title and optional header banner.
+    HR Loading is removed. Supports Without Royalty, Royalty Sale, Credit Sale, Cash Sale, QR Sale.
     """
     s = str(sheet_title or "").strip().lower().replace("_", " ").replace("-", " ")
     b = str(banner_text or "").strip().lower().replace("_", " ").replace("-", " ")
 
-    # 1. HR Loading check FIRST: HR Loading is a distinct mode!
-    if "hr" in s or "loading" in s or "hr" in b or "loading" in b:
-        # Check sub-type for HR Loading
-        sub_type = "Without Royalty"
-        if "royalty" in b or "royalty" in s:
-            if "without" not in b and "with out" not in b and "without" not in s and "with out" not in s:
-                sub_type = "Royalty Sale"
-        return "HR Loading", sub_type
-
-    # 2. Main Without Royalty (handles 'with out', 'without', 'non royalty', 'w/o')
+    # 1. Main Without Royalty (handles 'with out', 'without', 'non royalty', 'w/o')
     if "without" in s or "with out" in s or "non royalty" in s or "w/o" in s:
         return "Without Royalty", None
 
-    # 3. Main Royalty Sale
+    # 2. Main Royalty Sale
     if "royalty" in s:
         return "Royalty Sale", None
 
-    # 4. Credit Sale
+    # 3. Credit Sale
     if "credit" in s or "udhar" in s:
         return "Credit Sale", None
 
-    # 5. Cash Sale
-    if "cash" in s or "case" in s or "nagad" in s:
+    # 4. Cash Sale / QR Sale (handles 'cash', 'case', 'nagad', 'qr', 'qe', 'upi', 'online')
+    if "cash" in s or "case" in s or "nagad" in s or "qr" in s or "qe" in s or "upi" in s or "online" in s:
         return "Cash Sale", None
 
-    # 6. QR / UPI Sale (handles 'qr', 'qe', 'upi', 'online')
-    if "qr" in s or "qe" in s or "upi" in s or "online" in s:
-        return "QR Sale", None
-
-    # 7. Default for party ledgers or general sheets
+    # 5. Default for party ledgers or general sheets
     return "Credit Sale", None
 
 def detect_mode_from_text(text: Any) -> Optional[str]:
@@ -227,8 +264,7 @@ def parse_excel_or_csv_bytes(
     """
     Parse Excel (.xlsx, .xls) or CSV bytes into a list of normalized row dictionaries.
     - Iterates ALL sheets in the workbook (multi-sheet support).
-    - Automatically detects Type/Mode from sheet tab title (e.g. 'Royalty Sale', 'Cash Sale').
-    - Distinguishes HR Loading Royalty/Without Royalty from main Royalty/Without Royalty.
+    - Automatically detects Type/Mode from sheet tab title or row columns.
     - Filters empty / template placeholder rows.
     Returns (rows, available_sheets).
     """
@@ -238,7 +274,7 @@ def parse_excel_or_csv_bytes(
 
     if fname.endswith(".csv"):
         # Auto-detect mode from CSV filename or default
-        csv_mode, csv_sub = detect_mode_and_sub(filename)
+        csv_mode, _ = detect_mode_and_sub(filename)
         if default_type_mode:
             csv_mode = default_type_mode
 
@@ -270,10 +306,9 @@ def parse_excel_or_csv_bytes(
                 if not v_no or v_no in ["0", "#REF!", "None", "-", "0.0"]:
                     continue
 
-                if not row_dict.get("type_mode"):
-                    row_dict["type_mode"] = csv_mode
-                if csv_mode == "HR Loading":
-                    row_dict["hr_loading_type"] = csv_sub or "Without Royalty"
+                mode_val = row_dict.get("sales_mode") or row_dict.get("type_mode") or csv_mode
+                row_dict["sales_mode"] = mode_val
+                row_dict["type_mode"] = mode_val
                 row_dict["_sheet_name"] = filename
                 rows.append(row_dict)
                 valid_count += 1
@@ -281,7 +316,7 @@ def parse_excel_or_csv_bytes(
         available_sheets.append({
             "name": filename,
             "mode": csv_mode,
-            "hr_loading_type": csv_sub,
+            "hr_loading_type": None,
             "rows_count": valid_count,
             "is_core": True
         })
@@ -309,12 +344,12 @@ def parse_excel_or_csv_bytes(
                 banner_text = str(r0_non_empty[0])
                 header_row_idx = 1
 
-            # Detect sheet mode and HR sub-type
-            sheet_mode, sheet_sub = detect_mode_and_sub(sheet.title, banner_text)
+            # Detect sheet mode
+            sheet_mode, _ = detect_mode_and_sub(sheet.title, banner_text)
             if default_type_mode and not default_type_mode.lower().startswith("auto"):
                 sheet_mode = default_type_mode
 
-            key_cols = {"date", "vehicle_no", "party_name", "material_name", "rate", "g_wt", "t_wt", "cum", "type_mode", "challan_no"}
+            key_cols = {"date", "vehicle_no", "party_name", "material_name", "rate", "g_wt", "t_wt", "cum", "sales_mode", "type_mode", "challan_no", "customer_name"}
 
             # Search up to row 10 for true header row
             for r_idx in range(header_row_idx, min(10, len(rows_iter))):
@@ -331,7 +366,7 @@ def parse_excel_or_csv_bytes(
             if header_row is None:
                 continue
 
-            is_core_sheet = sheet_mode in ["Royalty Sale", "Without Royalty", "HR Loading", "Credit Sale", "Cash Sale", "QR Sale"] and not any(party in title_lower for party in ["sageer", "altamash", "nawaz"])
+            is_core_sheet = sheet_mode in ["Royalty Sale", "Without Royalty", "Credit Sale", "Cash Sale"] and not any(party in title_lower for party in ["sageer", "altamash", "nawaz"])
 
             # Check if this sheet is selected for import
             should_import = True
@@ -362,19 +397,12 @@ def parse_excel_or_csv_bytes(
 
                 # Auto-assign party name from sheet title if party ledger sheet
                 p_name = str(row_dict.get("party_name") or "").strip()
-                if not p_name:
+                if not p_name and not row_dict.get("customer_name"):
                     row_dict["party_name"] = sheet.title.strip()
 
-                # Set Mode and HR Loading Type
-                if sheet_mode == "HR Loading":
-                    row_dict["type_mode"] = "HR Loading"
-                    # Preserve explicit row hr_loading_type if present, else use sheet's detected sub
-                    if not row_dict.get("hr_loading_type"):
-                        row_dict["hr_loading_type"] = sheet_sub or "Royalty Sale"
-                else:
-                    if not row_dict.get("type_mode"):
-                        row_dict["type_mode"] = sheet_mode
-                    row_dict["hr_loading_type"] = None
+                mode_val = row_dict.get("sales_mode") or row_dict.get("type_mode") or sheet_mode
+                row_dict["sales_mode"] = mode_val
+                row_dict["type_mode"] = mode_val
 
                 row_dict["_sheet_name"] = sheet.title.strip()
                 row_dict["_sheet_mode"] = sheet_mode
@@ -383,7 +411,7 @@ def parse_excel_or_csv_bytes(
             available_sheets.append({
                 "name": sheet.title.strip(),
                 "mode": sheet_mode,
-                "hr_loading_type": sheet_sub,
+                "hr_loading_type": None,
                 "rows_count": sheet_valid_rows,
                 "is_core": is_core_sheet,
                 "selected": should_import and is_core_sheet if selected_sheets is None else should_import
@@ -397,6 +425,12 @@ def process_raw_imported_rows(
 ) -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]]]:
     """
     Validate, normalize, calculate, and sort imported rows by date.
+    Maps directly to Create Entry form fields:
+    - Sales Mode (Cash Sale / Credit Sale / Royalty Sale / Without Royalty / QR Sale)
+    - Sale Type (Royalty Sale / Without Royalty)
+    - Transport Name, Customer Name, Party Name, Rate Calculation Unit (MT/CUM)
+    - Additional Charges & GST
+    Destination collection is routed according to Sales Mode.
     Returns (valid_entries, errors).
     """
     valid_entries = []
@@ -409,23 +443,73 @@ def process_raw_imported_rows(
 
             # 2. Extract and sanitize key fields
             vehicle_no = str(r.get("vehicle_no") or "").strip().upper()
-            transport_type = str(r.get("transport_type") or "").strip()
+            transport_name = str(r.get("transport_name") or r.get("transport_type") or "").strip()
+            if not transport_name:
+                transport_name = "Own / Default"
 
-            # Resolve Type/Mode: column value > sheet title detection > default_type_mode
-            type_mode = str(r.get("type_mode") or "").strip()
-            if not type_mode:
+            # Resolve Sales Mode: row value > sheet title detection > default_type_mode
+            raw_mode = str(r.get("sales_mode") or r.get("type_mode") or "").strip()
+            if not raw_mode:
                 sheet_title = r.get("_sheet_name")
-                type_mode = detect_mode_from_text(sheet_title) or (default_type_mode or "").strip()
+                raw_mode = detect_mode_from_text(sheet_title) or (default_type_mode or "").strip()
+
+            mode_lower = raw_mode.lower()
+            if "cash" in mode_lower or "case" in mode_lower or "qr" in mode_lower or "upi" in mode_lower:
+                mode = "Cash Sale"
+            elif "credit" in mode_lower or "udhar" in mode_lower:
+                mode = "Credit Sale"
+            elif "without" in mode_lower:
+                mode = "Without Royalty"
+            elif "royalty" in mode_lower:
+                mode = "Royalty Sale"
+            elif raw_mode:
+                mode = raw_mode
+            else:
+                mode = "Credit Sale"
+
+            # Sale Type (Royalty Sale / Without Royalty)
+            raw_sale_type = str(r.get("sale_type") or "").strip()
+            if "without" in raw_sale_type.lower():
+                sale_type = "Without Royalty"
+            elif "royalty" in raw_sale_type.lower():
+                sale_type = "Royalty Sale"
+            elif raw_sale_type:
+                sale_type = raw_sale_type
+            elif mode == "Royalty Sale":
+                sale_type = "Royalty Sale"
+            elif mode == "Without Royalty":
+                sale_type = "Without Royalty"
+            else:
+                sale_type = None
+
+            # Customer Name & Party Name based on Sales Mode
+            raw_cust = str(r.get("customer_name") or "").strip()
+            raw_party = str(r.get("party_name") or "").strip()
+
+            if mode == "Cash Sale":
+                customer_name = raw_cust or raw_party or "Cash Customer"
+                party_name = customer_name
+                raw_pm = str(r.get("payment_mode") or "").strip()
+                if raw_pm.lower() in ["bank", "online"]:
+                    payment_mode = "Bank"
+                elif raw_pm.lower() in ["qr", "upi"] or "qr" in mode_lower or "upi" in mode_lower:
+                    payment_mode = "QR"
+                else:
+                    payment_mode = "Cash"
+            else:
+                customer_name = None
+                party_name = raw_party or raw_cust
+                payment_mode = None
 
             material_name = str(r.get("material_name") or "").strip()
-            party_name = str(r.get("party_name") or "").strip()
 
             # Validation: essential fields
             missing = []
             if not vehicle_no: missing.append("Vehicle No")
-            if not type_mode: missing.append("Type/Mode")
+            if not mode: missing.append("Sales Mode")
             if not material_name: missing.append("Material Name")
-            if not party_name: missing.append("Party Name")
+            if mode == "Credit Sale" and not party_name: missing.append("Party Name")
+            if mode == "Cash Sale" and not customer_name: missing.append("Customer Name")
 
             if missing:
                 errors.append({
@@ -435,11 +519,7 @@ def process_raw_imported_rows(
                 })
                 continue
 
-            # Standardize default transport if omitted
-            if not transport_type:
-                transport_type = "Own / Default"
-
-            # 3. Numeric fields
+            # 3. Numeric & Calculation fields
             cum = parse_float_val(r.get("cum"), 0.0)
             etp_no = str(r.get("etp_no") or "").strip()
             g_wt = parse_float_val(r.get("g_wt"), 0.0)
@@ -447,41 +527,45 @@ def process_raw_imported_rows(
             rate = parse_float_val(r.get("rate"), 0.0)
             gst_rate = parse_float_val(r.get("gst_rate"), 0.0)
 
-            # HR Loading Type
-            hr_loading_type = r.get("hr_loading_type")
-            if hr_loading_type:
-                hr_loading_type = str(hr_loading_type).strip()
+            # Rate Calculation Unit (MT or CUM)
+            raw_unit = str(r.get("rate_calc_unit") or "").strip().upper()
+            rate_calc_unit = "CUM" if ("CUM" in raw_unit or "M3" in raw_unit) else "MT"
 
-            # Payment mode
-            payment_mode = r.get("payment_mode")
-            if payment_mode:
-                payment_mode = str(payment_mode).strip()
+            # Additional Charge
+            additional_charge_name = str(r.get("additional_charge_name") or "").strip() or None
+            additional_charge_amount = parse_float_val(r.get("additional_charge_amount"), 0.0)
 
-            # Always neglect any challan number from Excel to ensure continuous un-interrupted system series
-            challan_no = None
+            # Party State
+            party_state = str(r.get("party_state") or "").strip() or "Madhya Pradesh"
 
             # Create Pydantic model for calculation validation
             entry_create = EntryCreate(
                 date=date_str,
                 challan_no=None,
                 vehicle_no=vehicle_no,
-                transport_type=transport_type,
-                type_mode=type_mode,
-                hr_loading_type=hr_loading_type if type_mode == "HR Loading" else None,
+                transport_type=transport_name,
+                type_mode=mode,
+                sale_type=sale_type,
+                hr_loading_type=None,
                 material_name=material_name,
                 party_name=party_name,
+                customer_name=customer_name,
+                party_state=party_state,
                 cum=cum,
                 etp_no=etp_no,
                 g_wt=g_wt,
                 t_wt=t_wt,
                 rate=rate,
+                rate_calc_unit=rate_calc_unit,
+                additional_charge_name=additional_charge_name,
+                additional_charge_amount=additional_charge_amount,
                 payment_mode=payment_mode,
                 gst_rate=gst_rate,
             )
 
             # Process full formula calculations
             calc_data = process_entry_calculations(entry_create)
-            target_collection = get_collection_name(type_mode)
+            target_collection = get_collection_name(mode)
             calc_data["target_collection"] = target_collection
             calc_data["_sort_date"] = date_obj
             calc_data["row_number"] = index
@@ -556,7 +640,14 @@ async def execute_bulk_import_to_mongodb(
     }
 
 def generate_sample_excel_template() -> bytes:
-    """Generate a clean, styled Excel template with instructions and sample rows."""
+    """
+    Generate clean, styled Excel template matching Create Entry form fields.
+    Columns:
+    Date, ChallanNo, VehicleNo, Transport Name, Sales Mode, Payment Mode, Customer Name,
+    Party Name, Sale Type, MaterialName, CUM, ETP No, G.WT, T.WT, Net Wt,
+    Rate Calculation Unit, Rate, Amount, Additional Charge Name, Additional Charge Amount,
+    Party State, Taxable Base Amount, GST Rate (%), CGST Amount, SGST Amount, IGST Amount, Total Amount.
+    """
     wb = openpyxl.Workbook()
     ws = wb.active
     ws.title = "Delivery Entries Template"
@@ -580,18 +671,30 @@ def generate_sample_excel_template() -> bytes:
         "Date",
         "ChallanNo",
         "VehicleNo",
-        "TransportType",
-        "Type/Mode",
-        "HR Loading Type",
+        "Transport Name",
+        "Sales Mode",
+        "Payment Mode",
+        "Customer Name",
+        "Party Name",
+        "Sale Type",
         "MaterialName",
-        "PartyName",
         "CUM",
         "ETP No",
         "G.WT",
         "T.WT",
+        "Net Wt",
+        "Rate Calculation Unit",
         "Rate",
-        "Payment Mode",
-        "GST Rate"
+        "Amount",
+        "Additional Charge Name",
+        "Additional Charge Amount",
+        "Party State",
+        "Taxable Base Amount",
+        "GST Rate (%)",
+        "CGST Amount",
+        "SGST Amount",
+        "IGST Amount",
+        "Total Amount"
     ]
 
     ws.append(headers)
@@ -605,11 +708,11 @@ def generate_sample_excel_template() -> bytes:
         cell.border = thin_border
 
     sample_rows = [
-        ["10/14/2026", "CH-0001", "MP09GG1230", "MSK", "Royalty Sale", "", "10MM", "NAWAZ KHAN", 0, "ETP-8921", 60790, 15000, 450, "", 5],
-        ["10/14/2026", "CH-0002", "MP09BS6668", "VMPL", "Cash Sale", "", "20MM", "SAGEER PATEL", 0, "", 45000, 12000, 480, "Cash", 0],
-        ["10/15/2026", "CH-0003", "MP09GG7934", "MSK", "HR Loading", "With Royalty", "GSB", "PUSHPENDRA", 0, "ETP-9932", 52000, 14000, 390, "", 18],
-        ["10/15/2026", "CH-0004", "RJ09GE1458", "VMPL", "Without Royalty", "", "M-SAND", "ALTAMASH KHAN", 12.5, "", 0, 0, 850, "", 0],
-        ["10/16/2026", "CH-0005", "MP09GG1150", "MSK", "QR Sale", "", "10MM", "ANIL AARIYA", 0, "", 38000, 11000, 460, "QR", 0]
+        ["10/14/2026", "CH-0001", "MP09GG1230", "MSK", "Credit Sale", "", "", "NAWAZ KHAN", "Royalty Sale", "10MM", 0, "ETP-8921", 50.00, 15.00, 35.00, "MT", 450, 15750.00, "Loading Charge", 500.00, "Madhya Pradesh", 16250.00, 18, 1462.50, 1462.50, 0, 19175.00],
+        ["10/14/2026", "CH-0002", "MP09BS6668", "VMPL", "Cash Sale", "Cash", "RAMESH PATEL", "", "", "20MM", 0, "", 40.00, 12.00, 28.00, "MT", 480, 13440.00, "", 0, "Madhya Pradesh", 13440.00, 0, 0, 0, 0, 13440.00],
+        ["10/15/2026", "CH-0003", "RJ09GE1458", "VMPL", "Credit Sale", "", "", "ALTAMASH KHAN", "Without Royalty", "M-SAND", 12.5, "", 0, 0, 0, "CUM", 850, 10625.00, "Weighbridge Charge", 300.00, "Rajasthan", 10925.00, 5, 0, 0, 546.25, 11471.25],
+        ["10/15/2026", "CH-0004", "MP09GG1150", "MSK", "Cash Sale", "Bank", "VIJAY SHARMA", "", "", "10MM", 0, "", 38.00, 10.00, 28.00, "MT", 460, 12880.00, "", 0, "Madhya Pradesh", 12880.00, 12, 772.80, 772.80, 0, 14425.60],
+        ["10/16/2026", "CH-0005", "GJ01XY7890", "DELHI CARRIERS", "Credit Sale", "", "", "PUSHPENDRA", "Royalty Sale", "GSB", 0, "ETP-9932", 45.00, 12.00, 33.00, "MT", 390, 12870.00, "", 0, "Madhya Pradesh", 12870.00, 5, 321.75, 321.75, 0, 13513.50]
     ]
 
     for r_idx, row_data in enumerate(sample_rows, start=2):
@@ -619,18 +722,16 @@ def generate_sample_excel_template() -> bytes:
             cell.font = regular_font
             cell.border = thin_border
             cell.fill = sample_fill
-            if c_idx in [1, 2, 3, 4, 5, 6, 14]:
+            # Align center for text/dates, right for numeric
+            if c_idx in [1, 2, 3, 4, 5, 6, 9, 10, 16]:
                 cell.alignment = Alignment(horizontal="center")
-            elif c_idx in [9, 11, 12, 13, 15]:
+            elif c_idx in [11, 13, 14, 15, 17, 18, 20, 22, 23, 24, 25, 26, 27]:
                 cell.alignment = Alignment(horizontal="right")
 
-    # Column widths
-    column_widths = {
-        'A': 14, 'B': 14, 'C': 16, 'D': 16, 'E': 18, 
-        'F': 18, 'G': 16, 'H': 20, 'I': 10, 'J': 14, 
-        'K': 12, 'L': 12, 'M': 10, 'N': 16, 'O': 12
-    }
-    for col_letter, width in column_widths.items():
+    # Column widths for all 27 columns
+    widths = [14, 14, 16, 18, 16, 14, 20, 22, 16, 16, 10, 14, 12, 12, 12, 18, 10, 14, 20, 16, 18, 18, 14, 14, 14, 14, 16]
+    for idx, width in enumerate(widths, start=1):
+        col_letter = openpyxl.utils.get_column_letter(idx)
         ws.column_dimensions[col_letter].width = width
 
     ws_notes = wb.create_sheet(title="Instructions & Rules")
@@ -639,18 +740,30 @@ def generate_sample_excel_template() -> bytes:
         ["Date", "Yes", "MM/DD/YYYY, DD/MM/YYYY, YYYY-MM-DD", "Delivery transaction date."],
         ["ChallanNo", "Optional", "Leave blank or auto", "Auto-generated sequentially by system (001, 002...) to maintain continuous series across manual and excel entries."],
         ["VehicleNo", "Yes", "MP09GG1230, etc.", "Vehicle registration number."],
-        ["TransportType", "No", "MSK, VMPL, etc.", "Transporter name (defaults to 'Own / Default' if blank)."],
-        ["Type/Mode", "Yes", "Royalty Sale, Without Royalty, Credit Sale, Cash Sale, QR Sale, HR Loading", "Routes directly to MongoDB collection."],
-        ["HR Loading Type", "Conditional", "With Royalty, Without Royalty", "Required only when Type/Mode is 'HR Loading'."],
+        ["Transport Name", "No", "MSK, VMPL, etc.", "Transporter name (defaults to 'Own / Default' if blank)."],
+        ["Sales Mode", "Yes", "Credit Sale, Cash Sale, Royalty Sale, Without Royalty, QR Sale", "Routes directly to destination MongoDB collection."],
+        ["Payment Mode", "Conditional", "Cash, Bank, QR", "Applicable for Cash Sale."],
+        ["Customer Name", "Conditional", "Customer Name", "Required for Cash Sale. Saved in database without affecting party ledger."],
+        ["Party Name", "Conditional", "Client / Contractor name", "Required for Credit Sale."],
+        ["Sale Type", "Optional", "Royalty Sale, Without Royalty", "Distinguishes Royalty vs Without Royalty transaction."],
         ["MaterialName", "Yes", "10MM, 20MM, GSB, M-SAND", "Quarry material delivered."],
-        ["PartyName", "Yes", "Customer or Contractor name", "Client party."],
-        ["CUM", "Optional", "Numeric (e.g. 10.5)", "Cubic meters."],
+        ["CUM", "Optional", "Numeric (e.g. 12.5)", "Cubic meters."],
         ["ETP No", "Optional", "ETP-8921", "Electronic Transit Pass number."],
-        ["G.WT", "Optional", "60790", "Gross weight in kg."],
-        ["T.WT", "Optional", "15000", "Tare weight in kg. Net weight = G.WT - T.WT."],
-        ["Rate", "Yes", "450", "Rate per Ton or per CUM. Amount = (Net Wt / 1000) * Rate (or CUM * Rate)."],
-        ["Payment Mode", "Conditional", "Cash or QR", "Auto-defaults to Cash for Cash Sale, QR for QR Sale."],
-        ["GST Rate", "Conditional", "5, 18, or 0", "Auto-calculates GST Amount and Total Amount for Royalty Sale or HR Loading With Royalty."]
+        ["G.WT", "Optional", "50.00 (in Tons)", "Gross weight in Tons."],
+        ["T.WT", "Optional", "15.00 (in Tons)", "Tare weight in Tons."],
+        ["Net Wt", "Optional", "Auto: G.WT - T.WT", "Calculated Net Weight in Tons."],
+        ["Rate Calculation Unit", "No", "MT, CUM", "If MT: Amount = Net Wt * Rate. If CUM: Amount = CUM * Rate."],
+        ["Rate", "Yes", "450", "Rate per Ton (MT) or per CUM."],
+        ["Amount", "Optional", "Calculated", "Base material amount (Rate * Net Wt or Rate * CUM)."],
+        ["Additional Charge Name", "Optional", "Loading Charge, Weighbridge Charge", "Name of extra/loading charge."],
+        ["Additional Charge Amount", "Optional", "Numeric (e.g. 500)", "Extra charge added to taxable base."],
+        ["Party State", "No", "Madhya Pradesh, Rajasthan, etc.", "Defaults to Madhya Pradesh (determines CGST+SGST vs IGST)."],
+        ["Taxable Base Amount", "Optional", "Calculated", "Amount + Additional Charge Amount."],
+        ["GST Rate (%)", "No", "0, 5, 12, 18", "GST percentage applicable."],
+        ["CGST Amount", "Optional", "Calculated", "50% of GST Amount for Intra-state (MP)."],
+        ["SGST Amount", "Optional", "Calculated", "50% of GST Amount for Intra-state (MP)."],
+        ["IGST Amount", "Optional", "Calculated", "100% of GST Amount for Inter-state (outside MP)."],
+        ["Total Amount", "Optional", "Calculated", "Taxable Base Amount + GST Amount."]
     ]
     for row in notes:
         ws_notes.append(row)
@@ -661,11 +774,203 @@ def generate_sample_excel_template() -> bytes:
         cell.font = header_font
         cell.alignment = Alignment(horizontal="center")
     
-    ws_notes.column_dimensions['A'].width = 18
+    ws_notes.column_dimensions['A'].width = 24
     ws_notes.column_dimensions['B'].width = 14
-    ws_notes.column_dimensions['C'].width = 30
-    ws_notes.column_dimensions['D'].width = 50
+    ws_notes.column_dimensions['C'].width = 34
+    ws_notes.column_dimensions['D'].width = 54
 
     output = io.BytesIO()
     wb.save(output)
     return output.getvalue()
+
+
+def generate_party_wise_sales_excel(
+    party_list: List[Dict[str, Any]],
+    month_label: str = "All Time",
+    totals: Optional[Dict[str, Any]] = None
+) -> bytes:
+    """
+    Generate a beautifully styled Excel (.xlsx) report of Party-wise Sales for a given month or all time.
+    Includes summary headers, rank, party name, total sales, deliveries, net weight, royalty/non-royalty breakdown, and grand totals.
+    """
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = "Party Wise Sales"
+
+    # Styling definitions
+    title_fill = PatternFill(start_color="1E3A8A", end_color="1E3A8A", fill_type="solid")
+    title_font = Font(name="Calibri", size=14, bold=True, color="FFFFFF")
+    subtitle_font = Font(name="Calibri", size=10, italic=True, color="E2E8F0")
+
+    header_fill = PatternFill(start_color="0284C7", end_color="0284C7", fill_type="solid")
+    header_font = Font(name="Calibri", size=11, bold=True, color="FFFFFF")
+
+    total_fill = PatternFill(start_color="DCFCE7", end_color="DCFCE7", fill_type="solid")
+    total_font = Font(name="Calibri", size=11, bold=True, color="166534")
+
+    zebra_fill = PatternFill(start_color="F8FAFC", end_color="F8FAFC", fill_type="solid")
+    regular_font = Font(name="Calibri", size=10, bold=False, color="0F172A")
+    rank_font = Font(name="Calibri", size=10, bold=True, color="1E3A8A")
+
+    thin_border_side = Side(style="thin", color="CBD5E1")
+    thin_border = Border(left=thin_border_side, right=thin_border_side, top=thin_border_side, bottom=thin_border_side)
+
+    total_top_border = Side(style="thin", color="059669")
+    total_bottom_border = Side(style="double", color="059669")
+    total_border = Border(left=thin_border_side, right=thin_border_side, top=total_top_border, bottom=total_bottom_border)
+
+    total_amount = totals.get("total_amount", 0.0) if totals else sum(p.get("total", 0.0) for p in party_list)
+    total_trips = totals.get("total_trips", 0) if totals else sum(p.get("trips", 0) for p in party_list)
+
+    # 1. Title Banner (Rows 1-2)
+    ws.merge_cells("A1:J1")
+    ws.row_dimensions[1].height = 28
+    title_cell = ws["A1"]
+    title_cell.value = f"PARTY-WISE SALES REPORT — {month_label.upper()}"
+    title_cell.fill = title_fill
+    title_cell.font = title_font
+    title_cell.alignment = Alignment(horizontal="center", vertical="center")
+
+    ws.merge_cells("A2:J2")
+    ws.row_dimensions[2].height = 20
+    sub_cell = ws["A2"]
+    now_str = datetime.now().strftime("%d-%b-%Y %I:%M %p")
+    sub_cell.value = f"Generated: {now_str}   |   Parties: {len(party_list)}   |   Total Sales: ₹{total_amount:,.2f}   |   Trips: {total_trips}"
+    sub_cell.fill = title_fill
+    sub_cell.font = subtitle_font
+    sub_cell.alignment = Alignment(horizontal="center", vertical="center")
+
+    # Empty spacer row
+    ws.row_dimensions[3].height = 10
+
+    # 2. Table Headers (Row 4)
+    headers = [
+        "Rank",
+        "Party Name",
+        "Total Sales (₹)",
+        "Trips / Deliveries",
+        "Net Weight (MT)",
+        "Royalty Sale (₹)",
+        "Without Royalty (₹)",
+        "Cash Sale (₹)",
+        "Credit Sale (₹)",
+        "% Share of Month"
+    ]
+    ws.row_dimensions[4].height = 24
+    ws.append(headers)
+    for col_idx in range(1, len(headers) + 1):
+        cell = ws.cell(row=4, column=col_idx)
+        cell.fill = header_fill
+        cell.font = header_font
+        cell.alignment = Alignment(horizontal="center", vertical="center")
+        cell.border = thin_border
+
+    # 3. Party Data Rows
+    current_row = 5
+    for idx, p in enumerate(party_list, start=1):
+        ws.row_dimensions[current_row].height = 20
+        p_total = float(p.get("total", 0.0) or 0.0)
+        p_trips = int(p.get("trips", 0) or 0)
+        p_net_wt = float(p.get("net_wt", 0.0) or 0.0)
+        p_royalty = float(p.get("royalty", 0.0) or 0.0)
+        p_non_royalty = float(p.get("non_royalty", 0.0) or 0.0)
+        p_cash = float(p.get("cash", 0.0) or 0.0)
+        p_credit = float(p.get("credit", 0.0) or 0.0)
+        share = (p_total / total_amount * 100.0) if total_amount > 0 else 0.0
+
+        row_vals = [
+            f"#{idx}",
+            p.get("name", "Unspecified"),
+            round(p_total, 2),
+            p_trips,
+            round(p_net_wt, 2),
+            round(p_royalty, 2),
+            round(p_non_royalty, 2),
+            round(p_cash, 2),
+            round(p_credit, 2),
+            f"{share:.1f}%"
+        ]
+        ws.append(row_vals)
+
+        is_even = (idx % 2 == 0)
+        row_fill = zebra_fill if is_even else None
+
+        for c_idx in range(1, len(row_vals) + 1):
+            cell = ws.cell(row=current_row, column=c_idx)
+            cell.font = rank_font if c_idx == 1 else regular_font
+            if row_fill:
+                cell.fill = row_fill
+            cell.border = thin_border
+
+            # Number formatting and alignments
+            if c_idx == 1:
+                cell.alignment = Alignment(horizontal="center", vertical="center")
+            elif c_idx == 2:
+                cell.alignment = Alignment(horizontal="left", vertical="center")
+            elif c_idx in [3, 6, 7, 8, 9]:
+                cell.alignment = Alignment(horizontal="right", vertical="center")
+                cell.number_format = "#,##0.00"
+            elif c_idx == 4:
+                cell.alignment = Alignment(horizontal="center", vertical="center")
+                cell.number_format = "#,##0"
+            elif c_idx == 5:
+                cell.alignment = Alignment(horizontal="right", vertical="center")
+                cell.number_format = "#,##0.00"
+            elif c_idx == 10:
+                cell.alignment = Alignment(horizontal="right", vertical="center")
+
+        current_row += 1
+
+    # 4. Grand Total Summary Row
+    ws.row_dimensions[current_row].height = 24
+    total_net_wt = totals.get("total_net_wt", 0.0) if totals else sum(p.get("net_wt", 0.0) for p in party_list)
+    total_royalty = totals.get("total_royalty", 0.0) if totals else sum(p.get("royalty", 0.0) for p in party_list)
+    total_non_royalty = totals.get("total_non_royalty", 0.0) if totals else sum(p.get("non_royalty", 0.0) for p in party_list)
+    total_cash = totals.get("total_cash", 0.0) if totals else sum(p.get("cash", 0.0) for p in party_list)
+    total_credit = totals.get("total_credit", 0.0) if totals else sum(p.get("credit", 0.0) for p in party_list)
+
+    total_vals = [
+        "TOTAL",
+        f"{len(party_list)} Parties",
+        round(total_amount, 2),
+        total_trips,
+        round(total_net_wt, 2),
+        round(total_royalty, 2),
+        round(total_non_royalty, 2),
+        round(total_cash, 2),
+        round(total_credit, 2),
+        "100.0%"
+    ]
+    ws.append(total_vals)
+    for c_idx in range(1, len(total_vals) + 1):
+        cell = ws.cell(row=current_row, column=c_idx)
+        cell.fill = total_fill
+        cell.font = total_font
+        cell.border = total_border
+        if c_idx == 1:
+            cell.alignment = Alignment(horizontal="center", vertical="center")
+        elif c_idx == 2:
+            cell.alignment = Alignment(horizontal="left", vertical="center")
+        elif c_idx in [3, 6, 7, 8, 9]:
+            cell.alignment = Alignment(horizontal="right", vertical="center")
+            cell.number_format = "#,##0.00"
+        elif c_idx == 4:
+            cell.alignment = Alignment(horizontal="center", vertical="center")
+            cell.number_format = "#,##0"
+        elif c_idx == 5:
+            cell.alignment = Alignment(horizontal="right", vertical="center")
+            cell.number_format = "#,##0.00"
+        elif c_idx == 10:
+            cell.alignment = Alignment(horizontal="right", vertical="center")
+
+    # 5. Auto column widths
+    col_widths = [10, 32, 18, 18, 16, 18, 18, 16, 16, 18]
+    for idx, width in enumerate(col_widths, start=1):
+        col_letter = openpyxl.utils.get_column_letter(idx)
+        ws.column_dimensions[col_letter].width = width
+
+    output = io.BytesIO()
+    wb.save(output)
+    return output.getvalue()
+
+

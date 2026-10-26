@@ -18,7 +18,7 @@ export const Sidebar = ({ activeTab, setActiveTab, isOpen, onClose }) => {
     { id: 'dashboard', label: 'Dashboard', icon: 'grid-outline' },
     { id: 'entries', label: 'All Entries', icon: 'flash' },
     { id: 'masters', label: 'Masters Management', icon: 'layers-outline' },
-    { id: 'about', label: 'About', icon: 'information-circle-outline' },
+    { id: 'profile', label: 'Profile', icon: 'person-circle-outline' },
   ];
 
   const handleSelect = (id) => {
@@ -76,17 +76,9 @@ export const Sidebar = ({ activeTab, setActiveTab, isOpen, onClose }) => {
     </View>
   );
 
+  // On mobile screens, sidebar is completely removed (bottom navigation bar is used)
   if (isMobile) {
-    return (
-      <Modal visible={isOpen} transparent={true} animationType="fade" onRequestClose={onClose}>
-        <View style={styles.backdrop}>
-          <TouchableWithoutFeedback onPress={onClose}>
-            <View style={styles.backdropTouch} />
-          </TouchableWithoutFeedback>
-          {menuContent}
-        </View>
-      </Modal>
-    );
+    return null;
   }
 
   if (!isOpen) return null;

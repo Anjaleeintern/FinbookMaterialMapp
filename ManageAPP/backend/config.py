@@ -26,8 +26,7 @@ class Settings(BaseSettings):
         "Case Sale": "cash_sale",
         "Case sale": "cash_sale",
         "case sale": "cash_sale",
-        "QR Sale": "qr_sale",
-        "HR Loading": "hr_loading"
+        "QR Sale": "cash_sale"
     }
 
     model_config = SettingsConfigDict(
@@ -40,10 +39,20 @@ settings = Settings()
 
 def get_collection_name(type_mode: str) -> str:
     if not type_mode:
-        return "general_sale"
+        return "credit_sale"
     cleaned = type_mode.strip()
     if cleaned in settings.COLLECTION_MAP:
         return settings.COLLECTION_MAP[cleaned]
+    low = cleaned.lower()
+    if "cash" in low or "case" in low or "qr" in low:
+        return "cash_sale"
+    if "credit" in low:
+        return "credit_sale"
+    if "without" in low:
+        return "without_royalty"
+    if "royalty" in low:
+        return "royalty_sale"
     # Clean custom mode to valid MongoDB collection name (e.g. "Special Sale" -> "special_sale")
     slug = re.sub(r'[^a-zA-Z0-9]+', '_', cleaned.lower()).strip('_')
-    return slug or "custom_sale"
+    return slug or "credit_sale"
+

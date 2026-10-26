@@ -29,11 +29,10 @@ export const LoginView = () => {
   const insets = useSafeAreaInsets();
   const { width: winW, height: winH } = useWindowDimensions();
 
-  // Screens: 'landing' | 'login' | 'register'
-  const [screen, setScreen] = useState('landing');
+  // Screens: 'landing' | 'login'
+  const [screen, setScreen] = useState('login');
 
   // Form states
-  const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPw, setShowPw] = useState(false);
@@ -45,7 +44,6 @@ export const LoginView = () => {
   // Input refs for direct focus without re-render glitches
   const emailRef = useRef(null);
   const pwRef = useRef(null);
-  const nameRef = useRef(null);
   const scrollViewRef = useRef(null);
 
   // Keyboard listener to keep password and action buttons visible when typing
@@ -106,38 +104,6 @@ export const LoginView = () => {
     }
   };
 
-  const doRegister = async () => {
-    if (loading || isSubmitting.current) return;
-    const n = name.trim();
-    const e = email.trim();
-    const p = password.trim();
-    if (!n) {
-      setErr('Please enter your full name.');
-      return;
-    }
-    if (!e || !p) {
-      setErr('Please enter email and password.');
-      return;
-    }
-    if (p.length < 4) {
-      setErr('Password must be at least 4 characters.');
-      return;
-    }
-    isSubmitting.current = true;
-    setLoading(true);
-    setErr('');
-    setSuc('');
-    try {
-      await api.register(e, p, n);
-      setSuc('Account created! Signing in...');
-      await login(e, p);
-    } catch (error) {
-      setErr(error.message || 'Registration failed.');
-      setLoading(false);
-      isSubmitting.current = false;
-    }
-  };
-
   const isDesktop = winW >= 560;
   const heroHeight = Math.min(Math.max(winH * 0.28, 200), 260);
 
@@ -164,74 +130,22 @@ export const LoginView = () => {
 
           {/* ════════════ TOP APP BAR (Padded below phone status bar) ════════════ */}
           <View style={[st.topBar, { paddingTop: topSafePadding + 8 }]}>
-            {screen === 'landing' ? (
-              <>
-                <View style={st.brandMini}>
-                  <View style={st.logoMini}>
-                    <Text style={st.logoMiniT}>M</Text>
-                  </View>
-                  <Text style={st.brandMiniT}>MaterialMApp</Text>
-                </View>
-                <View style={st.topRightBtns}>
-                  <TouchableOpacity
-                    style={st.pillOutline}
-                    onPress={() => go('login')}
-                    activeOpacity={0.8}
-                  >
-                    <Text style={st.pillOutlineT}>Login</Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity
-                    style={st.pillFill}
-                    onPress={() => go('register')}
-                    activeOpacity={0.85}
-                  >
-                    <Text style={st.pillFillT}>Sign Up</Text>
-                  </TouchableOpacity>
-                </View>
-              </>
-            ) : screen === 'login' ? (
-              <>
+            <View style={st.brandMini}>
+              <View style={st.logoMini}>
+                <Text style={st.logoMiniT}>M</Text>
+              </View>
+              <Text style={st.brandMiniT}>MaterialMApp</Text>
+            </View>
+            {screen === 'landing' && (
+              <View style={st.topRightBtns}>
                 <TouchableOpacity
-                  style={st.backCircle}
-                  onPress={() => go('landing')}
-                  hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
-                  activeOpacity={0.7}
-                >
-                  <Ionicons name="chevron-back" size={22} color="#0f172a" />
-                </TouchableOpacity>
-                <View style={st.topRightBtns}>
-                  <TouchableOpacity style={st.pillOutlineActive} activeOpacity={1}>
-                    <Text style={st.pillOutlineActiveT}>Login</Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity
-                    style={st.pillFill}
-                    onPress={() => go('register')}
-                    activeOpacity={0.85}
-                  >
-                    <Text style={st.pillFillT}>Sign Up</Text>
-                  </TouchableOpacity>
-                </View>
-              </>
-            ) : (
-              <>
-                <TouchableOpacity
-                  style={st.backCircle}
+                  style={st.pillFill}
                   onPress={() => go('login')}
-                  hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
-                  activeOpacity={0.7}
+                  activeOpacity={0.85}
                 >
-                  <Ionicons name="chevron-back" size={22} color="#0f172a" />
+                  <Text style={st.pillFillT}>Login</Text>
                 </TouchableOpacity>
-                <View style={st.topRightBtns}>
-                  <TouchableOpacity
-                    style={st.pillOutline}
-                    onPress={() => go('login')}
-                    activeOpacity={0.8}
-                  >
-                    <Text style={st.pillOutlineT}>Login</Text>
-                  </TouchableOpacity>
-                </View>
-              </>
+              </View>
             )}
           </View>
 
@@ -378,18 +292,8 @@ export const LoginView = () => {
                       onPress={() => go('login')}
                       activeOpacity={0.88}
                     >
-                      <Text style={st.primaryButtonText}>Get Started</Text>
+                      <Text style={st.primaryButtonText}>Sign In to Account</Text>
                       <Ionicons name="arrow-forward" size={19} color="#ffffff" style={{ marginLeft: 8 }} />
-                    </TouchableOpacity>
-
-                    <TouchableOpacity
-                      onPress={() => go('login')}
-                      style={st.secondaryTextBtn}
-                      activeOpacity={0.75}
-                    >
-                      <Text style={st.secondaryText}>
-                        Already have an account? <Text style={st.highlightText}>Sign In</Text>
-                      </Text>
                     </TouchableOpacity>
 
                     <View style={st.trustBadges}>
@@ -516,188 +420,8 @@ export const LoginView = () => {
                   </TouchableOpacity>
 
 
-                  {/* Bottom Link */}
-                  <View style={st.switchLinkBox}>
-                    <Text style={st.switchLinkMuted}>Don't have an account? </Text>
-                    <TouchableOpacity
-                      onPress={() => go('register')}
-                      hitSlop={{ top: 8, bottom: 8, left: 4, right: 8 }}
-                    >
-                      <Text style={st.switchLinkActive}>Sign Up</Text>
-                    </TouchableOpacity>
-                  </View>
-
                   <View style={st.trustBadges}>
                     <Text style={st.trustText}>🔒 256-bit SSL Encrypted • Weighbridge Connected</Text>
-                  </View>
-
-                </View>
-              )}
-
-              {/* ──────────────────────────────────────────────────────── */}
-              {/* SCREEN 3: REGISTER (Create Your Account)                 */}
-              {/* ──────────────────────────────────────────────────────── */}
-              {screen === 'register' && (
-                <View style={st.formContainer}>
-
-                  {/* Brand Block */}
-                  <View style={[st.brandBlockCompact, keyboardHeight > 0 && { marginBottom: 6 }]}>
-                    <View style={[st.logoBadgeSmall, keyboardHeight > 0 && { width: 38, height: 38, marginBottom: 4 }]}>
-                      <Text style={[st.logoBadgeSmallText, keyboardHeight > 0 && { fontSize: 20 }]}>M</Text>
-                    </View>
-                    <Text style={[st.brandTitleSmall, keyboardHeight > 0 && { fontSize: 18 }]}>MaterialMApp</Text>
-                    {keyboardHeight === 0 && (
-                      <View style={st.tagPillSmall}>
-                        <Text style={st.tagPillSmallText}>Quarry & Weighbridge Dispatch</Text>
-                      </View>
-                    )}
-                  </View>
-
-                  {/* Heading */}
-                  <View style={[st.formHeadingBox, keyboardHeight > 0 && { marginBottom: 12, marginTop: 2 }]}>
-                    <Text style={[st.formTitle, keyboardHeight > 0 && { fontSize: 20 }]}>Create Your Account</Text>
-                    <Text style={st.formSub}>Get started with your business account</Text>
-                  </View>
-
-                  {/* Banners */}
-                  {err ? (
-                    <View style={st.errorBanner}>
-                      <Ionicons name="alert-circle" size={17} color="#ef4444" />
-                      <Text style={st.errorBannerText}>{err}</Text>
-                    </View>
-                  ) : null}
-                  {suc ? (
-                    <View style={st.successBanner}>
-                      <Ionicons name="checkmark-circle" size={17} color="#16a34a" />
-                      <Text style={st.successBannerText}>{suc}</Text>
-                    </View>
-                  ) : null}
-
-                  {/* Full Name Input */}
-                  <View style={st.inputGroup}>
-                    <Text style={st.inputLabel}>Full Name</Text>
-                    <View style={st.inputBox}>
-                      <Ionicons name="person-outline" size={18} color="#64748b" style={st.inputIcon} />
-                      <TextInput
-                        ref={nameRef}
-                        style={st.textInput}
-                        placeholder="Enter your name"
-                        placeholderTextColor="#94a3b8"
-                        value={name}
-                        onChangeText={setName}
-                        autoCapitalize="words"
-                        autoCorrect={false}
-                        returnKeyType="next"
-                        onSubmitEditing={() => emailRef.current?.focus()}
-                        onFocus={() => scrollToInput(40)}
-                      />
-                      {name ? (
-                        <TouchableOpacity
-                          onPress={() => setName('')}
-                          hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-                        >
-                          <Ionicons name="close-circle" size={18} color="#94a3b8" />
-                        </TouchableOpacity>
-                      ) : null}
-                    </View>
-                  </View>
-
-                  {/* Email Input */}
-                  <View style={st.inputGroup}>
-                    <Text style={st.inputLabel}>Email Address</Text>
-                    <View style={st.inputBox}>
-                      <Ionicons name="mail-outline" size={18} color="#64748b" style={st.inputIcon} />
-                      <TextInput
-                        ref={emailRef}
-                        style={st.textInput}
-                        placeholder="Enter your email"
-                        placeholderTextColor="#94a3b8"
-                        value={email}
-                        onChangeText={setEmail}
-                        keyboardType="email-address"
-                        autoCapitalize="none"
-                        autoCorrect={false}
-                        returnKeyType="next"
-                        onSubmitEditing={() => pwRef.current?.focus()}
-                        onFocus={() => scrollToInput(120)}
-                      />
-                      {email ? (
-                        <TouchableOpacity
-                          onPress={() => setEmail('')}
-                          hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-                        >
-                          <Ionicons name="close-circle" size={18} color="#94a3b8" />
-                        </TouchableOpacity>
-                      ) : null}
-                    </View>
-                  </View>
-
-                  {/* Password Input */}
-                  <View style={st.inputGroup}>
-                    <Text style={st.inputLabel}>Password</Text>
-                    <View style={st.inputBox}>
-                      <Ionicons name="lock-closed-outline" size={18} color="#64748b" style={st.inputIcon} />
-                      <TextInput
-                        ref={pwRef}
-                        style={st.textInput}
-                        placeholder="Create a password"
-                        placeholderTextColor="#94a3b8"
-                        value={password}
-                        onChangeText={setPassword}
-                        secureTextEntry={!showPw}
-                        autoCapitalize="none"
-                        autoCorrect={false}
-                        textContentType="newPassword"
-                        autoComplete="new-password"
-                        returnKeyType="done"
-                        onSubmitEditing={doRegister}
-                        onFocus={() => scrollToInput(220)}
-                      />
-                      <TouchableOpacity
-                        onPress={() => setShowPw((v) => !v)}
-                        hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-                      >
-                        <Ionicons
-                          name={showPw ? 'eye-off-outline' : 'eye-outline'}
-                          size={20}
-                          color="#64748b"
-                        />
-                      </TouchableOpacity>
-                    </View>
-                  </View>
-
-                  {/* Sign Up Button */}
-                  <TouchableOpacity
-                    style={[st.primaryButton, loading && { opacity: 0.75 }]}
-                    onPress={doRegister}
-                    disabled={loading}
-                    activeOpacity={0.88}
-                  >
-                    {loading ? (
-                      <ActivityIndicator size="small" color="#ffffff" />
-                    ) : (
-                      <Text style={st.primaryButtonText}>Sign Up</Text>
-                    )}
-                  </TouchableOpacity>
-
-                  {/* Terms Note */}
-                  <View style={st.termsBox}>
-                    <Text style={st.termsText}>
-                      By continuing, you agree to our{' '}
-                      <Text style={st.termsLink}>Terms & Conditions</Text> and{' '}
-                      <Text style={st.termsLink}>Privacy Policy</Text>
-                    </Text>
-                  </View>
-
-                  {/* Switch Link */}
-                  <View style={st.switchLinkBox}>
-                    <Text style={st.switchLinkMuted}>Already have an account? </Text>
-                    <TouchableOpacity
-                      onPress={() => go('login')}
-                      hitSlop={{ top: 8, bottom: 8, left: 4, right: 8 }}
-                    >
-                      <Text style={st.switchLinkActive}>Sign In</Text>
-                    </TouchableOpacity>
                   </View>
 
                 </View>

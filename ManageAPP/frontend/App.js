@@ -19,8 +19,9 @@ import { DeliveryEntriesFormModal } from './src/components/DeliveryEntriesFormMo
 import { ExcelImportModal } from './src/components/ExcelImportModal';
 import { MastersView } from './src/components/MastersView';
 import { DashboardView } from './src/components/DashboardView';
-import { AboutView } from './src/components/AboutView';
+import { ProfileView } from './src/components/ProfileView';
 import { LoginView } from './src/components/LoginView';
+import { PartyWiseSalesModal } from './src/components/PartyWiseSalesModal';
 import { api } from './src/api/client';
 import './style.css';
 
@@ -31,11 +32,20 @@ const MainApp = () => {
   const isMobile = width < 768;
 
   const [activeTab, setActiveTab] = useState('dashboard');
-  const [visitedTabs, setVisitedTabs] = useState(() => new Set(['dashboard', 'entries', 'masters', 'about']));
   const [sidebarOpen, setSidebarOpen] = useState(!isMobile);
   const [search, setSearch] = useState('');
+  const [debouncedSearch, setDebouncedSearch] = useState('');
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isImportModalOpen, setIsImportModalOpen] = useState(false);
+  const [directPartySalesMonth, setDirectPartySalesMonth] = useState(() => {
+    if (Platform.OS === 'web' && typeof window !== 'undefined') {
+      const params = new URLSearchParams(window.location.search);
+      if (params.get('view') === 'party-sales') {
+        return params.get('month') || 'all';
+      }
+    }
+    return null;
+  });
 
   const [entries, setEntries] = useState([]);
   const [masters, setMasters] = useState(null);
@@ -43,40 +53,59 @@ const MainApp = () => {
 
   const handleSelectTab = useCallback((tab) => {
     setActiveTab(tab);
-    setVisitedTabs((prev) => {
-      if (prev.has(tab)) return prev;
-      const next = new Set(prev);
-      next.add(tab);
-      return next;
-    });
   }, []);
 
   useEffect(() => {
     setSidebarOpen(!isMobile);
   }, [isMobile]);
 
-  const loadData = useCallback(async () => {
+  // Debounce search input by 300ms to avoid firing heavy API and re-render cycles on every keystroke
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setDebouncedSearch(search);
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [search]);
+
+  // Separate masters fetch from entries search
+  const loadMasters = useCallback(async () => {
+    if (!user) return;
+    try {
+      const mastersData = await api.getMasters();
+      setMasters(mastersData);
+    } catch (err) {
+      console.error('Error fetching masters:', err);
+    }
+  }, [user]);
+
+  const loadEntries = useCallback(async (query = '') => {
     if (!user) return;
     setLoading(true);
     try {
-      const [mastersData, entriesData] = await Promise.all([
-        api.getMasters(),
-        api.getEntries(search),
-      ]);
-      setMasters(mastersData);
+      const entriesData = await api.getEntries(query);
       setEntries(entriesData);
     } catch (err) {
-      console.error('Error fetching data from backend:', err);
+      console.error('Error fetching entries:', err);
     } finally {
       setLoading(false);
     }
-  }, [user, search]);
+  }, [user]);
+
+  const loadData = useCallback(async () => {
+    await Promise.all([loadMasters(), loadEntries(debouncedSearch)]);
+  }, [loadMasters, loadEntries, debouncedSearch]);
 
   useEffect(() => {
     if (user) {
-      loadData();
+      loadMasters();
     }
-  }, [user, loadData]);
+  }, [user, loadMasters]);
+
+  useEffect(() => {
+    if (user) {
+      loadEntries(debouncedSearch);
+    }
+  }, [user, debouncedSearch, loadEntries]);
 
   // Stable callbacks so child tab views wrapped in React.memo never re-render unnecessarily
   const handleOpenAddModal = useCallback(() => setIsModalOpen(true), []);
@@ -99,6 +128,27 @@ const MainApp = () => {
     return <LoginView />;
   }
 
+  // Standalone dedicated window page for Party-wise Sales if opened in new tab/window
+  if (directPartySalesMonth !== null) {
+    return (
+      <View style={{ flex: 1, backgroundColor: '#f8fafc' }}>
+        <PartyWiseSalesModal
+          visible={true}
+          isDirectPage={true}
+          entries={entries}
+          initialMonth={directPartySalesMonth === 'all' ? null : directPartySalesMonth}
+          onClose={() => {
+            if (Platform.OS === 'web' && typeof window !== 'undefined') {
+              window.location.href = window.location.pathname;
+            } else {
+              setDirectPartySalesMonth(null);
+            }
+          }}
+        />
+      </View>
+    );
+  }
+
   // Safe top padding for notch / status bar across Android & iOS
   const topPadding =
     Platform.OS === 'web'
@@ -117,41 +167,35 @@ const MainApp = () => {
         setSearch={setSearch}
         onRefresh={loadData}
         toggleSidebar={handleToggleSidebar}
+        onNavigateProfile={() => handleSelectTab('profile')}
       />
 
       {/* Main Layout */}
       <View style={styles.mainLayout}>
-        <Sidebar
-          activeTab={activeTab}
-          setActiveTab={handleSelectTab}
-          isOpen={sidebarOpen}
-          onClose={handleCloseSidebar}
-        />
+        {!isMobile && (
+          <Sidebar
+            activeTab={activeTab}
+            setActiveTab={handleSelectTab}
+            isOpen={sidebarOpen}
+            onClose={handleCloseSidebar}
+          />
+        )}
 
-        {/* Persistent Tab Panes: Once visited, tabs stay in memory with display: 'none' for 0ms instantaneous switching */}
+        {/* Dynamic Active Tab View: Only active tab is mounted in DOM for maximum 60FPS mobile performance */}
         <View style={styles.contentArea}>
-          {visitedTabs.has('dashboard') && (
-            <View
-              style={[
-                styles.tabPane,
-                activeTab !== 'dashboard' && styles.tabPaneHidden,
-              ]}
-            >
+          {activeTab === 'dashboard' && (
+            <View style={styles.tabPane}>
               <DashboardView
                 entries={entries}
                 onOpenAddModal={handleOpenAddModal}
                 onNavigateMasters={handleNavigateMasters}
+                onNavigateEntries={() => handleSelectTab('entries')}
               />
             </View>
           )}
 
-          {visitedTabs.has('entries') && (
-            <View
-              style={[
-                styles.tabPane,
-                activeTab !== 'entries' && styles.tabPaneHidden,
-              ]}
-            >
+          {activeTab === 'entries' && (
+            <View style={styles.tabPane}>
               <AllEntriesView
                 entries={entries}
                 loading={loading}
@@ -162,34 +206,24 @@ const MainApp = () => {
             </View>
           )}
 
-          {visitedTabs.has('masters') && (
-            <View
-              style={[
-                styles.tabPane,
-                activeTab !== 'masters' && styles.tabPaneHidden,
-              ]}
-            >
+          {activeTab === 'masters' && (
+            <View style={styles.tabPane}>
               <MastersView
                 masters={masters}
-                onRefresh={loadData}
+                onRefresh={loadMasters}
               />
             </View>
           )}
 
-          {visitedTabs.has('about') && (
-            <View
-              style={[
-                styles.tabPane,
-                activeTab !== 'about' && styles.tabPaneHidden,
-              ]}
-            >
-              <AboutView />
+          {activeTab === 'profile' && (
+            <View style={styles.tabPane}>
+              <ProfileView />
             </View>
           )}
         </View>
       </View>
 
-      {/* Mobile Bottom Navigation Bar: Dashboard, All Entries, Masters, About */}
+      {/* Mobile Bottom Navigation Bar: Dashboard, All Entries, Masters, Profile */}
       {isMobile && (
         <View style={[styles.bottomBar, { paddingBottom: Math.max(bottomPadding, 6) }]}>
           {/* 1. Dashboard */}
@@ -252,24 +286,24 @@ const MainApp = () => {
             {activeTab === 'masters' && <View style={styles.activeTabIndicator} />}
           </TouchableOpacity>
 
-          {/* 4. About */}
+          {/* 4. Profile */}
           <TouchableOpacity
             style={styles.bottomTab}
-            onPress={() => handleSelectTab('about')}
+            onPress={() => handleSelectTab('profile')}
             activeOpacity={0.75}
           >
             <Ionicons
-              name={activeTab === 'about' ? 'information-circle' : 'information-circle-outline'}
+              name={activeTab === 'profile' ? 'person-circle' : 'person-circle-outline'}
               size={22}
-              color={activeTab === 'about' ? '#0284c7' : '#64748b'}
+              color={activeTab === 'profile' ? '#0284c7' : '#64748b'}
             />
             <Text
-              style={[styles.bottomTabText, activeTab === 'about' && styles.bottomTabTextActive]}
+              style={[styles.bottomTabText, activeTab === 'profile' && styles.bottomTabTextActive]}
               numberOfLines={1}
             >
-              About
+              Profile
             </Text>
-            {activeTab === 'about' && <View style={styles.activeTabIndicator} />}
+            {activeTab === 'profile' && <View style={styles.activeTabIndicator} />}
           </TouchableOpacity>
         </View>
       )}

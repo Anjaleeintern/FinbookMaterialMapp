@@ -60,9 +60,13 @@ export const AuthProvider = ({ children }) => {
     setUser(null);
   }, []);
 
+  const updateUser = useCallback((newUserData) => {
+    setUser((prev) => ({ ...prev, ...newUserData }));
+  }, []);
+
   const value = useMemo(
-    () => ({ user, token, loading, login, logout }),
-    [user, token, loading, login, logout]
+    () => ({ user, token, loading, login, logout, updateUser }),
+    [user, token, loading, login, logout, updateUser]
   );
 
   return (

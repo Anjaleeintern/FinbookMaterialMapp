@@ -23,9 +23,183 @@ from services.excel_service import (
     process_raw_imported_rows,
     execute_bulk_import_to_mongodb,
     generate_sample_excel_template,
+    generate_party_wise_sales_excel,
 )
 
 router = APIRouter(prefix="/api/entries", tags=["Entries"])
+
+
+def extract_month_key_and_label(date_val):
+    """
+    Parses date string or date object and returns (month_key, month_label),
+    e.g. ('2026-10', 'October 2026'). Returns (None, None) if invalid.
+    """
+    if not date_val:
+        return None, None
+    if isinstance(date_val, datetime):
+        return date_val.strftime("%Y-%m"), date_val.strftime("%B %Y")
+
+    s = str(date_val).strip()
+    if not s:
+        return None, None
+
+    # Handle standard YYYY-MM-DD
+    if "-" in s:
+        parts = s.split("-")
+        if len(parts) == 3 and len(parts[0]) == 4:
+            try:
+                y = int(parts[0])
+                m = int(parts[1])
+                dt = datetime(y, m, 1)
+                return dt.strftime("%Y-%m"), dt.strftime("%B %Y")
+            except Exception:
+                pass
+
+    # Handle DD/MM/YYYY or MM/DD/YYYY
+    if "/" in s:
+        parts = s.split("/")
+        if len(parts) == 3:
+            try:
+                p0 = int(parts[0])
+                p1 = int(parts[1])
+                y = int(parts[2])
+                if y < 100:
+                    y += 2000
+                m = p1 if p0 > 12 else p0
+                dt = datetime(y, m, 1)
+                return dt.strftime("%Y-%m"), dt.strftime("%B %Y")
+            except Exception:
+                pass
+
+    for fmt in ("%Y-%m-%d", "%d-%m-%Y", "%d/%m/%Y", "%m/%d/%Y", "%Y/%m/%d", "%d-%b-%Y"):
+        try:
+            dt = datetime.strptime(s[:10], fmt)
+            return dt.strftime("%Y-%m"), dt.strftime("%B %Y")
+        except Exception:
+            continue
+
+    return None, None
+
+
+@router.get("/party-wise-sales/export")
+async def export_party_wise_sales(
+    month: Optional[str] = Query(None, description="Month filter (e.g. '2026-10', 'October 2026', or 'all')"),
+    current_user: dict = Depends(get_current_user)
+):
+    """
+    Download Party-wise Sales in Excel format for a selected month or all time.
+    """
+    db = get_database()
+    user_id = current_user["id"]
+
+    collections = ["credit_sale", "cash_sale", "royalty_sale", "without_royalty"]
+    all_entries = []
+
+    for col in collections:
+        cursor = db[col].find({"user_id": user_id})
+        docs = await cursor.to_list(length=10000)
+        for doc in docs:
+            doc["_collection"] = col
+            all_entries.append(doc)
+
+    month_filter = (month or "").strip().lower()
+    selected_label = "All Time"
+
+    filtered_entries = []
+    for e in all_entries:
+        m_key, m_lbl = extract_month_key_and_label(e.get("date"))
+        if not month_filter or month_filter == "all":
+            filtered_entries.append(e)
+        else:
+            if (m_key and month_filter == m_key.lower()) or (m_lbl and month_filter in m_lbl.lower()):
+                filtered_entries.append(e)
+                if selected_label == "All Time" and m_lbl:
+                    selected_label = m_lbl
+
+    if month_filter and month_filter != "all" and selected_label == "All Time":
+        selected_label = month.strip()
+
+    # Aggregate by party
+    party_map = {}
+    total_sales = 0.0
+    total_trips = 0
+    total_net_wt = 0.0
+    total_royalty = 0.0
+    total_non_royalty = 0.0
+    total_cash = 0.0
+    total_credit = 0.0
+
+    for e in filtered_entries:
+        p_name = (e.get("party_name") or e.get("customer_name") or "Unspecified Party").strip()
+        amt = float(e.get("total_amount") or e.get("amount") or 0.0)
+        wt = float(e.get("net_wt") or 0.0)
+        col = e.get("_collection", "")
+        sale_type = str(e.get("sale_type") or "").lower()
+        mode = str(e.get("type_mode") or "").lower()
+
+        if p_name not in party_map:
+            party_map[p_name] = {
+                "name": p_name,
+                "total": 0.0,
+                "trips": 0,
+                "net_wt": 0.0,
+                "royalty": 0.0,
+                "non_royalty": 0.0,
+                "cash": 0.0,
+                "credit": 0.0,
+            }
+
+        party_map[p_name]["total"] += amt
+        party_map[p_name]["trips"] += 1
+        party_map[p_name]["net_wt"] += wt
+
+        total_sales += amt
+        total_trips += 1
+        total_net_wt += wt
+
+        if "royalty" in col or "royalty" in sale_type:
+            if "without" in col or "without" in sale_type:
+                party_map[p_name]["non_royalty"] += amt
+                total_non_royalty += amt
+            else:
+                party_map[p_name]["royalty"] += amt
+                total_royalty += amt
+        else:
+            party_map[p_name]["non_royalty"] += amt
+            total_non_royalty += amt
+
+        if "cash" in col or "cash" in mode or "qr" in mode or "bank" in mode:
+            party_map[p_name]["cash"] += amt
+            total_cash += amt
+        else:
+            party_map[p_name]["credit"] += amt
+            total_credit += amt
+
+    # Sort descending by total purchase
+    party_list = sorted(party_map.values(), key=lambda x: x["total"], reverse=True)
+
+    totals = {
+        "total_amount": total_sales,
+        "total_trips": total_trips,
+        "total_net_wt": total_net_wt,
+        "total_royalty": total_royalty,
+        "total_non_royalty": total_non_royalty,
+        "total_cash": total_cash,
+        "total_credit": total_credit,
+    }
+
+    excel_bytes = generate_party_wise_sales_excel(party_list, selected_label, totals)
+    safe_name = selected_label.replace(" ", "_").replace("/", "-").lower()
+
+    return Response(
+        content=excel_bytes,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={
+            "Content-Disposition": f"attachment; filename=party_wise_sales_{safe_name}.xlsx",
+            "Access-Control-Expose-Headers": "Content-Disposition"
+        }
+    )
+
 
 @router.get("/template")
 async def download_excel_template():
@@ -170,10 +344,20 @@ async def create_entry(entry: EntryCreate, current_user: dict = Depends(get_curr
             detail="Type/Mode is required"
         )
 
+    user_id = current_user["id"]
+
+    if not entry.party_state and entry.party_name:
+        party_doc = await db.masters.find_one({
+            "category": "PartyName",
+            "value": entry.party_name.strip(),
+            "$or": [{"user_id": user_id}, {"is_system": True}]
+        })
+        if party_doc and party_doc.get("state"):
+            entry.party_state = party_doc.get("state")
+
     target_collection = get_collection_name(type_mode)
     calc_data = process_entry_calculations(entry)
 
-    user_id = current_user["id"]
     calc_data["user_id"] = user_id
     calc_data["user_email"] = current_user["email"]
 

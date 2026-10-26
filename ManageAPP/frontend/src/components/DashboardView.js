@@ -20,6 +20,7 @@ import SvgNative, {
   Line as LineNative,
   Text as SvgTextNative,
 } from 'react-native-svg';
+import { PartyWiseSalesModal } from './PartyWiseSalesModal';
 
 const isWeb = Platform.OS === 'web';
 const Svg = isWeb ? 'svg' : SvgNative;
@@ -211,7 +212,7 @@ const formatCompactINR = (val) => {
   return `₹${Math.round(num)}`;
 };
 
-export const DashboardView = React.memo(({ entries = [], onOpenAddModal, onNavigateMasters }) => {
+export const DashboardView = React.memo(({ entries = [], onOpenAddModal, onNavigateMasters, onNavigateEntries }) => {
   const { user } = useAuth();
   const displayName = user?.name || (user?.email ? user.email.split('@')[0] : 'User');
   const { width } = useWindowDimensions();
@@ -221,11 +222,19 @@ export const DashboardView = React.memo(({ entries = [], onOpenAddModal, onNavig
   const isDesktop = screenW >= 1024;
   const isUltraSmall = screenW < 340; // Only ultra small phones (<340px) fall back to 1-column KPI grid
 
+  // Navigate to detailed entries list on KPI card tap
+  const handleCardPress = (card) => {
+    if (onNavigateEntries) {
+      onNavigateEntries(card);
+    }
+  };
+
   // Dynamic hover states for interactive tooltips
   const [hoveredTrendIdx, setHoveredTrendIdx] = useState(null);
   const [hoveredPartyIdx, setHoveredPartyIdx] = useState(null);
   const [hoveredMaterialIdx, setHoveredMaterialIdx] = useState(null);
   const [hoveredModeKey, setHoveredModeKey] = useState(null);
+  const [showPartySalesModal, setShowPartySalesModal] = useState(false);
 
   // App-Based Date Filter State
   const [dateFilter, setDateFilter] = useState('all');
@@ -275,6 +284,17 @@ export const DashboardView = React.memo(({ entries = [], onOpenAddModal, onNavig
         .pie-legend-card-row:hover {
           background-color: #ffffff;
           box-shadow: 0 2px 8px rgba(15, 23, 42, 0.05);
+        }
+        .dashboard-kpi-tile {
+          cursor: pointer;
+          transition: transform 0.18s ease, box-shadow 0.18s ease, border-color 0.18s ease;
+        }
+        .dashboard-kpi-tile:hover {
+          transform: translateY(-2px);
+          box-shadow: 0 6px 16px rgba(15, 23, 42, 0.08);
+        }
+        .dashboard-kpi-tile:active {
+          transform: translateY(0px) scale(0.98);
         }
         @keyframes barSlideUp {
           0% { transform: scaleY(0); opacity: 0; }
@@ -837,11 +857,15 @@ export const DashboardView = React.memo(({ entries = [], onOpenAddModal, onNavig
         </View>
       </View>
 
-      {/* 2. THE 4 KPI CARDS (2-column grid on mobile, 1-col on ultra-small <340px, 4-col on Desktop) */}
+      {/* 2. THE 4 KPI CARDS (Clickable, navigate to detailed entries list, responsive full values) */}
       <View style={[styles.kpiGrid, isMobile && styles.kpiGridMobile]}>
         {kpiCards.map((card) => (
-          <View
+          <TouchableOpacity
             key={card.id}
+            activeOpacity={0.72}
+            onPress={() => handleCardPress(card)}
+            accessibilityRole="button"
+            accessibilityLabel={`${card.title}: ${card.value}. Tap to view detailed entries list.`}
             className="dashboard-kpi-tile"
             style={[
               styles.kpiCard,
@@ -851,25 +875,48 @@ export const DashboardView = React.memo(({ entries = [], onOpenAddModal, onNavig
               { backgroundColor: card.cardBg, borderColor: card.borderColor },
             ]}
           >
-            {/* Left Squircle Icon */}
-            <View style={[styles.kpiIconSquircle, isMobile && styles.kpiIconSquircleMobile, { backgroundColor: card.iconBg }]}>
-              {card.isPercent ? (
-                <Text style={[styles.kpiPercentText, isMobile && styles.kpiPercentTextMobile, { color: card.iconColor }]}>%</Text>
-              ) : (
-                <Ionicons name={card.icon} size={isMobile ? 16 : 20} color={card.iconColor} />
-              )}
+            {/* Top row: Icon on left, interactive arrow badge on right */}
+            <View style={styles.kpiCardTopRow}>
+              <View style={[styles.kpiIconSquircle, isMobile && styles.kpiIconSquircleMobile, { backgroundColor: card.iconBg }]}>
+                {card.isPercent ? (
+                  <Text style={[styles.kpiPercentText, isMobile && styles.kpiPercentTextMobile, { color: card.iconColor }]}>%</Text>
+                ) : (
+                  <Ionicons name={card.icon} size={isMobile ? 17 : 20} color={card.iconColor} />
+                )}
+              </View>
+              <View style={[styles.kpiArrowBadge, { backgroundColor: card.iconBg }]}>
+                <Ionicons name="chevron-forward" size={isMobile ? 12 : 14} color={card.iconColor} />
+              </View>
             </View>
 
-            {/* Right Content */}
+            {/* Content area: Full Title, Full Value, Subtitle */}
             <View style={styles.kpiContentCol}>
-              <View style={styles.kpiTitleRow}>
-                <Text style={[styles.kpiCardTitle, isMobile && styles.kpiCardTitleMobile]} numberOfLines={1}>{card.title}</Text>
-                <Ionicons name="chevron-forward" size={isMobile ? 13 : 15} color="#94a3b8" />
-              </View>
-              <Text style={[styles.kpiCardValue, isMobile && styles.kpiCardValueMobile]} numberOfLines={1}>{card.value}</Text>
-              <Text style={[styles.kpiCardTrend, isMobile && styles.kpiCardTrendMobile]} numberOfLines={1}>{card.trend}</Text>
+              <Text
+                style={[styles.kpiCardTitle, isMobile && styles.kpiCardTitleMobile]}
+                numberOfLines={2}
+              >
+                {card.title}
+              </Text>
+              <Text
+                style={[
+                  styles.kpiCardValue,
+                  isMobile && styles.kpiCardValueMobile,
+                  isMobile && card.value.length > 12 && styles.kpiCardValueLong,
+                ]}
+                numberOfLines={1}
+                adjustsFontSizeToFit={true}
+                minimumFontScale={0.75}
+              >
+                {card.value}
+              </Text>
+              <Text
+                style={[styles.kpiCardTrend, isMobile && styles.kpiCardTrendMobile]}
+                numberOfLines={1}
+              >
+                {card.trend}
+              </Text>
             </View>
-          </View>
+          </TouchableOpacity>
         ))}
       </View>
 
@@ -1586,9 +1633,16 @@ export const DashboardView = React.memo(({ entries = [], onOpenAddModal, onNavig
           {/* Chart 4: Top Party-wise Sales */}
           <View style={[styles.chartCard, isMobile && styles.chartCardMobile, !isMobile && styles.chartCardHalf]}>
             <View style={styles.chartHeaderRow}>
-              <Text style={[styles.chartCardTitle, isMobile && styles.chartCardTitleMobile, { flexShrink: 1 }]} numberOfLines={1}>
-                Top Party-wise Sales
-              </Text>
+              <TouchableOpacity
+                style={styles.chartTitleClickable}
+                onPress={() => setShowPartySalesModal(true)}
+                activeOpacity={0.7}
+              >
+                <Text style={[styles.chartCardTitle, isMobile && styles.chartCardTitleMobile, { flexShrink: 1 }]} numberOfLines={1}>
+                  Top Party-wise Sales
+                </Text>
+                <Ionicons name="open-outline" size={14} color="#0284c7" style={{ marginLeft: 6 }} />
+              </TouchableOpacity>
               <View style={styles.headerBadgeContainer}>
                 {hoveredPartyIdx !== null && partyData[hoveredPartyIdx] ? (
                   <View style={styles.hoverBadgePill}>
@@ -1597,11 +1651,17 @@ export const DashboardView = React.memo(({ entries = [], onOpenAddModal, onNavig
                     </Text>
                   </View>
                 ) : (
-                  <View style={[styles.hoverBadgePill, { backgroundColor: '#f1f5f9' }]}>
-                    <Text style={[styles.hoverBadgeText, { color: '#475569' }]} numberOfLines={1}>
-                      Ranked by Total Purchases
+                  <TouchableOpacity
+                    style={styles.allPartyWiseSalesHeaderBtn}
+                    onPress={() => setShowPartySalesModal(true)}
+                    activeOpacity={0.75}
+                  >
+                    <Ionicons name="list" size={12} color="#0284c7" style={{ marginRight: 4 }} />
+                    <Text style={styles.allPartyWiseSalesHeaderBtnText} numberOfLines={1}>
+                      All Party-wise Sales
                     </Text>
-                  </View>
+                    <Ionicons name="arrow-forward" size={11} color="#0284c7" style={{ marginLeft: 3 }} />
+                  </TouchableOpacity>
                 )}
               </View>
             </View>
@@ -1743,6 +1803,18 @@ export const DashboardView = React.memo(({ entries = [], onOpenAddModal, onNavig
                 )}
               </Svg>
             </View>
+
+            {/* Clickable footer link to open all party-wise sales */}
+            <TouchableOpacity
+              style={styles.partyChartFooterBtn}
+              onPress={() => setShowPartySalesModal(true)}
+              activeOpacity={0.75}
+            >
+              <Text style={styles.partyChartFooterBtnText}>
+                Showing Top {Math.min(5, partyData.length)} of {partyData.length} Parties • Click to view All Party-wise Sales
+              </Text>
+              <Ionicons name="chevron-forward" size={14} color="#0284c7" />
+            </TouchableOpacity>
           </View>
         </View>
       </View>
@@ -2061,6 +2133,14 @@ export const DashboardView = React.memo(({ entries = [], onOpenAddModal, onNavig
         </View>
       </View>
     </Modal>
+
+    {/* All Party-wise Sales Modal / New Window Page */}
+    <PartyWiseSalesModal
+      visible={showPartySalesModal}
+      onClose={() => setShowPartySalesModal(false)}
+      entries={entries}
+      initialMonth={dateFilter === 'custom' && customStartDate ? customStartDate.substring(0, 7) : null}
+    />
   </View>
   );
 });
@@ -2312,20 +2392,19 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     borderWidth: 1,
     padding: 14,
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    gap: 12,
+    flexDirection: 'column',
+    justifyContent: 'space-between',
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.03,
-    shadowRadius: 4,
+    shadowOpacity: 0.04,
+    shadowRadius: 5,
     elevation: 1,
   },
   kpiCardMobile: {
     width: '48.5%',
     padding: 10,
     borderRadius: 13,
-    gap: 8,
+    minHeight: 122,
   },
   kpiCardUltraSmall: {
     width: '100%',
@@ -2333,19 +2412,33 @@ const styles = StyleSheet.create({
   kpiCardDesktop: {
     width: '23.8%',
     padding: 16,
+    minHeight: 138,
+  },
+  kpiCardTopRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 6,
+  },
+  kpiArrowBadge: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   kpiIconSquircle: {
-    width: 42,
-    height: 42,
-    borderRadius: 12,
+    width: 40,
+    height: 40,
+    borderRadius: 11,
     justifyContent: 'center',
     alignItems: 'center',
     flexShrink: 0,
   },
   kpiIconSquircleMobile: {
-    width: 34,
-    height: 34,
-    borderRadius: 9,
+    width: 32,
+    height: 32,
+    borderRadius: 8,
   },
   kpiPercentText: {
     fontSize: 18,
@@ -2355,36 +2448,38 @@ const styles = StyleSheet.create({
     fontSize: 15,
   },
   kpiContentCol: {
+    width: '100%',
     flex: 1,
-    minWidth: 0,
-  },
-  kpiTitleRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
+    justifyContent: 'flex-end',
   },
   kpiCardTitle: {
     fontSize: 13,
     fontWeight: '600',
     color: '#475569',
-    flex: 1,
-    marginRight: 4,
+    lineHeight: 17,
   },
   kpiCardTitleMobile: {
-    fontSize: 10.5,
+    fontSize: 11,
+    lineHeight: 15,
+    minHeight: 30,
   },
   kpiCardValue: {
-    fontSize: 22,
+    fontSize: 21,
     fontWeight: '800',
     color: '#0f172a',
     marginTop: 4,
-    marginBottom: 4,
+    marginBottom: 3,
     letterSpacing: -0.3,
   },
   kpiCardValueMobile: {
     fontSize: 15.5,
+    lineHeight: 20,
     marginTop: 2,
     marginBottom: 2,
+  },
+  kpiCardValueLong: {
+    fontSize: 13.5,
+    letterSpacing: -0.4,
   },
   kpiCardTrend: {
     fontSize: 12,
@@ -2393,6 +2488,7 @@ const styles = StyleSheet.create({
   },
   kpiCardTrendMobile: {
     fontSize: 9.5,
+    marginTop: 1,
   },
 
   // 3. Charts 2x2 Grid
@@ -3074,5 +3170,43 @@ const styles = StyleSheet.create({
   dateSelectorClearBtn: {
     marginLeft: 2,
     padding: 2,
+  },
+  chartTitleClickable: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flexShrink: 1,
+  },
+  allPartyWiseSalesHeaderBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#f0f9ff',
+    paddingHorizontal: 9,
+    paddingVertical: 4.5,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: '#bae6fd',
+  },
+  allPartyWiseSalesHeaderBtnText: {
+    fontSize: 11.5,
+    fontWeight: '700',
+    color: '#0284c7',
+  },
+  partyChartFooterBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    backgroundColor: '#f8fafc',
+    borderRadius: 8,
+    marginTop: 8,
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+    gap: 6,
+  },
+  partyChartFooterBtnText: {
+    fontSize: 11.5,
+    fontWeight: '600',
+    color: '#0284c7',
   },
 });

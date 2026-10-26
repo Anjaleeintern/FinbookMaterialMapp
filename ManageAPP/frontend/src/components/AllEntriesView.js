@@ -9,6 +9,7 @@ import {
   useWindowDimensions,
   Platform,
   Modal,
+  TextInput,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { api } from '../api/client';
@@ -32,13 +33,14 @@ export const AllEntriesView = React.memo(({ entries, loading, onOpenAddModal, on
   const [selectedIds, setSelectedIds] = useState(new Set());
   const [deleting, setDeleting] = useState(false);
 
-  // Filters State: Date, Type, Mode, Material, Party, Source
+  // Filters State: Date, Sale Type, Sales Mode, Material, Party, Source, Column Filters
   const [selectedDate, setSelectedDate] = useState('All');
-  const [selectedType, setSelectedType] = useState('All');
-  const [selectedMode, setSelectedMode] = useState('All');
+  const [selectedType, setSelectedType] = useState('All'); // Acts as Sale Type (Royalty Sale / Without Royalty)
+  const [selectedMode, setSelectedMode] = useState('All'); // Acts as Sales Mode (Cash, Bank, QR, Credit Sale)
   const [selectedMaterial, setSelectedMaterial] = useState('All');
   const [selectedParty, setSelectedParty] = useState('All');
   const [selectedSource, setSelectedSource] = useState('All');
+  const [colFilters, setColFilters] = useState({});
   const [mobilePicker, setMobilePicker] = useState(null);
 
   // Unique options extracted dynamically from current entries
@@ -52,28 +54,26 @@ export const AllEntriesView = React.memo(({ entries, loading, onOpenAddModal, on
     return Array.from(set).sort().reverse();
   }, [entries]);
 
-  const uniqueTypes = useMemo(() => {
-    const set = new Set();
-    entries.forEach((e) => {
-      if (e.type_mode && String(e.type_mode).trim()) {
-        set.add(String(e.type_mode).trim());
-      }
-    });
-    return Array.from(set).sort((a, b) => a.localeCompare(b));
-  }, [entries]);
+  const uniqueSaleTypes = useMemo(() => {
+    return ['Royalty Sale', 'Without Royalty'];
+  }, []);
 
-  const uniqueModes = useMemo(() => {
+  const uniqueSalesModes = useMemo(() => {
     const set = new Set();
+    set.add('Cash');
+    set.add('Bank');
+    set.add('QR');
+    set.add('Credit Sale');
     entries.forEach((e) => {
       if (e.payment_mode && String(e.payment_mode).trim()) {
         set.add(String(e.payment_mode).trim());
       }
     });
-    if (set.size === 0) {
-      ['Cash', 'QR', 'Credit'].forEach((m) => set.add(m));
-    }
-    return Array.from(set).sort((a, b) => a.localeCompare(b));
+    return Array.from(set);
   }, [entries]);
+
+  const uniqueTypes = uniqueSaleTypes;
+  const uniqueModes = uniqueSalesModes;
 
   const uniqueMaterials = useMemo(() => {
     const set = new Set();
@@ -116,21 +116,42 @@ export const AllEntriesView = React.memo(({ entries, loading, onOpenAddModal, on
         }
       }
 
-      // 2. Type Filter (Type/Mode)
+      // 2. Sale Type Filter (Royalty Sale vs Without Royalty)
       if (selectedType !== 'All') {
-        const tm = String(entry.type_mode || '').trim().toLowerCase();
-        if (tm !== selectedType.trim().toLowerCase()) {
+        const target = selectedType.trim().toLowerCase();
+        const entrySaleType = String(entry.sale_type || entry.hr_loading_type || '').trim().toLowerCase();
+        if (target.includes('royalt') && !target.includes('without')) {
+          if (!entrySaleType.includes('royalt') || entrySaleType.includes('without')) {
+            return false;
+          }
+        } else if (target.includes('without')) {
+          if (!entrySaleType.includes('without')) {
+            return false;
+          }
+        } else if (entrySaleType !== target) {
           return false;
         }
       }
 
-      // 3. Mode Filter (Payment Mode or mode substring)
+      // 3. Sales Mode Filter (Cash, Bank, QR, Credit Sale, Party)
       if (selectedMode !== 'All') {
         const sm = selectedMode.trim().toLowerCase();
         const pm = String(entry.payment_mode || '').trim().toLowerCase();
         const tm = String(entry.type_mode || '').trim().toLowerCase();
-        if (pm !== sm && !tm.includes(sm)) {
-          return false;
+        const pty = String(entry.party_name || '').trim().toLowerCase();
+
+        if (sm === 'cash') {
+          if (!tm.includes('cash') || (pm && pm !== 'cash')) return false;
+        } else if (sm === 'bank') {
+          if (pm !== 'bank') return false;
+        } else if (sm === 'qr') {
+          if (pm !== 'qr') return false;
+        } else if (sm === 'credit sale' || sm === 'credit') {
+          if (!tm.includes('credit')) return false;
+        } else {
+          if (pm !== sm && !tm.includes(sm) && !pty.includes(sm)) {
+            return false;
+          }
         }
       }
 
@@ -161,9 +182,69 @@ export const AllEntriesView = React.memo(({ entries, loading, onOpenAddModal, on
         }
       }
 
+      // 7. Column-level text search filters
+      if (colFilters && Object.keys(colFilters).length > 0) {
+        const addName = (entry.additional_charge_name || '').toLowerCase();
+        const addAmt = Number(entry.additional_charge_amount || 0);
+        const isRoyalty = addName.includes('royalt') || (entry.sale_type === 'Royalty Sale' && addAmt > 0 && !addName.includes('freight'));
+        const royaltyVal = isRoyalty && addAmt > 0 ? String(addAmt) : '-';
+        const isFreight = addName.includes('freight') || addName.includes('freigth') || (!isRoyalty && addAmt > 0);
+        const freightVal = isFreight && addAmt > 0 ? String(addAmt) : '-';
+
+        const isMpParty = !entry.party_state || entry.party_state.toLowerCase().includes('madhya pradesh') || entry.party_state.toLowerCase() === 'mp';
+        const cgstVal = entry.cgst_amount > 0 ? String(entry.cgst_amount) : (entry.gst_amount > 0 && isMpParty ? String(entry.gst_amount / 2) : '-');
+        const sgstVal = entry.sgst_amount > 0 ? String(entry.sgst_amount) : (entry.gst_amount > 0 && isMpParty ? String(entry.gst_amount / 2) : '-');
+        const igstVal = entry.igst_amount > 0 ? String(entry.igst_amount) : (entry.gst_amount > 0 && !isMpParty ? String(entry.gst_amount) : '-');
+
+        const salesModeVal = entry.type_mode === 'Cash Sale'
+          ? (entry.payment_mode || 'Cash')
+          : entry.type_mode === 'Credit Sale'
+          ? (entry.party_name || 'Credit Sale')
+          : (entry.type_mode || '-');
+
+        const customerNameVal = entry.type_mode === 'Cash Sale'
+          ? (entry.customer_name || '-')
+          : entry.type_mode === 'Credit Sale'
+          ? 'NA'
+          : (entry.customer_name || '-');
+
+        const cells = {
+          date: String(entry.date || ''),
+          challan_no: String(entry.challan_no || ''),
+          vehicle_no: String(entry.vehicle_no || ''),
+          transport_type: String(entry.transport_type || ''),
+          sales_mode: String(salesModeVal),
+          customer_name: String(customerNameVal),
+          sale_type: String(entry.sale_type || entry.hr_loading_type || ''),
+          etp_no: String(entry.etp_no || ''),
+          cum: String(entry.cum || ''),
+          g_wt: String(entry.g_wt || ''),
+          t_wt: String(entry.t_wt || ''),
+          net_wt: String(entry.net_wt || ''),
+          rate: String(entry.rate || ''),
+          amount: String(entry.amount || ''),
+          royalty: royaltyVal,
+          freight: freightVal,
+          cgst: cgstVal,
+          sgst: sgstVal,
+          igst: igstVal,
+          gross_amount: String(entry.total_amount || entry.amount || ''),
+        };
+
+        for (const [key, filterVal] of Object.entries(colFilters)) {
+          if (filterVal && filterVal.trim()) {
+            const cellText = (cells[key] || '').toLowerCase();
+            const query = filterVal.trim().toLowerCase();
+            if (!cellText.includes(query)) {
+              return false;
+            }
+          }
+        }
+      }
+
       return true;
     });
-  }, [entries, selectedDate, selectedType, selectedMode, selectedMaterial, selectedParty, selectedSource]);
+  }, [entries, selectedDate, selectedType, selectedMode, selectedMaterial, selectedParty, selectedSource, colFilters]);
 
   const hasActiveFilter =
     selectedDate !== 'All' ||
@@ -171,7 +252,8 @@ export const AllEntriesView = React.memo(({ entries, loading, onOpenAddModal, on
     selectedMode !== 'All' ||
     selectedMaterial !== 'All' ||
     selectedParty !== 'All' ||
-    selectedSource !== 'All';
+    selectedSource !== 'All' ||
+    Object.values(colFilters).some((v) => v && v.trim());
 
   const handleClearFilters = () => {
     setSelectedDate('All');
@@ -180,6 +262,7 @@ export const AllEntriesView = React.memo(({ entries, loading, onOpenAddModal, on
     setSelectedMaterial('All');
     setSelectedParty('All');
     setSelectedSource('All');
+    setColFilters({});
   };
 
   const isAllSelected = filteredEntries.length > 0 && selectedIds.size === filteredEntries.length;
@@ -257,10 +340,6 @@ export const AllEntriesView = React.memo(({ entries, loading, onOpenAddModal, on
         return { bg: '#fee2e2', text: '#b91c1c' };
       case 'cash_sale':
         return { bg: '#dcfce7', text: '#15803d' };
-      case 'qr_sale':
-        return { bg: '#e0e7ff', text: '#4338ca' };
-      case 'hr_loading':
-        return { bg: '#f3e8ff', text: '#7e22ce' };
       default:
         return { bg: '#e2e8f0', text: '#334155' };
     }
@@ -422,7 +501,7 @@ export const AllEntriesView = React.memo(({ entries, loading, onOpenAddModal, on
                     </View>
                   </TouchableOpacity>
 
-                  {/* TYPE Dropdown */}
+                  {/* SALE TYPE Dropdown */}
                   <TouchableOpacity
                     style={[
                       styles.mobileFilterCard,
@@ -431,15 +510,15 @@ export const AllEntriesView = React.memo(({ entries, loading, onOpenAddModal, on
                     activeOpacity={0.7}
                     onPress={() =>
                       setMobilePicker({
-                        title: 'Type',
-                        options: uniqueTypes,
+                        title: 'Sale Type',
+                        options: uniqueSaleTypes,
                         current: selectedType,
                         onSelect: setSelectedType,
                       })
                     }
                   >
                     <Text style={[styles.mobileFilterCardLabel, selectedType !== 'All' && styles.mobileFilterCardLabelActive]}>
-                      TYPE
+                      SALE TYPE
                     </Text>
                     <View style={styles.mobileFilterCardValRow}>
                       <Text
@@ -449,7 +528,7 @@ export const AllEntriesView = React.memo(({ entries, loading, onOpenAddModal, on
                         ]}
                         numberOfLines={1}
                       >
-                        {selectedType === 'All' ? 'All Types' : selectedType}
+                        {selectedType === 'All' ? 'All Sale Types' : selectedType}
                       </Text>
                       <Ionicons
                         name="chevron-down"
@@ -460,9 +539,9 @@ export const AllEntriesView = React.memo(({ entries, loading, onOpenAddModal, on
                   </TouchableOpacity>
                 </View>
 
-                {/* Row 2: Mode & Material */}
+                {/* Row 2: Sales Mode & Material */}
                 <View style={styles.mobileFilterRow}>
-                  {/* MODE Dropdown */}
+                  {/* SALES MODE Dropdown */}
                   <TouchableOpacity
                     style={[
                       styles.mobileFilterCard,
@@ -471,15 +550,15 @@ export const AllEntriesView = React.memo(({ entries, loading, onOpenAddModal, on
                     activeOpacity={0.7}
                     onPress={() =>
                       setMobilePicker({
-                        title: 'Mode',
-                        options: uniqueModes,
+                        title: 'Sales Mode',
+                        options: uniqueSalesModes,
                         current: selectedMode,
                         onSelect: setSelectedMode,
                       })
                     }
                   >
                     <Text style={[styles.mobileFilterCardLabel, selectedMode !== 'All' && styles.mobileFilterCardLabelActive]}>
-                      MODE
+                      SALES MODE
                     </Text>
                     <View style={styles.mobileFilterCardValRow}>
                       <Text
@@ -489,7 +568,7 @@ export const AllEntriesView = React.memo(({ entries, loading, onOpenAddModal, on
                         ]}
                         numberOfLines={1}
                       >
-                        {selectedMode === 'All' ? 'All Modes' : selectedMode}
+                        {selectedMode === 'All' ? 'All Sales Modes' : selectedMode}
                       </Text>
                       <Ionicons
                         name="chevron-down"
@@ -732,7 +811,7 @@ export const AllEntriesView = React.memo(({ entries, loading, onOpenAddModal, on
               </View>
 
               <View style={styles.filterControl}>
-                <Text style={styles.filterLabel}>Type</Text>
+                <Text style={styles.filterLabel}>Sale Type</Text>
                 {Platform.OS === 'web' ? (
                   <select
                     value={selectedType}
@@ -743,8 +822,8 @@ export const AllEntriesView = React.memo(({ entries, loading, onOpenAddModal, on
                       backgroundColor: selectedType !== 'All' ? '#f0f9ff' : '#ffffff',
                     }}
                   >
-                    <option value="All">All Types</option>
-                    {uniqueTypes.map((t) => (
+                    <option value="All">All Sale Types</option>
+                    {uniqueSaleTypes.map((t) => (
                       <option key={t} value={t}>
                         {t}
                       </option>
@@ -753,10 +832,10 @@ export const AllEntriesView = React.memo(({ entries, loading, onOpenAddModal, on
                 ) : (
                   <TouchableOpacity
                     style={[styles.mobileFilterBtn, selectedType !== 'All' && styles.mobileFilterBtnActive]}
-                    onPress={() => setMobilePicker({ title: 'Type', options: uniqueTypes, current: selectedType, onSelect: setSelectedType })}
+                    onPress={() => setMobilePicker({ title: 'Sale Type', options: uniqueSaleTypes, current: selectedType, onSelect: setSelectedType })}
                   >
                     <Text style={styles.mobileFilterBtnText} numberOfLines={1}>
-                      {selectedType === 'All' ? 'All Types' : selectedType}
+                      {selectedType === 'All' ? 'All Sale Types' : selectedType}
                     </Text>
                     <Ionicons name="chevron-down" size={13} color="#64748b" />
                   </TouchableOpacity>
@@ -764,7 +843,7 @@ export const AllEntriesView = React.memo(({ entries, loading, onOpenAddModal, on
               </View>
 
               <View style={styles.filterControl}>
-                <Text style={styles.filterLabel}>Mode</Text>
+                <Text style={styles.filterLabel}>Sales Mode</Text>
                 {Platform.OS === 'web' ? (
                   <select
                     value={selectedMode}
@@ -775,8 +854,8 @@ export const AllEntriesView = React.memo(({ entries, loading, onOpenAddModal, on
                       backgroundColor: selectedMode !== 'All' ? '#f0f9ff' : '#ffffff',
                     }}
                   >
-                    <option value="All">All Modes</option>
-                    {uniqueModes.map((m) => (
+                    <option value="All">All Sales Modes</option>
+                    {uniqueSalesModes.map((m) => (
                       <option key={m} value={m}>
                         {m}
                       </option>
@@ -785,10 +864,10 @@ export const AllEntriesView = React.memo(({ entries, loading, onOpenAddModal, on
                 ) : (
                   <TouchableOpacity
                     style={[styles.mobileFilterBtn, selectedMode !== 'All' && styles.mobileFilterBtnActive]}
-                    onPress={() => setMobilePicker({ title: 'Mode', options: uniqueModes, current: selectedMode, onSelect: setSelectedMode })}
+                    onPress={() => setMobilePicker({ title: 'Sales Mode', options: uniqueSalesModes, current: selectedMode, onSelect: setSelectedMode })}
                   >
                     <Text style={styles.mobileFilterBtnText} numberOfLines={1}>
-                      {selectedMode === 'All' ? 'All Modes' : selectedMode}
+                      {selectedMode === 'All' ? 'All Sales Modes' : selectedMode}
                     </Text>
                     <Ionicons name="chevron-down" size={13} color="#64748b" />
                   </TouchableOpacity>
@@ -941,7 +1020,7 @@ export const AllEntriesView = React.memo(({ entries, loading, onOpenAddModal, on
                   <Text style={[styles.refCardHeaderCol, { flex: 1.1 }]}>DATE</Text>
                   <Text style={[styles.refCardHeaderCol, { flex: 1 }]}>CHALLANNO</Text>
                   <Text style={[styles.refCardHeaderCol, { flex: 1.3 }]}>VEHICLENO</Text>
-                  <Text style={[styles.refCardHeaderCol, { flex: 1.2 }]}>TRANSPORTTYPE</Text>
+                  <Text style={[styles.refCardHeaderCol, { flex: 1.2 }]}>TRANSPORT NAME</Text>
                 </View>
 
                 {/* 2. Sub-header: Values Row with Checkbox */}
@@ -976,58 +1055,66 @@ export const AllEntriesView = React.memo(({ entries, loading, onOpenAddModal, on
 
                 {/* 4. 2-Column Key-Value Grid */}
                 <View style={styles.refCardGridBody}>
-                  {/* Row 1: TYPE/MODE | PARTYNAME */}
+                  {/* Row 1: SALES MODE | CUSTOMER NAME */}
                   <View style={styles.refCardGridRow}>
                     <View style={styles.refCardGridCol}>
-                      <Text style={styles.refCardFieldLabel}>TYPE/MODE</Text>
+                      <Text style={styles.refCardFieldLabel}>SALES MODE</Text>
                       <Text style={styles.refCardFieldVal} numberOfLines={1}>
-                        {entry.type_mode || 'N/A'}
+                        {entry.type_mode === 'Cash Sale'
+                          ? (entry.payment_mode || 'Cash')
+                          : entry.type_mode === 'Credit Sale'
+                          ? (entry.party_name || 'Credit Sale')
+                          : (entry.type_mode || 'N/A')}
                       </Text>
                     </View>
                     <View style={styles.refCardGridCol}>
-                      <Text style={styles.refCardFieldLabel}>PARTYNAME</Text>
-                      <Text style={styles.refCardFieldVal} numberOfLines={2}>
-                        {entry.party_name || 'N/A'}
+                      <Text style={styles.refCardFieldLabel}>CUSTOMER NAME</Text>
+                      <Text style={styles.refCardFieldVal} numberOfLines={1}>
+                        {entry.type_mode === 'Cash Sale'
+                          ? (entry.customer_name || '-')
+                          : entry.type_mode === 'Credit Sale'
+                          ? 'NA'
+                          : (entry.customer_name || '-')}
                       </Text>
                     </View>
                   </View>
 
-                  {/* Row 2: MATERIALNAME | CUM */}
+                  {/* Row 2: SALES TYPE | ETP NO. */}
                   <View style={styles.refCardGridRow}>
                     <View style={styles.refCardGridCol}>
-                      <Text style={styles.refCardFieldLabel}>MATERIALNAME</Text>
+                      <Text style={styles.refCardFieldLabel}>SALES TYPE</Text>
                       <Text style={styles.refCardFieldVal} numberOfLines={1}>
-                        {entry.material_name || 'N/A'}
+                        {entry.sale_type || entry.hr_loading_type || '-'}
                       </Text>
                     </View>
-                    <View style={styles.refCardGridCol}>
-                      <Text style={styles.refCardFieldLabel}>CUM</Text>
-                      <Text style={styles.refCardFieldVal} numberOfLines={1}>
-                        {entry.cum || 0}
-                      </Text>
-                    </View>
-                  </View>
-
-                  {/* Row 3: ETP NO. | G.WT */}
-                  <View style={styles.refCardGridRow}>
                     <View style={styles.refCardGridCol}>
                       <Text style={styles.refCardFieldLabel}>ETP NO.</Text>
                       <Text style={styles.refCardFieldVal} numberOfLines={1}>
                         {entry.etp_no || '-'}
                       </Text>
                     </View>
+                  </View>
+
+                  {/* Row 3: CUM | G Wt */}
+                  <View style={styles.refCardGridRow}>
                     <View style={styles.refCardGridCol}>
-                      <Text style={styles.refCardFieldLabel}>G.WT</Text>
+                      <Text style={styles.refCardFieldLabel}>CUM</Text>
+                      <Text style={styles.refCardFieldVal} numberOfLines={1}>
+                        {entry.cum || 0}
+                      </Text>
+                    </View>
+                    <View style={styles.refCardGridCol}>
+                      <Text style={styles.refCardFieldLabel}>G WT</Text>
                       <Text style={styles.refCardFieldVal} numberOfLines={1}>
                         {Number(entry.g_wt || 0).toLocaleString('en-IN')}
                       </Text>
                     </View>
                   </View>
 
-                  {/* Row 4: T.WT | NET WT (Net WT is Blue) */}
+                  {/* Row 4: T Wt | Net Wt */}
                   <View style={styles.refCardGridRow}>
                     <View style={styles.refCardGridCol}>
-                      <Text style={styles.refCardFieldLabel}>T.WT</Text>
+                      <Text style={styles.refCardFieldLabel}>T WT</Text>
                       <Text style={styles.refCardFieldVal} numberOfLines={1}>
                         {Number(entry.t_wt || 0).toLocaleString('en-IN')}
                       </Text>
@@ -1040,7 +1127,7 @@ export const AllEntriesView = React.memo(({ entries, loading, onOpenAddModal, on
                     </View>
                   </View>
 
-                  {/* Row 5: RATE | AMOUNT (Amount is Green) */}
+                  {/* Row 5: RATE | AMOUNT */}
                   <View style={styles.refCardGridRow}>
                     <View style={styles.refCardGridCol}>
                       <Text style={styles.refCardFieldLabel}>RATE</Text>
@@ -1056,21 +1143,19 @@ export const AllEntriesView = React.memo(({ entries, loading, onOpenAddModal, on
                     </View>
                   </View>
 
-                  {/* Row 6: TOTAL AMT (Green) | DIRECT DESTINATION (Purple Pill) */}
+                  {/* Row 6: ROYALTY / FREIGHT | GROSS AMOUNT */}
                   <View style={styles.refCardGridRow}>
                     <View style={styles.refCardGridCol}>
-                      <Text style={styles.refCardFieldLabel}>TOTAL AMT</Text>
-                      <Text style={[styles.refCardFieldVal, styles.refCardTotalVal]} numberOfLines={1}>
-                        ₹{Number(entry.total_amount || 0).toLocaleString('en-IN')}
+                      <Text style={styles.refCardFieldLabel}>ROYALTY / FREIGHT</Text>
+                      <Text style={styles.refCardFieldVal} numberOfLines={1}>
+                        {entry.additional_charge_amount ? `₹${Number(entry.additional_charge_amount).toLocaleString('en-IN')}` : '-'}
                       </Text>
                     </View>
                     <View style={styles.refCardGridCol}>
-                      <Text style={styles.refCardFieldLabel}>DIRECT DESTINATION</Text>
-                      <View style={styles.refDestinationPill}>
-                        <Text style={styles.refDestinationPillText} numberOfLines={1}>
-                          {entry.saved_in || 'hr_loading'}
-                        </Text>
-                      </View>
+                      <Text style={styles.refCardFieldLabel}>GROSS AMOUNT</Text>
+                      <Text style={[styles.refCardFieldVal, styles.refCardTotalVal]} numberOfLines={1}>
+                        ₹{Number(entry.total_amount || entry.amount || 0).toLocaleString('en-IN')}
+                      </Text>
                     </View>
                   </View>
                 </View>
@@ -1134,30 +1219,228 @@ export const AllEntriesView = React.memo(({ entries, loading, onOpenAddModal, on
                   color={selectedIds.size > 0 ? '#0284c7' : '#94a3b8'}
                 />
               </TouchableOpacity>
-              <Text style={[styles.thCell, { width: 90 }]}>Date</Text>
-              <Text style={[styles.thCell, { width: 100 }]}>ChallanNo</Text>
-              <Text style={[styles.thCell, { width: 110 }]}>VehicleNo</Text>
-              <Text style={[styles.thCell, { width: 110 }]}>TransportType</Text>
-              <Text style={[styles.thCell, { width: 120 }]}>Type/Mode</Text>
-              <Text style={[styles.thCell, { width: 140 }]}>PartyName</Text>
-              <Text style={[styles.thCell, { width: 110 }]}>MaterialName</Text>
-              <Text style={[styles.thCell, styles.thRight, { width: 70 }]}>CUM</Text>
-              <Text style={[styles.thCell, { width: 110 }]}>ETP No.</Text>
-              <Text style={[styles.thCell, styles.thRight, { width: 85 }]}>G.WT</Text>
-              <Text style={[styles.thCell, styles.thRight, { width: 85 }]}>T.WT</Text>
-              <Text style={[styles.thCell, styles.thRight, { width: 85 }]}>NET WT</Text>
-              <Text style={[styles.thCell, styles.thRight, { width: 75 }]}>Rate</Text>
+              <Text style={[styles.thCell, { width: 95 }]}>DATE</Text>
+              <Text style={[styles.thCell, { width: 110 }]}>CHALLAN NO.</Text>
+              <Text style={[styles.thCell, { width: 115 }]}>VEHICLE NO</Text>
+              <Text style={[styles.thCell, { width: 125 }]}>TRANSPORT Name</Text>
+              <Text style={[styles.thCell, { width: 125 }]}>SALES Mode</Text>
+              <Text style={[styles.thCell, { width: 130 }]}>Customer Name</Text>
+              <Text style={[styles.thCell, { width: 120 }]}>Sales Type</Text>
+              <Text style={[styles.thCell, { width: 105 }]}>ETP No.</Text>
+              <Text style={[styles.thCell, styles.thRight, { width: 75 }]}>CUM</Text>
+              <Text style={[styles.thCell, styles.thRight, { width: 85 }]}>G Wt</Text>
+              <Text style={[styles.thCell, styles.thRight, { width: 85 }]}>T Wt</Text>
+              <Text style={[styles.thCell, styles.thRight, { width: 85 }]}>Net Wt</Text>
+              <Text style={[styles.thCell, styles.thRight, { width: 80 }]}>Rate</Text>
               <Text style={[styles.thCell, styles.thRight, { width: 95 }]}>Amount</Text>
-              <Text style={[styles.thCell, styles.thRight, { width: 105 }]}>Total Amt</Text>
-              <Text style={[styles.thCell, { width: 130 }]}>Direct Destination</Text>
-              <Text style={[styles.thCell, { width: 85 }]}>Source</Text>
+              <Text style={[styles.thCell, styles.thRight, { width: 90 }]}>Royalty</Text>
+              <Text style={[styles.thCell, styles.thRight, { width: 90 }]}>Freight</Text>
+              <Text style={[styles.thCell, styles.thRight, { width: 85 }]}>CGST</Text>
+              <Text style={[styles.thCell, styles.thRight, { width: 85 }]}>SGST</Text>
+              <Text style={[styles.thCell, styles.thRight, { width: 85 }]}>IGST</Text>
+              <Text style={[styles.thCell, styles.thRight, { width: 115 }]}>Gross Amount</Text>
+            </View>
+
+            {/* Row-level Search Filter Inputs for every column */}
+            <View style={styles.tableFilterRow}>
+              <View style={[styles.thFilterCell, { width: 44, alignItems: 'center', justifyContent: 'center' }]}>
+                {Object.values(colFilters).some((v) => v && v.trim()) ? (
+                  <TouchableOpacity
+                    onPress={() => setColFilters({})}
+                    hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                  >
+                    <Ionicons name="close-circle" size={16} color="#ef4444" />
+                  </TouchableOpacity>
+                ) : (
+                  <Ionicons name="search" size={13} color="#94a3b8" />
+                )}
+              </View>
+              <View style={[styles.thFilterCell, { width: 95 }]}>
+                <TextInput
+                  style={styles.colSearchInput}
+                  placeholder="Search..."
+                  placeholderTextColor="#94a3b8"
+                  value={colFilters.date || ''}
+                  onChangeText={(txt) => setColFilters((prev) => ({ ...prev, date: txt }))}
+                />
+              </View>
+              <View style={[styles.thFilterCell, { width: 110 }]}>
+                <TextInput
+                  style={styles.colSearchInput}
+                  placeholder="Search..."
+                  placeholderTextColor="#94a3b8"
+                  value={colFilters.challan_no || ''}
+                  onChangeText={(txt) => setColFilters((prev) => ({ ...prev, challan_no: txt }))}
+                />
+              </View>
+              <View style={[styles.thFilterCell, { width: 115 }]}>
+                <TextInput
+                  style={styles.colSearchInput}
+                  placeholder="Search..."
+                  placeholderTextColor="#94a3b8"
+                  value={colFilters.vehicle_no || ''}
+                  onChangeText={(txt) => setColFilters((prev) => ({ ...prev, vehicle_no: txt }))}
+                />
+              </View>
+              <View style={[styles.thFilterCell, { width: 125 }]}>
+                <TextInput
+                  style={styles.colSearchInput}
+                  placeholder="Search..."
+                  placeholderTextColor="#94a3b8"
+                  value={colFilters.transport_type || ''}
+                  onChangeText={(txt) => setColFilters((prev) => ({ ...prev, transport_type: txt }))}
+                />
+              </View>
+              <View style={[styles.thFilterCell, { width: 125, alignItems: 'center', justifyContent: 'center' }]}>
+                <Text style={{ fontSize: 11, color: '#cbd5e1' }}>-</Text>
+              </View>
+              <View style={[styles.thFilterCell, { width: 130 }]}>
+                <TextInput
+                  style={styles.colSearchInput}
+                  placeholder="Search..."
+                  placeholderTextColor="#94a3b8"
+                  value={colFilters.customer_name || ''}
+                  onChangeText={(txt) => setColFilters((prev) => ({ ...prev, customer_name: txt }))}
+                />
+              </View>
+              <View style={[styles.thFilterCell, { width: 120, alignItems: 'center', justifyContent: 'center' }]}>
+                <Text style={{ fontSize: 11, color: '#cbd5e1' }}>-</Text>
+              </View>
+              <View style={[styles.thFilterCell, { width: 105 }]}>
+                <TextInput
+                  style={styles.colSearchInput}
+                  placeholder="Search..."
+                  placeholderTextColor="#94a3b8"
+                  value={colFilters.etp_no || ''}
+                  onChangeText={(txt) => setColFilters((prev) => ({ ...prev, etp_no: txt }))}
+                />
+              </View>
+              <View style={[styles.thFilterCell, { width: 75 }]}>
+                <TextInput
+                  style={[styles.colSearchInput, { textAlign: 'right' }]}
+                  placeholder="Search..."
+                  placeholderTextColor="#94a3b8"
+                  value={colFilters.cum || ''}
+                  onChangeText={(txt) => setColFilters((prev) => ({ ...prev, cum: txt }))}
+                />
+              </View>
+              <View style={[styles.thFilterCell, { width: 85 }]}>
+                <TextInput
+                  style={[styles.colSearchInput, { textAlign: 'right' }]}
+                  placeholder="Search..."
+                  placeholderTextColor="#94a3b8"
+                  value={colFilters.g_wt || ''}
+                  onChangeText={(txt) => setColFilters((prev) => ({ ...prev, g_wt: txt }))}
+                />
+              </View>
+              <View style={[styles.thFilterCell, { width: 85 }]}>
+                <TextInput
+                  style={[styles.colSearchInput, { textAlign: 'right' }]}
+                  placeholder="Search..."
+                  placeholderTextColor="#94a3b8"
+                  value={colFilters.t_wt || ''}
+                  onChangeText={(txt) => setColFilters((prev) => ({ ...prev, t_wt: txt }))}
+                />
+              </View>
+              <View style={[styles.thFilterCell, { width: 85 }]}>
+                <TextInput
+                  style={[styles.colSearchInput, { textAlign: 'right' }]}
+                  placeholder="Search..."
+                  placeholderTextColor="#94a3b8"
+                  value={colFilters.net_wt || ''}
+                  onChangeText={(txt) => setColFilters((prev) => ({ ...prev, net_wt: txt }))}
+                />
+              </View>
+              <View style={[styles.thFilterCell, { width: 80 }]}>
+                <TextInput
+                  style={[styles.colSearchInput, { textAlign: 'right' }]}
+                  placeholder="Search..."
+                  placeholderTextColor="#94a3b8"
+                  value={colFilters.rate || ''}
+                  onChangeText={(txt) => setColFilters((prev) => ({ ...prev, rate: txt }))}
+                />
+              </View>
+              <View style={[styles.thFilterCell, { width: 95 }]}>
+                <TextInput
+                  style={[styles.colSearchInput, { textAlign: 'right' }]}
+                  placeholder="Search..."
+                  placeholderTextColor="#94a3b8"
+                  value={colFilters.amount || ''}
+                  onChangeText={(txt) => setColFilters((prev) => ({ ...prev, amount: txt }))}
+                />
+              </View>
+              <View style={[styles.thFilterCell, { width: 90 }]}>
+                <TextInput
+                  style={[styles.colSearchInput, { textAlign: 'right' }]}
+                  placeholder="Search..."
+                  placeholderTextColor="#94a3b8"
+                  value={colFilters.royalty || ''}
+                  onChangeText={(txt) => setColFilters((prev) => ({ ...prev, royalty: txt }))}
+                />
+              </View>
+              <View style={[styles.thFilterCell, { width: 90 }]}>
+                <TextInput
+                  style={[styles.colSearchInput, { textAlign: 'right' }]}
+                  placeholder="Search..."
+                  placeholderTextColor="#94a3b8"
+                  value={colFilters.freight || ''}
+                  onChangeText={(txt) => setColFilters((prev) => ({ ...prev, freight: txt }))}
+                />
+              </View>
+              <View style={[styles.thFilterCell, { width: 85 }]}>
+                <TextInput
+                  style={[styles.colSearchInput, { textAlign: 'right' }]}
+                  placeholder="Search..."
+                  placeholderTextColor="#94a3b8"
+                  value={colFilters.cgst || ''}
+                  onChangeText={(txt) => setColFilters((prev) => ({ ...prev, cgst: txt }))}
+                />
+              </View>
+              <View style={[styles.thFilterCell, { width: 85 }]}>
+                <TextInput
+                  style={[styles.colSearchInput, { textAlign: 'right' }]}
+                  placeholder="Search..."
+                  placeholderTextColor="#94a3b8"
+                  value={colFilters.sgst || ''}
+                  onChangeText={(txt) => setColFilters((prev) => ({ ...prev, sgst: txt }))}
+                />
+              </View>
+              <View style={[styles.thFilterCell, { width: 85 }]}>
+                <TextInput
+                  style={[styles.colSearchInput, { textAlign: 'right' }]}
+                  placeholder="Search..."
+                  placeholderTextColor="#94a3b8"
+                  value={colFilters.igst || ''}
+                  onChangeText={(txt) => setColFilters((prev) => ({ ...prev, igst: txt }))}
+                />
+              </View>
+              <View style={[styles.thFilterCell, { width: 115 }]}>
+                <TextInput
+                  style={[styles.colSearchInput, { textAlign: 'right' }]}
+                  placeholder="Search..."
+                  placeholderTextColor="#94a3b8"
+                  value={colFilters.gross_amount || ''}
+                  onChangeText={(txt) => setColFilters((prev) => ({ ...prev, gross_amount: txt }))}
+                />
+              </View>
             </View>
 
             <ScrollView style={styles.tableBodyScroll}>
               {filteredEntries.map((entry, idx) => {
-                const badge = getBadgeColor(entry.saved_in);
                 const isEven = idx % 2 === 0;
                 const isSelected = selectedIds.has(entry.id);
+
+                const addName = (entry.additional_charge_name || '').toLowerCase();
+                const addAmt = Number(entry.additional_charge_amount || 0);
+                const isRoyalty = addName.includes('royalt') || (entry.sale_type === 'Royalty Sale' && addAmt > 0 && !addName.includes('freight'));
+                const royaltyVal = isRoyalty && addAmt > 0 ? `₹${addAmt.toLocaleString()}` : '-';
+                const isFreight = addName.includes('freight') || addName.includes('freigth') || (!isRoyalty && addAmt > 0);
+                const freightVal = isFreight && addAmt > 0 ? `₹${addAmt.toLocaleString()}` : '-';
+
+                const isMpParty = !entry.party_state || entry.party_state.toLowerCase().includes('madhya pradesh') || entry.party_state.toLowerCase() === 'mp';
+                const cgstVal = entry.cgst_amount > 0 ? `₹${Number(entry.cgst_amount).toLocaleString()}` : (entry.gst_amount > 0 && isMpParty ? `₹${Number(entry.gst_amount / 2).toLocaleString()}` : '-');
+                const sgstVal = entry.sgst_amount > 0 ? `₹${Number(entry.sgst_amount).toLocaleString()}` : (entry.gst_amount > 0 && isMpParty ? `₹${Number(entry.gst_amount / 2).toLocaleString()}` : '-');
+                const igstVal = entry.igst_amount > 0 ? `₹${Number(entry.igst_amount).toLocaleString()}` : (entry.gst_amount > 0 && !isMpParty ? `₹${Number(entry.gst_amount).toLocaleString()}` : '-');
 
                 return (
                   <View
@@ -1180,51 +1463,84 @@ export const AllEntriesView = React.memo(({ entries, loading, onOpenAddModal, on
                         color={isSelected ? '#0284c7' : '#cbd5e1'}
                       />
                     </TouchableOpacity>
-                    <Text style={[styles.tdCell, { width: 90 }]}>{entry.date}</Text>
-                    <Text style={[styles.tdCell, styles.boldCell, { width: 100 }]}>
-                      {entry.challan_no}
+                    {/* 1. DATE */}
+                    <Text style={[styles.tdCell, { width: 95 }]}>{entry.date || '-'}</Text>
+                    {/* 2. CHALLAN NO. */}
+                    <Text style={[styles.tdCell, styles.boldCell, { width: 110 }]}>
+                      {entry.challan_no || '-'}
                     </Text>
-                    <Text style={[styles.tdCell, { width: 110 }]}>{entry.vehicle_no}</Text>
-                    <Text style={[styles.tdCell, { width: 110 }]}>{entry.transport_type}</Text>
+                    {/* 3. VEHICLE NO */}
+                    <Text style={[styles.tdCell, { width: 115 }]}>{entry.vehicle_no || '-'}</Text>
+                    {/* 4. TRANSPORT Name */}
+                    <Text style={[styles.tdCell, { width: 125 }]}>{entry.transport_type || '-'}</Text>
+                    {/* 5. SALES Mode */}
+                    <Text style={[styles.tdCell, { width: 125 }]}>
+                      {entry.type_mode === 'Cash Sale'
+                        ? (entry.payment_mode || 'Cash')
+                        : entry.type_mode === 'Credit Sale'
+                        ? (entry.party_name || 'Credit Sale')
+                        : (entry.type_mode || '-')}
+                    </Text>
+                    {/* 6. Customer Name */}
+                    <Text style={[styles.tdCell, { width: 130 }]}>
+                      {entry.type_mode === 'Cash Sale'
+                        ? (entry.customer_name || '-')
+                        : entry.type_mode === 'Credit Sale'
+                        ? 'NA'
+                        : (entry.customer_name || '-')}
+                    </Text>
+                    {/* 7. Sales Type */}
                     <Text style={[styles.tdCell, { width: 120 }]}>
-                      {entry.type_mode}{entry.payment_mode ? ` (${entry.payment_mode})` : ''}
+                      {entry.sale_type || entry.hr_loading_type || '-'}
                     </Text>
-                    <Text style={[styles.tdCell, { width: 140 }]}>{entry.party_name}</Text>
-                    <Text style={[styles.tdCell, { width: 110 }]}>{entry.material_name}</Text>
-                    <Text style={[styles.tdCell, styles.tdRight, { width: 70 }]}>
+                    {/* 8. ETP No. */}
+                    <Text style={[styles.tdCell, { width: 105 }]}>{entry.etp_no || '-'}</Text>
+                    {/* 9. CUM */}
+                    <Text style={[styles.tdCell, styles.tdRight, { width: 75 }]}>
                       {entry.cum || 0}
                     </Text>
-                    <Text style={[styles.tdCell, { width: 110 }]}>{entry.etp_no || '-'}</Text>
+                    {/* 10. G Wt */}
                     <Text style={[styles.tdCell, styles.tdRight, { width: 85 }]}>
                       {(entry.g_wt || 0).toLocaleString()}
                     </Text>
+                    {/* 11. T Wt */}
                     <Text style={[styles.tdCell, styles.tdRight, { width: 85 }]}>
                       {(entry.t_wt || 0).toLocaleString()}
                     </Text>
+                    {/* 12. Net Wt */}
                     <Text style={[styles.tdCell, styles.tdRight, styles.highlightCell, { width: 85 }]}>
                       {(entry.net_wt || 0).toLocaleString()}
                     </Text>
-                    <Text style={[styles.tdCell, styles.tdRight, { width: 75 }]}>₹{entry.rate || 0}</Text>
+                    {/* 13. Rate */}
+                    <Text style={[styles.tdCell, styles.tdRight, { width: 80 }]}>₹{entry.rate || 0}</Text>
+                    {/* 14. Amount */}
                     <Text style={[styles.tdCell, styles.tdRight, { width: 95 }]}>
                       ₹{(entry.amount || 0).toLocaleString()}
                     </Text>
-                    <Text style={[styles.tdCell, styles.tdRight, styles.boldCell, { width: 105, color: '#16a34a' }]}>
-                      ₹{(entry.total_amount || 0).toLocaleString()}
+                    {/* 15. Royalty */}
+                    <Text style={[styles.tdCell, styles.tdRight, { width: 90 }]}>
+                      {royaltyVal}
                     </Text>
-                    <View style={[styles.tdCell, { width: 130, paddingVertical: 4 }]}>
-                      <View style={[styles.collectionBadge, { backgroundColor: badge.bg }]}>
-                        <Text style={[styles.collectionBadgeText, { color: badge.text }]}>
-                          {entry.saved_in}
-                        </Text>
-                      </View>
-                    </View>
-                    <View style={[styles.tdCell, { width: 85, paddingVertical: 4 }]}>
-                      <View style={[styles.sourceBadge, entry.entry_source === 'manual' ? styles.sourceBadgeManual : styles.sourceBadgeExcel]}>
-                        <Text style={[styles.sourceBadgeText, entry.entry_source === 'manual' ? styles.sourceBadgeTextManual : styles.sourceBadgeTextExcel]}>
-                          {entry.entry_source === 'manual' ? 'Manual' : 'Excel'}
-                        </Text>
-                      </View>
-                    </View>
+                    {/* 16. Freight */}
+                    <Text style={[styles.tdCell, styles.tdRight, { width: 90 }]}>
+                      {freightVal}
+                    </Text>
+                    {/* 17. CGST */}
+                    <Text style={[styles.tdCell, styles.tdRight, { width: 85 }]}>
+                      {cgstVal}
+                    </Text>
+                    {/* 18. SGST */}
+                    <Text style={[styles.tdCell, styles.tdRight, { width: 85 }]}>
+                      {sgstVal}
+                    </Text>
+                    {/* 19. IGST */}
+                    <Text style={[styles.tdCell, styles.tdRight, { width: 85 }]}>
+                      {igstVal}
+                    </Text>
+                    {/* 20. Gross Amount */}
+                    <Text style={[styles.tdCell, styles.tdRight, styles.boldCell, { width: 115, color: '#16a34a' }]}>
+                      ₹{(entry.total_amount || entry.amount || 0).toLocaleString()}
+                    </Text>
                   </View>
                 );
               })}
@@ -2425,5 +2741,32 @@ const styles = StyleSheet.create({
   },
   refSourcePillTextExcel: {
     color: '#16a34a',
+  },
+  tableFilterRow: {
+    flexDirection: 'row',
+    backgroundColor: '#f8fafc',
+    borderBottomWidth: 1,
+    borderBottomColor: '#cbd5e1',
+    paddingVertical: 5,
+    alignItems: 'center',
+  },
+  thFilterCell: {
+    paddingHorizontal: 3,
+    justifyContent: 'center',
+  },
+  colSearchInput: {
+    height: 28,
+    backgroundColor: '#ffffff',
+    borderWidth: 1,
+    borderColor: '#cbd5e1',
+    borderRadius: 5,
+    paddingHorizontal: 6,
+    fontSize: 11,
+    color: '#0f172a',
+    ...Platform.select({
+      web: {
+        outlineStyle: 'none',
+      },
+    }),
   },
 });

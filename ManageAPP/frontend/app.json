@@ -6,12 +6,16 @@
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
+    "jsEngine": "hermes",
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.materialmapp.app"
+      "bundleIdentifier": "com.materialmapp.app",
+      "jsEngine": "hermes"
     },
     "android": {
       "package": "com.materialmapp.app",
+      "jsEngine": "hermes",
+      "softwareKeyboardLayoutMode": "pan",
       "adaptiveIcon": {
         "backgroundColor": "#E6F4FE",
         "foregroundImage": "./assets/android-icon-foreground.png",

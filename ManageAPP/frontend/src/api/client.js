@@ -267,6 +267,16 @@ export const api = {
       body: JSON.stringify({ email, password, name }),
     }),
   getMe: () => request('/api/auth/me'),
+  updateProfile: (profileData) =>
+    request('/api/auth/profile', {
+      method: 'PUT',
+      body: JSON.stringify(profileData),
+    }),
+  changePassword: (currentPassword, newPassword) =>
+    request('/api/auth/change-password', {
+      method: 'POST',
+      body: JSON.stringify({ current_password: currentPassword, new_password: newPassword }),
+    }),
   logout: () =>
     request('/api/auth/logout', {
       method: 'POST',
@@ -282,11 +292,16 @@ export const api = {
     const qs = q.toString();
     return request(`/api/masters/all${qs ? `?${qs}` : ''}`);
   },
-  addMasterItem: (category, value, status = 'Active') =>
-    request('/api/masters', {
+  addMasterItem: (categoryOrPayload, value, status = 'Active', extraFields = {}) => {
+    const body =
+      typeof categoryOrPayload === 'object' && categoryOrPayload !== null
+        ? categoryOrPayload
+        : { category: categoryOrPayload, value, status, ...extraFields };
+    return request('/api/masters', {
       method: 'POST',
-      body: JSON.stringify({ category, value, status }),
-    }),
+      body: JSON.stringify(body),
+    });
+  },
   updateMasterItem: (id, data) =>
     request(`/api/masters/${id}`, {
       method: 'PUT',
@@ -346,6 +361,44 @@ export const api = {
 
   // Excel Bulk Import & Template
   getTemplateDownloadUrl: () => `${activeBaseUrl}/api/entries/template`,
+  getPartyWiseSalesExportUrl: (month = '') => {
+    const token = getAuthToken();
+    const qMonth = month ? `month=${encodeURIComponent(month)}` : '';
+    const qToken = token ? `auth_token=${encodeURIComponent(token)}` : '';
+    const params = [qMonth, qToken].filter(Boolean).join('&');
+    return `${activeBaseUrl}/api/entries/party-wise-sales/export${params ? `?${params}` : ''}`;
+  },
+  downloadPartyWiseSalesExcel: async (month = '', label = '') => {
+    const token = getAuthToken();
+    const url = `${activeBaseUrl}/api/entries/party-wise-sales/export${month ? `?month=${encodeURIComponent(month)}` : ''}`;
+    const res = await fetch(url, {
+      headers: {
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
+    });
+    if (!res.ok) {
+      throw new Error(`Failed to download report (HTTP ${res.status})`);
+    }
+    const blob = await res.blob();
+    const safeMonth = (label || month || 'all_time').replace(/\s+/g, '_').toLowerCase();
+    const filename = `party_wise_sales_${safeMonth}.xlsx`;
+
+    if (Platform.OS === 'web' && typeof window !== 'undefined') {
+      const blobUrl = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = blobUrl;
+      link.download = filename;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      window.URL.revokeObjectURL(blobUrl);
+      return true;
+    } else {
+      const directUrl = `${activeBaseUrl}/api/entries/party-wise-sales/export?month=${encodeURIComponent(month)}&auth_token=${encodeURIComponent(token)}`;
+      await Linking.openURL(directUrl);
+      return true;
+    }
+  },
   importExcel: async (file, previewOnly = false, defaultTypeMode = null, selectedSheets = null) => {
     let url = `${activeBaseUrl}/api/entries/import-excel?preview_only=${previewOnly ? 'true' : 'false'}`;
     if (defaultTypeMode && defaultTypeMode !== 'auto') {

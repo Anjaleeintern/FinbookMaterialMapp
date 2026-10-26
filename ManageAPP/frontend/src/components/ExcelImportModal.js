@@ -196,10 +196,6 @@ export const ExcelImportModal = ({ visible, onClose, onSuccess }) => {
         return { bg: '#fee2e2', text: '#b91c1c', label: 'Credit Sale' };
       case 'cash_sale':
         return { bg: '#dcfce7', text: '#15803d', label: 'Cash Sale' };
-      case 'qr_sale':
-        return { bg: '#e0e7ff', text: '#4338ca', label: 'QR Sale' };
-      case 'hr_loading':
-        return { bg: '#f3e8ff', text: '#7e22ce', label: 'HR Loading' };
       default:
         return { bg: '#e2e8f0', text: '#334155', label: colName };
     }
@@ -239,7 +235,7 @@ export const ExcelImportModal = ({ visible, onClose, onSuccess }) => {
                 <View style={{ marginLeft: 10, flex: 1 }}>
                   <Text style={styles.templateBannerTitle}>Standard Excel Template</Text>
                   <Text style={styles.templateBannerDesc}>
-                    Download our ready-to-use template with columns: Date, VehicleNo, Type/Mode, Material, Party, Rate, Weights, etc.
+                    Download our ready-to-use template matching the entry form: Date, VehicleNo, Transport Name, Sales Mode, Customer/Party Name, Sale Type, Material, Weights, Rate, etc.
                   </Text>
                 </View>
               </View>
@@ -349,7 +345,7 @@ export const ExcelImportModal = ({ visible, onClose, onSuccess }) => {
                     <Text style={styles.modeConfigTitle}>Sheet Type / Mode Selection</Text>
                   </View>
                   <Text style={styles.modeConfigDesc}>
-                    Agar Excel file me alag se "Type/Mode" ka column nahi hai, toh Sheet Tab ke naam se auto-detect hoga ya aap yahan se direct mode chun sakte hain:
+                    Agar Excel file me alag se "Sales Mode" ya "Type/Mode" ka column nahi hai, toh Sheet Tab ke naam se auto-detect hoga ya aap yahan se direct mode chun sakte hain:
                   </Text>
 
                   <View style={styles.modeButtonsGrid}>
@@ -359,8 +355,6 @@ export const ExcelImportModal = ({ visible, onClose, onSuccess }) => {
                       { key: 'Without Royalty', label: 'Without Royalty' },
                       { key: 'Cash Sale', label: 'Cash Sale' },
                       { key: 'Credit Sale', label: 'Credit Sale' },
-                      { key: 'QR Sale', label: 'QR Sale' },
-                      { key: 'HR Loading', label: 'HR Loading' },
                     ].map((m) => (
                       <TouchableOpacity
                         key={m.key}
@@ -399,23 +393,19 @@ export const ExcelImportModal = ({ visible, onClose, onSuccess }) => {
                         </Text>
                       </View>
                       <Text style={styles.sheetSelectorDesc}>
-                        Har sheet ka mode alag se detect ho chuka hai (jaise HR Loading, Without Royalty, Royalty Sale). Aap kisi bhi sheet ko click karke include/exclude kar sakte hain:
+                        Har sheet ka mode alag se detect ho chuka hai (jaise Cash Sale, Credit Sale, Without Royalty, Royalty Sale). Aap kisi bhi sheet ko click karke include/exclude kar sakte hain:
                       </Text>
 
                       <View style={styles.sheetPillsRow}>
                         {previewData.available_sheets.map((sheet) => {
                           const isSelected = selectedSheets.includes(sheet.name);
                           const colKey =
-                            sheet.mode === 'HR Loading'
-                              ? 'hr_loading'
-                              : sheet.mode === 'Without Royalty'
+                            sheet.mode === 'Without Royalty'
                               ? 'without_royalty'
                               : sheet.mode === 'Royalty Sale'
                               ? 'royalty_sale'
                               : sheet.mode === 'Cash Sale'
                               ? 'cash_sale'
-                              : sheet.mode === 'QR Sale'
-                              ? 'qr_sale'
                               : 'credit_sale';
                           const modeBadge = getCollectionBadgeColor(colKey);
 
@@ -441,7 +431,6 @@ export const ExcelImportModal = ({ visible, onClose, onSuccess }) => {
                               <View style={[styles.sheetChipModeBadge, { backgroundColor: modeBadge.bg }]}>
                                 <Text style={[styles.sheetChipModeText, { color: modeBadge.text }]}>
                                   {sheet.mode}
-                                  {sheet.hr_loading_type ? ` • ${sheet.hr_loading_type}` : ''}
                                 </Text>
                               </View>
                               <View style={styles.sheetChipCountBadge}>

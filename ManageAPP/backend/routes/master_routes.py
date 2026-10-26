@@ -27,9 +27,7 @@ STANDARD_TYPE_MODES = [
     "Royalty Sale",
     "Without Royalty",
     "Credit Sale",
-    "Cash Sale",
-    "QR Sale",
-    "HR Loading"
+    "Cash Sale"
 ]
 
 STATIC_TYPE_MODES = {
@@ -38,18 +36,52 @@ STATIC_TYPE_MODES = {
     "With Royalty",
     "Credit Sale",
     "Cash Sale",
-    "Case Sale",
-    "QR Sale",
-    "HR Loading"
+    "Case Sale"
 }
 
-HR_LOADING_SUB_TYPES = [
-    "Royalty Sale",
-    "Without Royalty"
-]
+HR_LOADING_SUB_TYPES = []
 
 def format_iso_now():
     return datetime.now(timezone.utc).isoformat()
+
+STANDARD_INDIAN_STATES = [
+    "Madhya Pradesh",
+    "Maharashtra",
+    "Gujarat",
+    "Rajasthan",
+    "Uttar Pradesh",
+    "Delhi",
+    "Andhra Pradesh",
+    "Arunachal Pradesh",
+    "Assam",
+    "Bihar",
+    "Chhattisgarh",
+    "Goa",
+    "Haryana",
+    "Himachal Pradesh",
+    "Jharkhand",
+    "Karnataka",
+    "Kerala",
+    "Manipur",
+    "Meghalaya",
+    "Mizoram",
+    "Nagaland",
+    "Odisha",
+    "Punjab",
+    "Sikkim",
+    "Tamil Nadu",
+    "Telangana",
+    "Tripura",
+    "Uttarakhand",
+    "West Bengal",
+    "Andaman and Nicobar Islands",
+    "Chandigarh",
+    "Dadra and Nagar Haveli and Daman and Diu",
+    "Jammu and Kashmir",
+    "Ladakh",
+    "Lakshadweep",
+    "Puducherry"
+]
 
 @router.get("", response_model=MasterListResponse)
 async def get_all_masters(current_user: dict = Depends(get_current_user)):
@@ -64,7 +96,7 @@ async def get_all_masters(current_user: dict = Depends(get_current_user)):
             "status": {"$ne": "Inactive"},
             "$or": [{"user_id": user_id}, {"is_system": True}]
         },
-        {"_id": 0, "category": 1, "value": 1}
+        {"_id": 0, "category": 1, "value": 1, "state": 1}
     )
     items = await cursor.to_list(length=3000)
 
@@ -73,8 +105,13 @@ async def get_all_masters(current_user: dict = Depends(get_current_user)):
         "TransportName": [],
         "MaterialName": [],
         "PartyName": [],
-        "TypeMode": []
+        "TypeMode": [],
+        "State": [],
+        "AdditionalCharges": [],
+        "party_states": {}
     }
+
+    party_states = {}
 
     for item in items:
         cat = item.get("category")
@@ -84,6 +121,14 @@ async def get_all_masters(current_user: dict = Depends(get_current_user)):
         if cat == "Type/Mode":
             if val not in result["TypeMode"]:
                 result["TypeMode"].append(val)
+        elif cat == "PartyName":
+            if val not in result["PartyName"]:
+                result["PartyName"].append(val)
+            st = item.get("state")
+            if st and st.strip():
+                party_states[val] = st.strip()
+            else:
+                party_states[val] = "Madhya Pradesh"
         elif cat in result and val not in result[cat]:
             result[cat].append(val)
 
@@ -92,9 +137,18 @@ async def get_all_masters(current_user: dict = Depends(get_current_user)):
         if std not in result["TypeMode"]:
             result["TypeMode"].append(std)
 
+    # Ensure standard Indian States exist in State list
+    for st in STANDARD_INDIAN_STATES:
+        if st not in result["State"]:
+            result["State"].append(st)
+
+    # Note: AdditionalCharges is populated purely from user's MongoDB database without any static additions
+    result["party_states"] = party_states
+
     # Sort all master values alphabetically
-    for cat in ["VehicleNo", "TransportName", "MaterialName", "PartyName", "TypeMode"]:
-        result[cat].sort()
+    for cat in ["VehicleNo", "TransportName", "MaterialName", "PartyName", "TypeMode", "State", "AdditionalCharges"]:
+        if cat in result:
+            result[cat].sort()
 
     return result
 
@@ -114,6 +168,8 @@ async def get_masters_details(
     query = {"$or": [{"user_id": user_id}, {"is_system": True}]}
     if category and category != "All":
         query["category"] = category
+    else:
+        query["category"] = {"$nin": ["Type/Mode", "TypeMode"]}
     if status_filter and status_filter != "All":
         query["status"] = status_filter
     if search and search.strip():
@@ -137,7 +193,7 @@ async def get_masters_details(
         cat = doc.get("category", "")
         val = doc.get("value", "")
         is_static = doc.get("is_system", False) or (cat in ["Type/Mode", "TypeMode"] and val in STATIC_TYPE_MODES)
-        sub_types = HR_LOADING_SUB_TYPES if (cat in ["Type/Mode", "TypeMode"] and val == "HR Loading") else None
+        sub_types = None
 
         results.append(
             MasterItemDetail(
@@ -149,11 +205,20 @@ async def get_masters_details(
                 sub_types=sub_types,
                 created_at=created_at,
                 updated_at=updated_at,
+                address_1=doc.get("address_1"),
+                address_2=doc.get("address_2"),
+                city=doc.get("city"),
+                state=doc.get("state"),
+                pin_code=doc.get("pin_code"),
+                mobile_no=doc.get("mobile_no"),
+                email_id=doc.get("email_id"),
+                gst_type=doc.get("gst_type"),
+                gst_no=doc.get("gst_no"),
             )
         )
 
-    # If category is Type/Mode or empty, ensure standard modes are visible in table
-    if not category or category == "Type/Mode" or category == "All":
+    # If category is Type/Mode explicitly requested
+    if category == "Type/Mode":
         existing_type_modes = {
             r.value.strip().lower() for r in results if r.category == "Type/Mode"
         }
@@ -166,7 +231,7 @@ async def get_masters_details(
                         value=std,
                         status="Active",
                         is_static=True,
-                        sub_types=HR_LOADING_SUB_TYPES if std == "HR Loading" else None,
+                        sub_types=None,
                         created_at=format_iso_now(),
                         updated_at=format_iso_now(),
                     )
@@ -206,6 +271,29 @@ async def add_master_item(item: MasterItemCreate, current_user: dict = Depends(g
         "created_at": now_iso,
         "updated_at": now_iso,
     }
+
+    # Store party master fields if category is PartyName or if any field is provided
+    if category == "PartyName":
+        doc["address_1"] = (item.address_1 or "").strip()
+        doc["address_2"] = (item.address_2 or "").strip()
+        doc["city"] = (item.city or "").strip()
+        doc["state"] = (item.state or "").strip()
+        doc["pin_code"] = (item.pin_code or "").strip()
+        doc["mobile_no"] = (item.mobile_no or "").strip()
+        doc["email_id"] = (item.email_id or "").strip()
+        doc["gst_type"] = (item.gst_type or "Unregistered").strip()
+        doc["gst_no"] = (item.gst_no or "").strip().upper()
+    elif any([item.address_1, item.address_2, item.city, item.state, item.pin_code, item.mobile_no, item.email_id, item.gst_type, item.gst_no]):
+        doc["address_1"] = (item.address_1 or "").strip()
+        doc["address_2"] = (item.address_2 or "").strip()
+        doc["city"] = (item.city or "").strip()
+        doc["state"] = (item.state or "").strip()
+        doc["pin_code"] = (item.pin_code or "").strip()
+        doc["mobile_no"] = (item.mobile_no or "").strip()
+        doc["email_id"] = (item.email_id or "").strip()
+        doc["gst_type"] = (item.gst_type or "").strip()
+        doc["gst_no"] = (item.gst_no or "").strip().upper()
+
     insert_res = await db.masters.insert_one(doc)
 
     return {
@@ -215,6 +303,15 @@ async def add_master_item(item: MasterItemCreate, current_user: dict = Depends(g
         "status": status_val,
         "created_at": now_iso,
         "updated_at": now_iso,
+        "address_1": doc.get("address_1"),
+        "address_2": doc.get("address_2"),
+        "city": doc.get("city"),
+        "state": doc.get("state"),
+        "pin_code": doc.get("pin_code"),
+        "mobile_no": doc.get("mobile_no"),
+        "email_id": doc.get("email_id"),
+        "gst_type": doc.get("gst_type"),
+        "gst_no": doc.get("gst_no"),
     }
 
 @router.put("/{item_id}", response_model=MasterItemDetail)
@@ -262,6 +359,14 @@ async def update_master_item(item_id: str, payload: MasterItemUpdate, current_us
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Status must be 'Active' or 'Inactive'")
         update_fields["status"] = st
 
+    for f in ["address_1", "address_2", "city", "state", "pin_code", "mobile_no", "email_id", "gst_type", "gst_no"]:
+        val = getattr(payload, f, None)
+        if val is not None:
+            if f == "gst_no":
+                update_fields[f] = val.strip().upper()
+            else:
+                update_fields[f] = val.strip()
+
     await db.masters.update_one({"_id": obj_id, "user_id": user_id}, {"$set": update_fields})
     updated_doc = await db.masters.find_one({"_id": obj_id})
 
@@ -272,6 +377,15 @@ async def update_master_item(item_id: str, payload: MasterItemUpdate, current_us
         status=updated_doc.get("status", "Active"),
         created_at=updated_doc.get("created_at") or format_iso_now(),
         updated_at=updated_doc.get("updated_at") or format_iso_now(),
+        address_1=updated_doc.get("address_1"),
+        address_2=updated_doc.get("address_2"),
+        city=updated_doc.get("city"),
+        state=updated_doc.get("state"),
+        pin_code=updated_doc.get("pin_code"),
+        mobile_no=updated_doc.get("mobile_no"),
+        email_id=updated_doc.get("email_id"),
+        gst_type=updated_doc.get("gst_type"),
+        gst_no=updated_doc.get("gst_no"),
     )
 
 @router.post("/bulk")
@@ -458,17 +572,21 @@ MASTER_CATEGORY_MAP = {
     "client_name": "PartyName",
     "party_buyer": "PartyName",
 
-    # Type/Mode
-    "type_mode": "Type/Mode",
-    "typemode": "Type/Mode",
-    "type_mode_name": "Type/Mode",
-    "type": "Type/Mode",
-    "mode": "Type/Mode",
-    "payment_mode": "Type/Mode",
-    "sale_type": "Type/Mode",
-    "saletype": "Type/Mode",
-    "transaction_type": "Type/Mode",
-    "loading_type": "Type/Mode",
+    # State
+    "state": "State",
+    "state_name": "State",
+    "statename": "State",
+    "party_state": "State",
+
+    # AdditionalCharges
+    "additional_charges": "AdditionalCharges",
+    "additional_charge": "AdditionalCharges",
+    "additionalcharges": "AdditionalCharges",
+    "additionalcharge": "AdditionalCharges",
+    "charges": "AdditionalCharges",
+    "charge": "AdditionalCharges",
+    "extra_charges": "AdditionalCharges",
+    "other_charges": "AdditionalCharges",
 }
 
 IGNORE_HEADERS = {
@@ -498,8 +616,10 @@ def match_header_to_category(header: Any) -> Optional[str]:
         return "MaterialName"
     if any(k in cleaned for k in ["party", "cust", "buyer", "client"]):
         return "PartyName"
-    if any(k in cleaned for k in ["type", "mode"]):
-        return "Type/Mode"
+    if any(k in cleaned for k in ["state"]):
+        return "State"
+    if any(k in cleaned for k in ["charge"]):
+        return "AdditionalCharges"
     return None
 
 def extract_masters_from_excel_bytes(file_bytes: bytes, default_category: str = "VehicleNo") -> Dict[str, List[str]]:
@@ -515,7 +635,8 @@ def extract_masters_from_excel_bytes(file_bytes: bytes, default_category: str = 
         "TransportName": set(),
         "MaterialName": set(),
         "PartyName": set(),
-        "Type/Mode": set()
+        "State": set(),
+        "AdditionalCharges": set()
     }
     seen_lower: Dict[str, Set[str]] = {k: set() for k in extracted}
 
@@ -572,7 +693,8 @@ def extract_masters_from_excel_bytes(file_bytes: bytes, default_category: str = 
                     if val_norm in {
                         "vehicle_no", "vehicleno", "transport_name", "transportname",
                         "material_name", "materialname", "party_name", "partyname",
-                        "type_mode", "typemode", "vehicle_number", "customer_name"
+                        "vehicle_number", "customer_name", "state", "state_name",
+                        "additional_charges", "charges"
                     }:
                         continue
 
@@ -610,12 +732,12 @@ def extract_masters_from_rows(rows: List[List[Any]], default_category: str = "Ve
                 if cell is not None and str(cell).strip():
                     non_empty_cols.add(c_idx)
 
-        valid_default = default_category if default_category in ["VehicleNo", "TransportName", "MaterialName", "PartyName", "Type/Mode"] else "VehicleNo"
+        valid_default = default_category if default_category in ["VehicleNo", "TransportName", "MaterialName", "PartyName", "State", "AdditionalCharges"] else "VehicleNo"
 
         if len(non_empty_cols) == 1:
             col_to_category[list(non_empty_cols)[0]] = valid_default
             first_val = str(rows[0][list(non_empty_cols)[0]]).strip().lower()
-            if any(k in first_val for k in ["vehicle", "transport", "material", "party", "type", "mode", "header", "name", "val"]):
+            if any(k in first_val for k in ["vehicle", "transport", "material", "party", "state", "charge", "header", "name", "val"]):
                 header_row_idx = 0
             else:
                 header_row_idx = -1
@@ -629,7 +751,8 @@ def extract_masters_from_rows(rows: List[List[Any]], default_category: str = "Ve
         "TransportName": set(),
         "MaterialName": set(),
         "PartyName": set(),
-        "Type/Mode": set()
+        "State": set(),
+        "AdditionalCharges": set()
     }
     seen_lower: Dict[str, Set[str]] = {k: set() for k in extracted}
 
@@ -655,7 +778,8 @@ def extract_masters_from_rows(rows: List[List[Any]], default_category: str = "Ve
                 if val_norm in {
                     "vehicle_no", "vehicleno", "transport_name", "transportname",
                     "material_name", "materialname", "party_name", "partyname",
-                    "type_mode", "typemode", "vehicle_number", "customer_name"
+                    "vehicle_number", "customer_name", "state", "state_name",
+                    "additional_charges", "charges"
                 }:
                     continue
 
@@ -710,10 +834,11 @@ async def process_master_extracted(extracted: Dict[str, List[str]], preview_only
 
     LABELS = {
         "VehicleNo": "Vehicle No",
-        "TransportName": "Transport",
-        "MaterialName": "Material",
+        "TransportName": "Transport Name",
+        "MaterialName": "Material Name",
         "PartyName": "Party Name",
-        "Type/Mode": "Type / Mode"
+        "State": "State",
+        "AdditionalCharges": "Additional Charges"
     }
 
     result_categories = {}
@@ -721,7 +846,7 @@ async def process_master_extracted(extracted: Dict[str, List[str]], preview_only
     total_new = 0
     total_duplicates = 0
 
-    for cat in ["VehicleNo", "TransportName", "MaterialName", "PartyName", "Type/Mode"]:
+    for cat in ["VehicleNo", "TransportName", "MaterialName", "PartyName", "State", "AdditionalCharges"]:
         items = extracted.get(cat, [])
         if not items:
             continue
@@ -785,14 +910,13 @@ async def process_master_extracted(extracted: Dict[str, List[str]], preview_only
 
 @router.get("/template")
 async def download_master_template(format: str = Query("xlsx", description="xlsx or csv")):
-    headers = ["Vehicle No", "Transport Name", "Material Name", "Party Name", "Type / Mode"]
+    headers = ["Vehicle No", "Transport Name", "Material Name", "Party Name", "State", "Additional Charges"]
     sample_rows = [
-        ["MP09DD5763", "VMPL", "10MM", "NAWAZ KHAN", "Royalty Sale"],
-        ["MP09HH9584", "MSK", "20MM", "ALTAMASH KHAN", "Without Royalty"],
-        ["MH12AB1234", "BALAJI LOGISTICS", "GSB", "SAGEER PATEL", "Credit Sale"],
-        ["RJ14CD5678", "SPEED FREIGHT", "M-SAND", "PUSHPENDRA", "Cash Sale"],
-        ["GJ01XY7890", "", "WMM", "ANIL AARIYA", "QR Sale"],
-        ["", "", "", "", "HR Loading"],
+        ["MP09DD5763", "VMPL", "10MM", "NAWAZ KHAN", "Madhya Pradesh", "Loading Charge"],
+        ["MP09HH9584", "MSK", "20MM", "ALTAMASH KHAN", "Rajasthan", "Weighbridge Charge"],
+        ["MH12AB1234", "BALAJI LOGISTICS", "GSB", "SAGEER PATEL", "Maharashtra", "Unloading Charge"],
+        ["RJ14CD5678", "SPEED FREIGHT", "M-SAND", "PUSHPENDRA", "Gujarat", "Royalty Pass"],
+        ["GJ01XY7890", "DELHI CARRIERS", "WMM", "ANIL AARIYA", "Delhi", "Toll Charge"],
     ]
 
     if format.lower() == "csv":

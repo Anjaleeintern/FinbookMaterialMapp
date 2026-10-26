@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import {
   View,
   Text,
@@ -90,58 +90,63 @@ const StepperInput = ({ label, value, onChange, step = 1, placeholder = '0' }) =
 };
 
 // Dropdown Component defined outside so it NEVER remounts
-const DropdownSelect = ({ label, required, value, options = [], onSelect, isMobile, onOpenPicker }) => {
-  if (Platform.OS === 'web' && !isMobile) {
+const DropdownSelect = ({ label, required, value, options = [], onSelect, isMobile, onOpenPicker, category }) => {
+  // If dropdown has a master category or on mobile, open searchable & creatable picker dialog
+  if (category || isMobile) {
     return (
       <View style={styles.formGroup}>
         <Text style={styles.fieldLabel}>
           {label} {required ? <Text style={{ color: '#ef4444' }}>*</Text> : null}
         </Text>
-        <select
-          value={value}
-          onChange={(e) => onSelect(e.target.value)}
-          style={{
-            height: 44,
-            border: '1px solid #cbd5e1',
-            borderRadius: 8,
-            paddingLeft: 12,
-            paddingRight: 12,
-            fontSize: 14,
-            color: value ? '#0f172a' : '#94a3b8',
-            backgroundColor: '#ffffff',
-            outline: 'none',
-            width: '100%',
-          }}
+        <TouchableOpacity
+          style={[styles.mobileDropdownTrigger, category && styles.searchableDropdownTrigger]}
+          onPress={() => onOpenPicker && onOpenPicker({ label, category, options, value, onSelect })}
+          activeOpacity={0.75}
         >
-          <option value="">Select {label}</option>
-          {options.map((opt) => (
-            <option key={opt} value={opt}>
-              {opt}
-            </option>
-          ))}
-        </select>
+          <Text
+            style={[styles.mobileDropdownValue, !value && styles.mobileDropdownPlaceholder]}
+            numberOfLines={1}
+          >
+            {value || `Select ${label}`}
+          </Text>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+            {category ? <Ionicons name="search" size={13} color="#94a3b8" /> : null}
+            <Ionicons name="chevron-down" size={18} color="#64748b" />
+          </View>
+        </TouchableOpacity>
       </View>
     );
   }
 
-  // Native Mobile Picker Trigger Button
+  // Desktop Web for fixed non-master lists (e.g. Sales Mode, Sale Type, GST Rate)
   return (
     <View style={styles.formGroup}>
       <Text style={styles.fieldLabel}>
         {label} {required ? <Text style={{ color: '#ef4444' }}>*</Text> : null}
       </Text>
-      <TouchableOpacity
-        style={styles.mobileDropdownTrigger}
-        onPress={() => onOpenPicker && onOpenPicker({ label, options, value, onSelect })}
+      <select
+        value={value}
+        onChange={(e) => onSelect(e.target.value)}
+        style={{
+          height: 44,
+          border: '1px solid #cbd5e1',
+          borderRadius: 8,
+          paddingLeft: 12,
+          paddingRight: 12,
+          fontSize: 14,
+          color: value ? '#0f172a' : '#94a3b8',
+          backgroundColor: '#ffffff',
+          outline: 'none',
+          width: '100%',
+        }}
       >
-        <Text
-          style={[styles.mobileDropdownValue, !value && styles.mobileDropdownPlaceholder]}
-          numberOfLines={1}
-        >
-          {value || `Select ${label}`}
-        </Text>
-        <Ionicons name="chevron-down" size={18} color="#64748b" />
-      </TouchableOpacity>
+        <option value="">Select {label}</option>
+        {options.map((opt) => (
+          <option key={opt} value={opt}>
+            {opt}
+          </option>
+        ))}
+      </select>
     </View>
   );
 };
@@ -158,35 +163,164 @@ export const DeliveryEntriesFormModal = ({ visible, onClose, onSuccess, masters 
   const [vehicleNo, setVehicleNo] = useState('');
   const [transportType, setTransportType] = useState('');
   const [typeMode, setTypeMode] = useState('');
+  const [saleType, setSaleType] = useState('');
   const [hrLoadingType, setHrLoadingType] = useState('');
   const [materialName, setMaterialName] = useState('');
   const [partyName, setPartyName] = useState('');
+  const [customerName, setCustomerName] = useState('');
   const [cum, setCum] = useState('0');
   const [etpNo, setEtpNo] = useState('');
   const [gWt, setGWt] = useState('0');
   const [tWt, setTWt] = useState('0');
   const [rate, setRate] = useState('0');
-  const [paymentMode, setPaymentMode] = useState('');
+  const [additionalChargesList, setAdditionalChargesList] = useState([
+    { id: '1', name: '', amount: '0' },
+  ]);
+
+  const handleAddChargeRow = () => {
+    setAdditionalChargesList((prev) => [
+      ...prev,
+      { id: String(Date.now() + Math.random()), name: '', amount: '0' },
+    ]);
+  };
+
+  const handleRemoveChargeRow = (id) => {
+    setAdditionalChargesList((prev) => {
+      if (prev.length <= 1) {
+        return [{ id: '1', name: '', amount: '0' }];
+      }
+      return prev.filter((item) => item.id !== id);
+    });
+  };
+
+  const handleUpdateChargeRow = (id, field, value) => {
+    setAdditionalChargesList((prev) =>
+      prev.map((item) => (item.id === id ? { ...item, [field]: value } : item))
+    );
+  };
+  const [partyState, setPartyState] = useState('Madhya Pradesh');
+  const [paymentMode, setPaymentMode] = useState('Cash');
   const [gstRate, setGstRate] = useState('0');
+  const [rateCalcUnit, setRateCalcUnit] = useState('MT'); // 'MT' | 'CUM'
 
   const [submitting, setSubmitting] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
 
-  // Mobile Picker Modal State
-  const [pickerConfig, setPickerConfig] = useState(null); // { label, options, value, onSelect }
+  // Local Options state initialized from masters prop
+  const [vehicleOptions, setVehicleOptions] = useState(masters?.VehicleNo || []);
+  const [transportOptions, setTransportOptions] = useState(masters?.TransportName || []);
+  const [partyOptions, setPartyOptions] = useState(masters?.PartyName || []);
+  const [materialOptions, setMaterialOptions] = useState(masters?.MaterialName || []);
+  const [additionalChargeOptions, setAdditionalChargeOptions] = useState(masters?.AdditionalCharges || []);
 
-  // Guarantee standard options are always present even before masters load
-  const standardTypeModes = [
-    'Royalty Sale',
-    'Without Royalty',
-    'Credit Sale',
-    'Cash Sale',
-    'QR Sale',
-    'HR Loading',
-  ];
-  const typeModeOptions = Array.from(
-    new Set([...(masters?.TypeMode || []), ...standardTypeModes])
-  );
+  // Search & Inline Create Picker Modal State
+  const [pickerConfig, setPickerConfig] = useState(null); // { label, category, options, value, onSelect }
+  const [pickerSearch, setPickerSearch] = useState('');
+  const [creatingMaster, setCreatingMaster] = useState(false);
+
+  // Sales Mode has strictly 2 options: Cash Sale or Credit Sale
+  const salesModeOptions = ['Cash Sale', 'Credit Sale'];
+
+  // Sale Type options: Royalty Sale or Without Royalty
+  const saleTypeOptions = ['Royalty Sale', 'Without Royalty'];
+
+  useEffect(() => {
+    if (masters) {
+      if (Array.isArray(masters.VehicleNo)) setVehicleOptions(masters.VehicleNo);
+      if (Array.isArray(masters.TransportName)) setTransportOptions(masters.TransportName);
+      if (Array.isArray(masters.PartyName)) setPartyOptions(masters.PartyName);
+      if (Array.isArray(masters.MaterialName)) setMaterialOptions(masters.MaterialName);
+      if (Array.isArray(masters.AdditionalCharges)) setAdditionalChargeOptions(masters.AdditionalCharges);
+    }
+  }, [masters]);
+
+  // Popup state for "+ Add New" Master Item
+  const [addMasterModal, setAddMasterModal] = useState(null); // { category, label, onCreated }
+  const [newMasterInputValue, setNewMasterInputValue] = useState('');
+  const [savingNewMaster, setSavingNewMaster] = useState(false);
+  const [addMasterError, setAddMasterError] = useState('');
+
+  const handleOpenAddMasterPopup = (category, label, initialVal = '') => {
+    setAddMasterError('');
+    setNewMasterInputValue(initialVal);
+    setAddMasterModal({
+      category,
+      label,
+      onCreated: (newVal) => {
+        if (pickerConfig && pickerConfig.onSelect) {
+          pickerConfig.onSelect(newVal);
+        }
+        setPickerConfig(null);
+        setPickerSearch('');
+      },
+    });
+  };
+
+  const handleSaveNewMasterPopup = async () => {
+    const trimmed = (newMasterInputValue || '').trim();
+    if (!trimmed) {
+      setAddMasterError('Please enter a value');
+      return;
+    }
+
+    setSavingNewMaster(true);
+    setAddMasterError('');
+    try {
+      const payload = {
+        category: addMasterModal.category,
+        value: trimmed,
+        status: 'Active',
+      };
+      if (addMasterModal.category === 'PartyName') {
+        payload.state = 'Madhya Pradesh';
+        payload.gst_type = 'Unregistered';
+      }
+      await api.addMasterItem(payload);
+
+      const cat = addMasterModal.category;
+      if (cat === 'VehicleNo') {
+        setVehicleOptions((prev) => (prev.includes(trimmed) ? prev : [...prev, trimmed].sort()));
+      } else if (cat === 'TransportName') {
+        setTransportOptions((prev) => (prev.includes(trimmed) ? prev : [...prev, trimmed].sort()));
+      } else if (cat === 'PartyName') {
+        setPartyOptions((prev) => (prev.includes(trimmed) ? prev : [...prev, trimmed].sort()));
+        setPartyState('Madhya Pradesh');
+      } else if (cat === 'MaterialName') {
+        setMaterialOptions((prev) => (prev.includes(trimmed) ? prev : [...prev, trimmed].sort()));
+      } else if (cat === 'AdditionalCharges') {
+        setAdditionalChargeOptions((prev) => (prev.includes(trimmed) ? prev : [...prev, trimmed].sort()));
+      }
+
+      if (addMasterModal.onCreated) {
+        addMasterModal.onCreated(trimmed);
+      }
+      setAddMasterModal(null);
+      setNewMasterInputValue('');
+    } catch (err) {
+      console.warn('Add master popup warning/fallback:', err);
+      const cat = addMasterModal.category;
+      if (cat === 'VehicleNo') {
+        setVehicleOptions((prev) => (prev.includes(trimmed) ? prev : [...prev, trimmed].sort()));
+      } else if (cat === 'TransportName') {
+        setTransportOptions((prev) => (prev.includes(trimmed) ? prev : [...prev, trimmed].sort()));
+      } else if (cat === 'PartyName') {
+        setPartyOptions((prev) => (prev.includes(trimmed) ? prev : [...prev, trimmed].sort()));
+        setPartyState('Madhya Pradesh');
+      } else if (cat === 'MaterialName') {
+        setMaterialOptions((prev) => (prev.includes(trimmed) ? prev : [...prev, trimmed].sort()));
+      } else if (cat === 'AdditionalCharges') {
+        setAdditionalChargeOptions((prev) => (prev.includes(trimmed) ? prev : [...prev, trimmed].sort()));
+      }
+
+      if (addMasterModal.onCreated) {
+        addMasterModal.onCreated(trimmed);
+      }
+      setAddMasterModal(null);
+      setNewMasterInputValue('');
+    } finally {
+      setSavingNewMaster(false);
+    }
+  };
 
   useEffect(() => {
     if (visible) {
@@ -198,38 +332,49 @@ export const DeliveryEntriesFormModal = ({ visible, onClose, onSuccess, masters 
       setVehicleNo('');
       setTransportType('');
       setTypeMode('');
+      setSaleType('');
       setHrLoadingType('');
       setMaterialName('');
       setPartyName('');
+      setCustomerName('');
+      setPartyState('Madhya Pradesh');
       setCum('0');
       setEtpNo('');
       setGWt('0');
       setTWt('0');
       setRate('0');
-      setPaymentMode('');
+      setAdditionalChargesList([{ id: '1', name: '', amount: '0' }]);
+      setPaymentMode('Cash');
       setGstRate('0');
+      setRateCalcUnit('MT');
       setErrorMsg('');
       setPickerConfig(null);
+      setPickerSearch('');
+
+      if (masters) {
+        if (Array.isArray(masters.VehicleNo)) setVehicleOptions(masters.VehicleNo);
+        if (Array.isArray(masters.TransportName)) setTransportOptions(masters.TransportName);
+        if (Array.isArray(masters.PartyName)) setPartyOptions(masters.PartyName);
+        if (Array.isArray(masters.MaterialName)) setMaterialOptions(masters.MaterialName);
+        if (Array.isArray(masters.AdditionalCharges)) setAdditionalChargeOptions(masters.AdditionalCharges);
+      }
     }
   }, [visible, masters]);
 
-  // When typeMode changes, automatically set sensible defaults for Payment Mode or HR Loading
+  // When partyName changes, automatically load its registered state from masters
   useEffect(() => {
-    if (isCashOrQrSale(typeMode)) {
-      const m = String(typeMode).trim().toLowerCase();
-      if (m.includes('qr')) {
-        setPaymentMode('QR');
-      } else {
-        setPaymentMode('Cash');
-      }
+    if (partyName && masters?.party_states && masters.party_states[partyName]) {
+      setPartyState(masters.party_states[partyName]);
+    }
+  }, [partyName, masters]);
+
+  // When typeMode changes, automatically set sensible defaults for Payment Mode
+  useEffect(() => {
+    if (typeMode === 'Cash Sale') {
+      if (!paymentMode) setPaymentMode('Cash');
     } else {
       setPaymentMode('');
-    }
-
-    if (typeMode === 'HR Loading') {
-      setHrLoadingType((prev) => (prev === 'Without Royalty' ? 'Without Royalty' : 'Royalty Sale'));
-    } else {
-      setHrLoadingType('');
+      setCustomerName('');
     }
   }, [typeMode]);
 
@@ -239,20 +384,70 @@ export const DeliveryEntriesFormModal = ({ visible, onClose, onSuccess, masters 
   const numCum = parseFloat(cum) || 0;
   const numRate = parseFloat(rate) || 0;
   const numGstRate = parseFloat(gstRate) || 0;
+  const numAddCharge = useMemo(() => {
+    return additionalChargesList.reduce((sum, item) => {
+      const amt = parseFloat(item.amount) || 0;
+      return sum + (isNaN(amt) ? 0 : amt);
+    }, 0);
+  }, [additionalChargesList]);
 
+  // Gross Weight and Tare Weight are in Tons by default (no division by 1000)
   const netWt = Math.max(0, Number((numGWt - numTWt).toFixed(2)));
-  const amount = netWt > 0 ? Number(((netWt / 1000) * numRate).toFixed(2)) : Number((numCum * numRate).toFixed(2));
 
-  const isGstVisible =
-    typeMode === 'Royalty Sale' ||
-    (typeMode === 'HR Loading' && (hrLoadingType === 'Royalty Sale' || hrLoadingType === 'With Royalty'));
+  // Amount: CUM * Rate if CUM, or NET WT * Rate if MT (Tons, no / 1000)
+  const amount = rateCalcUnit === 'CUM'
+    ? Number((numCum * numRate).toFixed(2))
+    : Number((netWt * numRate).toFixed(2));
+  const materialAmount = amount;
 
-  const gstAmount = isGstVisible ? Number(((amount * numGstRate) / 100).toFixed(2)) : 0;
-  const totalAmount = Number((amount + gstAmount).toFixed(2));
+  // Taxable base includes Amount + Additional Charge Amount
+  const taxableAmount = Number((amount + numAddCharge).toFixed(2));
+
+  // GST is now visible and calculated for all sale types
+  const isGstVisible = true;
+
+  // Determine if party state is MP (Intra-state: CGST + SGST) vs outside MP (Inter-state: IGST)
+  const isMP = !partyState || partyState.trim().toLowerCase() === 'madhya pradesh' || partyState.trim().toLowerCase() === 'mp';
+
+  let cgstRate = 0;
+  let cgstAmount = 0;
+  let sgstRate = 0;
+  let sgstAmount = 0;
+  let igstRate = 0;
+  let igstAmount = 0;
+  let gstAmount = 0;
+
+  if (numGstRate > 0) {
+    if (isMP) {
+      // Intra-state MP: CGST + SGST split 50-50
+      cgstRate = Number((numGstRate / 2).toFixed(2));
+      sgstRate = Number((numGstRate / 2).toFixed(2));
+      cgstAmount = Number(((taxableAmount * cgstRate) / 100).toFixed(2));
+      sgstAmount = Number(((taxableAmount * sgstRate) / 100).toFixed(2));
+      gstAmount = Number((cgstAmount + sgstAmount).toFixed(2));
+    } else {
+      // Inter-state (outside MP): Full IGST
+      igstRate = numGstRate;
+      igstAmount = Number(((taxableAmount * igstRate) / 100).toFixed(2));
+      gstAmount = igstAmount;
+    }
+  }
+
+  const totalAmount = Number((taxableAmount + gstAmount).toFixed(2));
 
   const handleSave = async () => {
-    if (!vehicleNo || !transportType || !typeMode || !materialName || !partyName) {
+    if (!vehicleNo || !transportType || !typeMode || !materialName) {
       setErrorMsg('Please select all required fields marked with *');
+      return;
+    }
+
+    if (typeMode === 'Credit Sale' && !partyName) {
+      setErrorMsg('Please select Party Name for Credit Sale');
+      return;
+    }
+
+    if (typeMode === 'Cash Sale' && !customerName.trim()) {
+      setErrorMsg('Please enter Customer Name for Cash Sale');
       return;
     }
 
@@ -260,26 +455,47 @@ export const DeliveryEntriesFormModal = ({ visible, onClose, onSuccess, masters 
     setErrorMsg('');
 
     try {
-      const finalPaymentMode = isCashOrQrSale(typeMode)
-        ? (paymentMode || (String(typeMode).toLowerCase().includes('qr') ? 'QR' : 'Cash'))
-        : null;
-
       const payload = {
         date,
         challan_no: challanNo,
         vehicle_no: vehicleNo,
         transport_type: transportType,
         type_mode: typeMode,
-        hr_loading_type: typeMode === 'HR Loading' ? hrLoadingType : null,
+        sale_type: saleType || null,
+        hr_loading_type: null,
         material_name: materialName,
-        party_name: partyName,
+        party_name: typeMode === 'Cash Sale' ? customerName.trim() : partyName,
+        customer_name: typeMode === 'Cash Sale' ? customerName.trim() : null,
+        party_state: partyState,
         cum: parseFloat(cum) || 0,
         etp_no: etpNo || '',
         g_wt: parseFloat(gWt) || 0,
         t_wt: parseFloat(tWt) || 0,
         rate: parseFloat(rate) || 0,
-        payment_mode: finalPaymentMode,
-        gst_rate: isGstVisible ? (parseFloat(gstRate) || 0) : 0,
+        rate_calc_unit: rateCalcUnit,
+        amount: amount,
+        additional_charges: additionalChargesList
+          .map((c) => ({
+            name: (c.name || '').trim(),
+            amount: parseFloat(c.amount) || 0,
+          }))
+          .filter((c) => c.name || c.amount > 0),
+        additional_charge_name: additionalChargesList
+          .map((c) => (c.name || '').trim())
+          .filter(Boolean)
+          .join(', ') || null,
+        additional_charge_amount: numAddCharge,
+        taxable_amount: taxableAmount,
+        payment_mode: typeMode === 'Cash Sale' ? (paymentMode || 'Cash') : null,
+        gst_rate: numGstRate,
+        gst_amount: gstAmount,
+        cgst_rate: cgstRate,
+        cgst_amount: cgstAmount,
+        sgst_rate: sgstRate,
+        sgst_amount: sgstAmount,
+        igst_rate: igstRate,
+        igst_amount: igstAmount,
+        total_amount: totalAmount,
       };
 
       const res = await api.createEntry(payload);
@@ -378,153 +594,136 @@ export const DeliveryEntriesFormModal = ({ visible, onClose, onSuccess, masters 
             <DropdownSelect
               label="VehicleNo"
               required={true}
+              category="VehicleNo"
               value={vehicleNo}
-              options={masters?.VehicleNo || []}
+              options={vehicleOptions}
               onSelect={setVehicleNo}
               isMobile={isMobile}
-              onOpenPicker={setPickerConfig}
+              onOpenPicker={(cfg) => {
+                setPickerSearch('');
+                setPickerConfig(cfg);
+              }}
             />
 
-            {/* 4. TransportType */}
+            {/* 4. Transport Name */}
             <DropdownSelect
-              label="TransportType"
+              label="Transport Name"
               required={true}
+              category="TransportName"
               value={transportType}
-              options={masters?.TransportName || []}
+              options={transportOptions}
               onSelect={setTransportType}
               isMobile={isMobile}
-              onOpenPicker={setPickerConfig}
+              onOpenPicker={(cfg) => {
+                setPickerSearch('');
+                setPickerConfig(cfg);
+              }}
             />
 
-            {/* 5. Type/Mode */}
+            {/* 5. Sales Mode (formerly Type/Mode) */}
             <DropdownSelect
-              label="Type/Mode"
+              label="Sales Mode"
               required={true}
               value={typeMode}
-              options={typeModeOptions}
+              options={salesModeOptions}
               onSelect={setTypeMode}
               isMobile={isMobile}
-              onOpenPicker={setPickerConfig}
+              onOpenPicker={(cfg) => {
+                setPickerSearch('');
+                setPickerConfig(cfg);
+              }}
             />
 
-            {/* 5.1 EASY & PROMINENT Payment Mode for Cash Sale / Case Sale / QR Sale */}
-            {isCashOrQrSale(typeMode) && (
-              <View style={styles.paymentSectionBlock}>
-                <View style={styles.paymentSectionHeader}>
-                  <Ionicons name="wallet-outline" size={18} color="#0284c7" />
-                  <Text style={styles.paymentSectionTitle}>
-                    Payment Mode <Text style={{ color: '#ef4444' }}>*</Text>
-                  </Text>
-                </View>
-                <Text style={styles.paymentSectionSub}>
-                  Select payment mode for {typeMode} (Cash or QR):
-                </Text>
-                <View style={[styles.paymentOptionsRow, isMobile && { flexDirection: 'column' }]}>
-                  <TouchableOpacity
-                    style={[
-                      styles.paymentOptionCard,
-                      paymentMode === 'Cash' && styles.paymentOptionCardActive,
-                    ]}
-                    onPress={() => setPaymentMode('Cash')}
-                    activeOpacity={0.8}
-                  >
-                    <View style={[styles.paymentRadio, paymentMode === 'Cash' && styles.paymentRadioActive]}>
-                      {paymentMode === 'Cash' && <View style={styles.paymentRadioInner} />}
-                    </View>
-                    <Ionicons
-                      name="cash-outline"
-                      size={22}
-                      color={paymentMode === 'Cash' ? '#0284c7' : '#64748b'}
-                      style={{ marginRight: 10 }}
-                    />
-                    <View style={{ flex: 1 }}>
-                      <Text
-                        style={[
-                          styles.paymentOptionLabel,
-                          paymentMode === 'Cash' && styles.paymentOptionLabelActive,
-                        ]}
-                      >
-                        Cash
-                      </Text>
-                      <Text style={styles.paymentOptionDesc}>Direct Cash Payment</Text>
-                    </View>
-                    {paymentMode === 'Cash' && (
-                      <Ionicons name="checkmark-circle" size={22} color="#0284c7" />
-                    )}
-                  </TouchableOpacity>
-
-                  <TouchableOpacity
-                    style={[
-                      styles.paymentOptionCard,
-                      paymentMode === 'QR' && styles.paymentOptionCardActive,
-                    ]}
-                    onPress={() => setPaymentMode('QR')}
-                    activeOpacity={0.8}
-                  >
-                    <View style={[styles.paymentRadio, paymentMode === 'QR' && styles.paymentRadioActive]}>
-                      {paymentMode === 'QR' && <View style={styles.paymentRadioInner} />}
-                    </View>
-                    <Ionicons
-                      name="qr-code-outline"
-                      size={22}
-                      color={paymentMode === 'QR' ? '#0284c7' : '#64748b'}
-                      style={{ marginRight: 10 }}
-                    />
-                    <View style={{ flex: 1 }}>
-                      <Text
-                        style={[
-                          styles.paymentOptionLabel,
-                          paymentMode === 'QR' && styles.paymentOptionLabelActive,
-                        ]}
-                      >
-                        QR Code / UPI
-                      </Text>
-                      <Text style={styles.paymentOptionDesc}>Online QR / UPI Scan</Text>
-                    </View>
-                    {paymentMode === 'QR' && (
-                      <Ionicons name="checkmark-circle" size={22} color="#0284c7" />
-                    )}
-                  </TouchableOpacity>
-                </View>
-              </View>
-            )}
-
-            {/* 6. HR Loading Type */}
-            {typeMode === 'HR Loading' && (
-              <View style={styles.conditionalBlock}>
-                <Text style={styles.conditionalTag}>HR Loading Options</Text>
+            {/* In case of Cash Sale: Payment Mode dropdown (Cash, QR, Bank) + Customer Name input box */}
+            {typeMode === 'Cash Sale' && (
+              <View style={{ marginBottom: 4 }}>
+                {/* Payment Mode Dropdown: Cash, QR, Bank */}
                 <DropdownSelect
-                  label="HR Loading Type"
+                  label="Payment Mode"
                   required={true}
-                  value={hrLoadingType}
-                  options={['Royalty Sale', 'Without Royalty']}
-                  onSelect={setHrLoadingType}
+                  value={paymentMode || 'Cash'}
+                  options={['Cash', 'QR', 'Bank']}
+                  onSelect={setPaymentMode}
                   isMobile={isMobile}
-                  onOpenPicker={setPickerConfig}
+                  onOpenPicker={(cfg) => {
+                    setPickerSearch('');
+                    setPickerConfig(cfg);
+                  }}
                 />
+
+                {/* Customer Name Text Input (Note removed) */}
+                <View style={styles.formGroup}>
+                  <Text style={styles.fieldLabel}>
+                    Customer Name <Text style={{ color: '#ef4444' }}>*</Text>
+                  </Text>
+                  <TextInput
+                    style={styles.textInput}
+                    value={customerName}
+                    onChangeText={setCustomerName}
+                    placeholder="Enter Customer Name"
+                    placeholderTextColor="#94a3b8"
+                  />
+                </View>
               </View>
             )}
 
-            {/* 7. MaterialName */}
+            {/* In case of Credit Sale: PartyName dropdown */}
+            {typeMode === 'Credit Sale' && (
+              <>
+                <DropdownSelect
+                  label="PartyName"
+                  required={true}
+                  category="PartyName"
+                  value={partyName}
+                  options={partyOptions}
+                  onSelect={setPartyName}
+                  isMobile={isMobile}
+                  onOpenPicker={(cfg) => {
+                    setPickerSearch('');
+                    setPickerConfig(cfg);
+                  }}
+                />
+
+                {partyName ? (
+                  <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: -6, marginBottom: 12, gap: 5 }}>
+                    <Ionicons name="location-outline" size={13} color="#0284c7" />
+                    <Text style={{ fontSize: 11.5, color: '#0369a1', fontWeight: '600' }}>
+                      Party State:{' '}
+                      <Text style={{ fontWeight: '700', color: '#0f172a' }}>{partyState || 'Madhya Pradesh'}</Text>
+                      {' '}({isMP ? 'Intra-State: CGST + SGST' : 'Inter-State: IGST'})
+                    </Text>
+                  </View>
+                ) : null}
+              </>
+            )}
+
+            {/* Sale Type Dropdown: Royalty Sale / Without Royalty */}
+            <DropdownSelect
+              label="Sale Type"
+              required={true}
+              value={saleType}
+              options={saleTypeOptions}
+              onSelect={setSaleType}
+              isMobile={isMobile}
+              onOpenPicker={(cfg) => {
+                setPickerSearch('');
+                setPickerConfig(cfg);
+              }}
+            />
+
+            {/* MaterialName */}
             <DropdownSelect
               label="MaterialName"
               required={true}
+              category="MaterialName"
               value={materialName}
-              options={masters?.MaterialName || []}
+              options={materialOptions}
               onSelect={setMaterialName}
               isMobile={isMobile}
-              onOpenPicker={setPickerConfig}
-            />
-
-            {/* 8. PartyName */}
-            <DropdownSelect
-              label="PartyName"
-              required={true}
-              value={partyName}
-              options={masters?.PartyName || []}
-              onSelect={setPartyName}
-              isMobile={isMobile}
-              onOpenPicker={setPickerConfig}
+              onOpenPicker={(cfg) => {
+                setPickerSearch('');
+                setPickerConfig(cfg);
+              }}
             />
 
             {/* 9. CUM */}
@@ -542,70 +741,263 @@ export const DeliveryEntriesFormModal = ({ visible, onClose, onSuccess, masters 
             </View>
 
             {/* 11. G.WT */}
-            <StepperInput label="G.WT (Gross Weight)" value={gWt} onChange={setGWt} step={100} />
+            <StepperInput label="G.WT (Gross Weight - Tons)" value={gWt} onChange={setGWt} step={1} />
 
             {/* 12. T.WT */}
-            <StepperInput label="T.WT (Tare Weight)" value={tWt} onChange={setTWt} step={100} />
+            <StepperInput label="T.WT (Tare Weight - Tons)" value={tWt} onChange={setTWt} step={1} />
 
             {/* 13. NET WT */}
             <View style={styles.formGroup}>
               <Text style={styles.fieldLabel}>NET WT (Calculated: G.WT - T.WT)</Text>
               <View style={styles.calculatedBox}>
-                <Text style={styles.calculatedValue}>{netWt.toLocaleString()} kg</Text>
+                <Text style={styles.calculatedValue}>{netWt.toLocaleString()} Tons</Text>
+              </View>
+            </View>
+
+            {/* RATE CALCULATION Fields Toggle (Directly above Rate) */}
+            <View style={styles.formGroup}>
+              <Text style={styles.fieldLabel}>RATE CALCULATION</Text>
+              <View style={styles.toggleContainer}>
+                <TouchableOpacity
+                  style={[styles.toggleBtn, rateCalcUnit === 'MT' && styles.toggleBtnActive]}
+                  onPress={() => setRateCalcUnit('MT')}
+                  activeOpacity={0.7}
+                >
+                  <Ionicons
+                    name="scale-outline"
+                    size={16}
+                    color={rateCalcUnit === 'MT' ? '#ffffff' : '#64748b'}
+                    style={{ marginRight: 6 }}
+                  />
+                  <Text style={[styles.toggleBtnText, rateCalcUnit === 'MT' && styles.toggleBtnTextActive]}>
+                    MT (Net WT × Rate)
+                  </Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  style={[styles.toggleBtn, rateCalcUnit === 'CUM' && styles.toggleBtnActive]}
+                  onPress={() => setRateCalcUnit('CUM')}
+                  activeOpacity={0.7}
+                >
+                  <Ionicons
+                    name="cube-outline"
+                    size={16}
+                    color={rateCalcUnit === 'CUM' ? '#ffffff' : '#64748b'}
+                    style={{ marginRight: 6 }}
+                  />
+                  <Text style={[styles.toggleBtnText, rateCalcUnit === 'CUM' && styles.toggleBtnTextActive]}>
+                    CUM (CUM × Rate)
+                  </Text>
+                </TouchableOpacity>
               </View>
             </View>
 
             {/* 14. Rate */}
             <StepperInput label="Rate" value={rate} onChange={setRate} step={10} />
 
-            {/* 15. Amount */}
+            {/* 15. Amount (Directly calculated after Rate) */}
             <View style={styles.formGroup}>
-              <Text style={styles.fieldLabel}>Amount (NET WT × Rate or CUM × Rate)</Text>
+              <Text style={styles.fieldLabel}>
+                Amount ({rateCalcUnit === 'CUM' ? 'CUM × Rate' : 'NET WT × Rate'})
+              </Text>
               <View style={styles.calculatedBox}>
-                <Text style={styles.calculatedValue}>₹ {amount.toLocaleString()}</Text>
+                <Text style={styles.calculatedValue}>
+                  ₹ {amount.toLocaleString()}
+                  <Text style={{ fontSize: 12, fontWeight: '400', color: '#64748b' }}>
+                    {' '}
+                    ({rateCalcUnit === 'CUM' ? `${numCum} CUM × ₹${numRate}` : `${netWt} MT × ₹${numRate}`})
+                  </Text>
+                </Text>
               </View>
             </View>
 
-            {/* Payment Summary Badge near Amount */}
-            {isCashOrQrSale(typeMode) && (
+            {/* 16. Additional Charges Section (Supports multiple charges with single + Add More button) */}
+            <View style={styles.addChargesSection}>
+              <View style={styles.addChargesHeaderRow}>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                  <Ionicons name="receipt-outline" size={17} color="#0284c7" />
+                  <Text style={styles.addChargesSectionTitle}>
+                    Additional Charges {additionalChargesList.length > 1 ? `(${additionalChargesList.length})` : ''}
+                  </Text>
+                </View>
+              </View>
+
+              {additionalChargesList.map((chargeRow, idx) => (
+                <View key={chargeRow.id} style={styles.chargeItemCard}>
+                  {additionalChargesList.length > 1 && (
+                    <View style={styles.chargeItemCardHeader}>
+                      <View style={styles.chargeBadge}>
+                        <Text style={styles.chargeBadgeText}>Charge #{idx + 1}</Text>
+                      </View>
+                      <TouchableOpacity
+                        style={styles.removeChargeIconBtn}
+                        onPress={() => handleRemoveChargeRow(chargeRow.id)}
+                        hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                      >
+                        <Ionicons name="trash-outline" size={15} color="#ef4444" />
+                        <Text style={styles.removeChargeText}>Remove</Text>
+                      </TouchableOpacity>
+                    </View>
+                  )}
+
+                  <DropdownSelect
+                    label={additionalChargesList.length > 1 ? `Additional Charge #${idx + 1}` : 'Additional Charge'}
+                    category="AdditionalCharges"
+                    value={chargeRow.name}
+                    options={additionalChargeOptions}
+                    onSelect={(val) => handleUpdateChargeRow(chargeRow.id, 'name', val)}
+                    isMobile={isMobile}
+                    onOpenPicker={(cfg) => {
+                      setPickerSearch('');
+                      setPickerConfig({
+                        ...cfg,
+                        onSelect: (val) => handleUpdateChargeRow(chargeRow.id, 'name', val),
+                      });
+                    }}
+                  />
+
+                  <StepperInput
+                    label={additionalChargesList.length > 1 ? `Charge #${idx + 1} Amount (₹)` : 'Additional Charge Amount (₹)'}
+                    value={chargeRow.amount}
+                    onChange={(val) => handleUpdateChargeRow(chargeRow.id, 'amount', val)}
+                    step={50}
+                    placeholder="0"
+                  />
+                </View>
+              ))}
+
+              {/* Show single + Add More button ONLY after at least one charge is selected / added */}
+              {additionalChargesList.some((c) => (c.name && c.name.trim()) || (parseFloat(c.amount) || 0) > 0) && (
+                <TouchableOpacity
+                  style={styles.addChargeRowBtn}
+                  onPress={handleAddChargeRow}
+                  activeOpacity={0.75}
+                >
+                  <Ionicons name="add-circle" size={19} color="#0284c7" />
+                  <Text style={styles.addChargeRowBtnText}>+ Add More</Text>
+                </TouchableOpacity>
+              )}
+            </View>
+
+            {/* Taxable Amount Summary */}
+            {numAddCharge > 0 && (
+              <View style={styles.formGroup}>
+                <Text style={styles.fieldLabel}>
+                  Taxable Base Amount (Amount + Total Addl Charges: ₹{numAddCharge.toLocaleString()})
+                </Text>
+                <View style={styles.calculatedBox}>
+                  <Text style={[styles.calculatedValue, { color: '#0369a1' }]}>
+                    ₹ {taxableAmount.toLocaleString()}
+                  </Text>
+                </View>
+              </View>
+            )}
+
+            {/* Payment Summary Badge near Amount for Cash Sale */}
+            {typeMode === 'Cash Sale' && (
               <View style={styles.paymentSummaryBadge}>
                 <Ionicons
-                  name={paymentMode === 'QR' ? 'qr-code-outline' : 'cash-outline'}
+                  name={paymentMode === 'Bank' ? 'business-outline' : paymentMode === 'QR' ? 'qr-code-outline' : 'cash-outline'}
                   size={16}
                   color="#0284c7"
                 />
                 <Text style={styles.paymentSummaryBadgeText}>
-                  Selected Payment Mode:{' '}
+                  Payment Mode:{' '}
                   <Text style={{ fontWeight: '700', color: '#0369a1' }}>
-                    {paymentMode === 'QR' ? 'QR Code / UPI' : 'Cash'}
+                    {paymentMode || 'Cash'}
                   </Text>
+                  {customerName ? (
+                    <Text style={{ color: '#475569', fontWeight: '400' }}>
+                      {' '}• Customer: <Text style={{ fontWeight: '600', color: '#0f172a' }}>{customerName}</Text>
+                    </Text>
+                  ) : null}
                 </Text>
               </View>
             )}
 
-            {/* 17, 18, 19. GST Fields */}
-            {isGstVisible && (
-              <View style={styles.conditionalBlock}>
+            {/* 17, 18, 19. GST Fields (Available & Calculated for ALL Sale Types) */}
+            <View style={styles.conditionalBlock}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8, flexWrap: 'wrap', gap: 6 }}>
                 <Text style={styles.conditionalTag}>GST Tax Calculations</Text>
-                <StepperInput label="GST Rate (%)" value={gstRate} onChange={setGstRate} step={1} />
-
-                <View style={styles.formGroup}>
-                  <Text style={styles.fieldLabel}>GST Amount (Amount × GST Rate / 100)</Text>
-                  <View style={styles.calculatedBox}>
-                    <Text style={styles.calculatedValue}>₹ {gstAmount.toLocaleString()}</Text>
-                  </View>
-                </View>
-
-                <View style={styles.formGroup}>
-                  <Text style={styles.fieldLabel}>Total Amount (Amount + GST Amount)</Text>
-                  <View style={[styles.calculatedBox, { backgroundColor: '#f0fdf4', borderColor: '#bbf7d0' }]}>
-                    <Text style={[styles.calculatedValue, { color: '#16a34a', fontSize: 16 }]}>
-                      ₹ {totalAmount.toLocaleString()}
-                    </Text>
-                  </View>
+                <View style={{
+                  paddingHorizontal: 8,
+                  paddingVertical: 3,
+                  borderRadius: 4,
+                  backgroundColor: isMP ? '#eff6ff' : '#fef3c7',
+                  borderWidth: 1,
+                  borderColor: isMP ? '#bfdbfe' : '#fde68a',
+                }}>
+                  <Text style={{ fontSize: 11, fontWeight: '700', color: isMP ? '#1d4ed8' : '#b45309' }}>
+                    {isMP ? 'Intra-State (MP): CGST + SGST' : `Inter-State (${partyState}): IGST`}
+                  </Text>
                 </View>
               </View>
-            )}
+
+              {/* Taxable Base on which GST is calculated */}
+              <View style={styles.formGroup}>
+                <Text style={styles.fieldLabel}>Taxable Base Amount (Amount + Addl Charge)</Text>
+                <View style={styles.calculatedBox}>
+                  <Text style={styles.calculatedValue}>₹ {taxableAmount.toLocaleString()}</Text>
+                </View>
+              </View>
+
+              {/* GST Rate Dropdown with [0%, 5%, 12%, 18%] */}
+              <DropdownSelect
+                label="GST Rate (%)"
+                value={`${gstRate}%`}
+                options={['0%', '5%', '12%', '18%']}
+                onSelect={(val) => {
+                  const clean = String(val).replace('%', '').trim();
+                  setGstRate(clean);
+                }}
+                isMobile={isMobile}
+                onOpenPicker={(cfg) => {
+                  setPickerSearch('');
+                  setPickerConfig(cfg);
+                }}
+              />
+
+              {/* State-wise Split: CGST + SGST for MP, IGST for other states */}
+              {isMP ? (
+                <View style={{ flexDirection: isMobile ? 'column' : 'row', gap: 10 }}>
+                  <View style={[styles.formGroup, { flex: 1 }]}>
+                    <Text style={styles.fieldLabel}>CGST ({cgstRate}%)</Text>
+                    <View style={styles.calculatedBox}>
+                      <Text style={styles.calculatedValue}>₹ {cgstAmount.toLocaleString()}</Text>
+                    </View>
+                  </View>
+                  <View style={[styles.formGroup, { flex: 1 }]}>
+                    <Text style={styles.fieldLabel}>SGST ({sgstRate}%)</Text>
+                    <View style={styles.calculatedBox}>
+                      <Text style={styles.calculatedValue}>₹ {sgstAmount.toLocaleString()}</Text>
+                    </View>
+                  </View>
+                </View>
+              ) : (
+                <View style={styles.formGroup}>
+                  <Text style={styles.fieldLabel}>IGST ({igstRate}%)</Text>
+                  <View style={styles.calculatedBox}>
+                    <Text style={styles.calculatedValue}>₹ {igstAmount.toLocaleString()}</Text>
+                  </View>
+                </View>
+              )}
+
+              <View style={styles.formGroup}>
+                <Text style={styles.fieldLabel}>Total GST Amount</Text>
+                <View style={styles.calculatedBox}>
+                  <Text style={styles.calculatedValue}>₹ {gstAmount.toLocaleString()}</Text>
+                </View>
+              </View>
+
+              <View style={styles.formGroup}>
+                <Text style={styles.fieldLabel}>Total Amount (Taxable Amount + GST Amount)</Text>
+                <View style={[styles.calculatedBox, { backgroundColor: '#f0fdf4', borderColor: '#bbf7d0' }]}>
+                  <Text style={[styles.calculatedValue, { color: '#16a34a', fontSize: 16 }]}>
+                    ₹ {totalAmount.toLocaleString()}
+                  </Text>
+                </View>
+              </View>
+            </View>
 
             <View style={{ height: 20 }} />
           </ScrollView>
@@ -631,25 +1023,138 @@ export const DeliveryEntriesFormModal = ({ visible, onClose, onSuccess, masters 
             </View>
           )}
 
-          {/* Bottom Sheet Picker Modal for Mobile */}
+          {/* Searchable & Inline Creatable Picker Dialog for Web & Mobile */}
           {pickerConfig && (
-            <Modal visible={true} transparent={true} animationType="slide" onRequestClose={() => setPickerConfig(null)}>
-              <View style={styles.pickerBackdrop}>
-                <TouchableWithoutFeedback onPress={() => setPickerConfig(null)}>
+            <Modal
+              visible={true}
+              transparent={true}
+              animationType="fade"
+              onRequestClose={() => {
+                setPickerConfig(null);
+                setPickerSearch('');
+              }}
+            >
+              <View style={[styles.pickerBackdrop, !isMobile && styles.pickerBackdropDesktop]}>
+                <TouchableWithoutFeedback
+                  onPress={() => {
+                    setPickerConfig(null);
+                    setPickerSearch('');
+                  }}
+                >
                   <View style={styles.pickerBackdropTouch} />
                 </TouchableWithoutFeedback>
-                <View style={[styles.pickerSheet, { paddingBottom: Math.max(bottomSafe + 16, 24) }]}>
+
+                <View style={[styles.pickerSheet, !isMobile && styles.pickerSheetDesktop]}>
+                  {/* Picker Header */}
                   <View style={styles.pickerHeader}>
-                    <Text style={styles.pickerTitle}>Select {pickerConfig.label}</Text>
-                    <TouchableOpacity onPress={() => setPickerConfig(null)} style={{ padding: 4 }}>
+                    <View style={{ flexDirection: 'row', alignItems: 'center', flex: 1, gap: 8 }}>
+                      <Ionicons
+                        name={pickerConfig.category ? 'layers-outline' : 'list-outline'}
+                        size={18}
+                        color="#0284c7"
+                      />
+                      <Text style={styles.pickerTitle} numberOfLines={1}>
+                        Select {pickerConfig.label}
+                      </Text>
+                    </View>
+                    <TouchableOpacity
+                      onPress={() => {
+                        setPickerConfig(null);
+                        setPickerSearch('');
+                      }}
+                      style={{ padding: 4 }}
+                    >
                       <Ionicons name="close" size={22} color="#64748b" />
                     </TouchableOpacity>
                   </View>
-                  <ScrollView style={styles.pickerList}>
-                    {pickerConfig.options.length === 0 ? (
-                      <Text style={styles.noOptionsText}>No items available in {pickerConfig.label}.</Text>
-                    ) : (
-                      pickerConfig.options.map((opt) => {
+
+                  {/* Search Input Box ONLY for Master Dropdowns */}
+                  {pickerConfig.category ? (
+                    <View style={styles.pickerSearchWrap}>
+                      <Ionicons name="search" size={16} color="#0284c7" style={{ marginRight: 8 }} />
+                      <TextInput
+                        style={styles.pickerSearchInput}
+                        placeholder={`Search ${pickerConfig.label} or type new...`}
+                        placeholderTextColor="#94a3b8"
+                        value={pickerSearch}
+                        onChangeText={setPickerSearch}
+                        autoFocus={true}
+                      />
+                      {pickerSearch ? (
+                        <TouchableOpacity
+                          onPress={() => setPickerSearch('')}
+                          hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                        >
+                          <Ionicons name="close-circle" size={16} color="#94a3b8" />
+                        </TouchableOpacity>
+                      ) : null}
+                    </View>
+                  ) : null}
+
+                  {/* Add New Option Button (Opens popup modal with input box & Save button) */}
+                  {pickerConfig.category && (
+                    <TouchableOpacity
+                      style={styles.pickerOpenAddBtn}
+                      onPress={() =>
+                        handleOpenAddMasterPopup(
+                          pickerConfig.category,
+                          pickerConfig.label,
+                          pickerSearch.trim()
+                        )
+                      }
+                      activeOpacity={0.8}
+                    >
+                      <Ionicons name="add-circle" size={18} color="#0284c7" style={{ marginRight: 6 }} />
+                      <Text style={styles.pickerOpenAddBtnText}>
+                        {pickerSearch.trim() &&
+                        !pickerConfig.options.some(
+                          (opt) => String(opt).trim().toLowerCase() === pickerSearch.trim().toLowerCase()
+                        )
+                          ? `+ Add "${pickerSearch.trim()}"`
+                          : `+ Add New ${pickerConfig.label}`}
+                      </Text>
+                    </TouchableOpacity>
+                  )}
+
+                  {/* Options List */}
+                  <ScrollView style={styles.pickerList} keyboardShouldPersistTaps="handled">
+                    {(() => {
+                      const query = pickerSearch.trim().toLowerCase();
+                      const filtered = query && pickerConfig.category
+                        ? pickerConfig.options.filter((opt) => String(opt).toLowerCase().includes(query))
+                        : pickerConfig.options;
+
+                      if (filtered.length === 0) {
+                        return (
+                          <View style={styles.pickerEmptyWrap}>
+                            <Ionicons name="search-outline" size={30} color="#cbd5e1" style={{ marginBottom: 6 }} />
+                            <Text style={styles.noOptionsText}>
+                              {pickerSearch.trim()
+                                ? `No ${pickerConfig.label} found for "${pickerSearch.trim()}".`
+                                : `No items available in ${pickerConfig.label}.`}
+                            </Text>
+                            {pickerConfig.category && (
+                              <TouchableOpacity
+                                style={[styles.pickerOpenAddBtn, { marginHorizontal: 0, marginTop: 12 }]}
+                                onPress={() =>
+                                  handleOpenAddMasterPopup(
+                                    pickerConfig.category,
+                                    pickerConfig.label,
+                                    pickerSearch.trim()
+                                  )
+                                }
+                              >
+                                <Ionicons name="add" size={16} color="#0284c7" style={{ marginRight: 4 }} />
+                                <Text style={styles.pickerOpenAddBtnText}>
+                                  Click here to Add New {pickerConfig.label}
+                                </Text>
+                              </TouchableOpacity>
+                            )}
+                          </View>
+                        );
+                      }
+
+                      return filtered.map((opt) => {
                         const isSelected = pickerConfig.value === opt;
                         return (
                           <TouchableOpacity
@@ -658,17 +1163,101 @@ export const DeliveryEntriesFormModal = ({ visible, onClose, onSuccess, masters 
                             onPress={() => {
                               pickerConfig.onSelect(opt);
                               setPickerConfig(null);
+                              setPickerSearch('');
                             }}
+                            activeOpacity={0.7}
                           >
                             <Text style={[styles.pickerItemText, isSelected && styles.pickerItemTextActive]}>
                               {opt}
                             </Text>
-                            {isSelected && <Ionicons name="checkmark" size={20} color="#0284c7" />}
+                            {isSelected && <Ionicons name="checkmark-circle" size={19} color="#0284c7" />}
                           </TouchableOpacity>
                         );
-                      })
-                    )}
+                      });
+                    })()}
                   </ScrollView>
+                </View>
+              </View>
+            </Modal>
+          )}
+
+          {/* Add New Master Item Popup Window with Input Box and Save Button */}
+          {addMasterModal && (
+            <Modal
+              visible={true}
+              transparent={true}
+              animationType="fade"
+              onRequestClose={() => {
+                if (!savingNewMaster) setAddMasterModal(null);
+              }}
+            >
+              <View style={styles.addMasterOverlay}>
+                <View style={styles.addMasterCard}>
+                  {/* Popup Header */}
+                  <View style={styles.addMasterHeader}>
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                      <View style={styles.addMasterIconCircle}>
+                        <Ionicons name="add" size={18} color="#0284c7" />
+                      </View>
+                      <Text style={styles.addMasterTitle}>
+                        Add New {addMasterModal.label}
+                      </Text>
+                    </View>
+                    <TouchableOpacity
+                      onPress={() => {
+                        if (!savingNewMaster) setAddMasterModal(null);
+                      }}
+                      style={{ padding: 4 }}
+                    >
+                      <Ionicons name="close" size={20} color="#64748b" />
+                    </TouchableOpacity>
+                  </View>
+
+                  {/* Popup Body: Input Box */}
+                  <View style={styles.addMasterBody}>
+                    <Text style={styles.addMasterLabel}>
+                      {addMasterModal.label} Name <Text style={{ color: '#ef4444' }}>*</Text>
+                    </Text>
+                    <TextInput
+                      style={styles.addMasterInput}
+                      placeholder={`Enter ${addMasterModal.label}...`}
+                      placeholderTextColor="#94a3b8"
+                      value={newMasterInputValue}
+                      onChangeText={setNewMasterInputValue}
+                      autoFocus={true}
+                      onSubmitEditing={handleSaveNewMasterPopup}
+                    />
+                    {addMasterError ? (
+                      <Text style={styles.addMasterError}>{addMasterError}</Text>
+                    ) : null}
+                    <Text style={styles.addMasterHint}>
+                      Saved directly to MongoDB masters and selected in your entry.
+                    </Text>
+                  </View>
+
+                  {/* Popup Footer: Cancel and Save Buttons */}
+                  <View style={styles.addMasterFooter}>
+                    <TouchableOpacity
+                      style={styles.addMasterCancelBtn}
+                      onPress={() => setAddMasterModal(null)}
+                      disabled={savingNewMaster}
+                    >
+                      <Text style={styles.addMasterCancelText}>Cancel</Text>
+                    </TouchableOpacity>
+
+                    <TouchableOpacity
+                      style={[styles.addMasterSaveBtn, savingNewMaster && { opacity: 0.7 }]}
+                      onPress={handleSaveNewMasterPopup}
+                      disabled={savingNewMaster}
+                    >
+                      {savingNewMaster ? (
+                        <ActivityIndicator size="small" color="#ffffff" style={{ marginRight: 6 }} />
+                      ) : (
+                        <Ionicons name="checkmark-circle" size={16} color="#ffffff" style={{ marginRight: 6 }} />
+                      )}
+                      <Text style={styles.addMasterSaveText}>Save</Text>
+                    </TouchableOpacity>
+                  </View>
                 </View>
               </View>
             </Modal>
@@ -1023,15 +1612,233 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(15, 23, 42, 0.6)',
     justifyContent: 'flex-end',
   },
+  pickerBackdropDesktop: {
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
   pickerBackdropTouch: {
-    flex: 1,
+    position: 'absolute',
+    top: 0,
+    bottom: 0,
+    left: 0,
+    right: 0,
   },
   pickerSheet: {
     backgroundColor: '#ffffff',
     borderTopLeftRadius: 16,
     borderTopRightRadius: 16,
-    maxHeight: '60%',
+    maxHeight: '75%',
     paddingBottom: 20,
+    width: '100%',
+  },
+  pickerSheetDesktop: {
+    width: 480,
+    maxHeight: 540,
+    borderRadius: 14,
+    borderTopLeftRadius: 14,
+    borderTopRightRadius: 14,
+    alignSelf: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 12 },
+    shadowOpacity: 0.25,
+    shadowRadius: 24,
+    elevation: 10,
+  },
+  searchableDropdownTrigger: {
+    backgroundColor: '#ffffff',
+  },
+  pickerSearchWrap: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#f8fafc',
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+    borderRadius: 8,
+    marginHorizontal: 16,
+    marginTop: 12,
+    marginBottom: 8,
+    paddingHorizontal: 12,
+    height: 42,
+  },
+  pickerSearchInput: {
+    flex: 1,
+    fontSize: 14,
+    color: '#0f172a',
+    height: '100%',
+    ...Platform.select({
+      web: {
+        outlineStyle: 'none',
+      },
+    }),
+  },
+  pickerAddNewCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#f0f9ff',
+    borderWidth: 1.5,
+    borderColor: '#bae6fd',
+    borderRadius: 10,
+    marginHorizontal: 16,
+    marginBottom: 8,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+  },
+  pickerAddNewIconWrap: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: '#0284c7',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 10,
+  },
+  pickerAddNewTitle: {
+    fontSize: 13.5,
+    fontWeight: '700',
+    color: '#0284c7',
+  },
+  pickerAddNewSub: {
+    fontSize: 11,
+    color: '#64748b',
+    marginTop: 1,
+  },
+  pickerOpenAddBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#f0f9ff',
+    borderWidth: 1.5,
+    borderColor: '#bae6fd',
+    borderRadius: 8,
+    marginHorizontal: 16,
+    marginBottom: 10,
+    paddingVertical: 10,
+    paddingHorizontal: 14,
+  },
+  pickerOpenAddBtnText: {
+    fontSize: 13.5,
+    fontWeight: '700',
+    color: '#0284c7',
+  },
+  addMasterOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(15, 23, 42, 0.7)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20,
+  },
+  addMasterCard: {
+    width: '100%',
+    maxWidth: 440,
+    backgroundColor: '#ffffff',
+    borderRadius: 14,
+    overflow: 'hidden',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.3,
+    shadowRadius: 20,
+    elevation: 12,
+  },
+  addMasterHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 18,
+    paddingVertical: 14,
+    borderBottomWidth: 1,
+    borderBottomColor: '#f1f5f9',
+  },
+  addMasterIconCircle: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: '#e0f2fe',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  addMasterTitle: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: '#0f172a',
+  },
+  addMasterBody: {
+    padding: 18,
+  },
+  addMasterLabel: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#334155',
+    marginBottom: 8,
+  },
+  addMasterInput: {
+    height: 44,
+    borderWidth: 1.5,
+    borderColor: '#cbd5e1',
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    fontSize: 14,
+    color: '#0f172a',
+    backgroundColor: '#ffffff',
+    ...Platform.select({
+      web: {
+        outlineStyle: 'none',
+      },
+    }),
+  },
+  addMasterError: {
+    color: '#ef4444',
+    fontSize: 12,
+    marginTop: 6,
+    fontWeight: '500',
+  },
+  addMasterHint: {
+    fontSize: 11.5,
+    color: '#64748b',
+    marginTop: 8,
+  },
+  addMasterFooter: {
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+    gap: 10,
+    paddingHorizontal: 18,
+    paddingVertical: 14,
+    backgroundColor: '#f8fafc',
+    borderTopWidth: 1,
+    borderTopColor: '#f1f5f9',
+  },
+  addMasterCancelBtn: {
+    paddingHorizontal: 16,
+    paddingVertical: 9,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#cbd5e1',
+    backgroundColor: '#ffffff',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  addMasterCancelText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#64748b',
+  },
+  addMasterSaveBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 20,
+    paddingVertical: 9,
+    borderRadius: 8,
+    backgroundColor: '#0284c7',
+  },
+  addMasterSaveText: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#ffffff',
+  },
+  pickerEmptyWrap: {
+    padding: 24,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   pickerHeader: {
     flexDirection: 'row',
@@ -1048,12 +1855,13 @@ const styles = StyleSheet.create({
   },
   pickerList: {
     paddingHorizontal: 8,
+    maxHeight: 320,
   },
   pickerItem: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingVertical: 14,
+    paddingVertical: 13,
     paddingHorizontal: 16,
     borderBottomWidth: 1,
     borderBottomColor: '#f8fafc',
@@ -1063,7 +1871,7 @@ const styles = StyleSheet.create({
     borderRadius: 8,
   },
   pickerItemText: {
-    fontSize: 15,
+    fontSize: 14.5,
     color: '#334155',
     fontWeight: '500',
   },
@@ -1072,9 +1880,136 @@ const styles = StyleSheet.create({
     fontWeight: '700',
   },
   noOptionsText: {
-    padding: 20,
     color: '#94a3b8',
     textAlign: 'center',
     fontSize: 14,
+  },
+  toggleContainer: {
+    flexDirection: 'row',
+    backgroundColor: '#f1f5f9',
+    borderRadius: 8,
+    padding: 4,
+    borderWidth: 1,
+    borderColor: '#cbd5e1',
+    gap: 6,
+  },
+  toggleBtn: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 9,
+    borderRadius: 6,
+    backgroundColor: 'transparent',
+  },
+  toggleBtnActive: {
+    backgroundColor: '#0284c7',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.1,
+    shadowRadius: 2,
+    elevation: 2,
+  },
+  toggleBtnText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#64748b',
+  },
+  toggleBtnTextActive: {
+    color: '#ffffff',
+    fontWeight: '700',
+  },
+  addChargesSection: {
+    backgroundColor: '#f8fafc',
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+    padding: 12,
+    marginBottom: 16,
+  },
+  addChargesHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 10,
+  },
+  addChargesSectionTitle: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#0f172a',
+  },
+  addChargeHeaderBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: '#e0f2fe',
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 6,
+  },
+  addChargeHeaderBtnText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#0284c7',
+  },
+  chargeItemCard: {
+    backgroundColor: '#ffffff',
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+    padding: 10,
+    marginBottom: 10,
+  },
+  chargeItemCardHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 8,
+    paddingBottom: 6,
+    borderBottomWidth: 1,
+    borderBottomColor: '#f1f5f9',
+  },
+  chargeBadge: {
+    backgroundColor: '#f1f5f9',
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 4,
+  },
+  chargeBadgeText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#475569',
+  },
+  removeChargeIconBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: 6,
+    paddingVertical: 3,
+    borderRadius: 4,
+    backgroundColor: '#fef2f2',
+  },
+  removeChargeText: {
+    fontSize: 11.5,
+    fontWeight: '600',
+    color: '#ef4444',
+  },
+  addChargeRowBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    backgroundColor: '#f0f9ff',
+    borderWidth: 1,
+    borderColor: '#bae6fd',
+    borderStyle: 'dashed',
+    paddingVertical: 10,
+    borderRadius: 8,
+    marginTop: 2,
+  },
+  addChargeRowBtnText: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#0284c7',
   },
 });

@@ -66,13 +66,37 @@ async def connect_to_mongo():
             )
 
         # 5. Ensure standard Type/Mode masters are flagged as is_system=True
-        for std in ["Royalty Sale", "Without Royalty", "Credit Sale", "Cash Sale", "QR Sale", "HR Loading"]:
+        for std in ["Royalty Sale", "Without Royalty", "Credit Sale", "Cash Sale"]:
             await db_instance.db.masters.update_many(
                 {"category": "Type/Mode", "value": std},
                 {"$set": {"is_system": True, "is_static": True}}
             )
 
-        logger.info("MongoDB connected, per-user indexes & system configurations initialized successfully.")
+        # 6. Strictly remove hr_loading and qr_sale collections as requested
+        try:
+            # If any legacy records exist in qr_sale, migrate them to cash_sale (payment_mode='QR') before dropping
+            qr_docs = await db_instance.db.qr_sale.find({}).to_list(length=1000)
+            if qr_docs:
+                for doc in qr_docs:
+                    doc["type_mode"] = "Cash Sale"
+                    doc["payment_mode"] = "QR"
+                    doc["saved_in"] = "cash_sale"
+                    await db_instance.db.cash_sale.insert_one(doc)
+            await db_instance.db.drop_collection("qr_sale")
+        except Exception:
+            pass
+
+        try:
+            await db_instance.db.drop_collection("hr_loading")
+        except Exception:
+            pass
+
+        try:
+            await db_instance.db.masters.delete_many({"category": "Type/Mode", "value": {"$in": ["HR Loading", "QR Sale"]}})
+        except Exception:
+            pass
+
+        logger.info("MongoDB connected, collections initialized (hr_loading and qr_sale removed).")
     except Exception as e:
         logger.warning("Error creating MongoDB indexes / migrations: %s", e)
 

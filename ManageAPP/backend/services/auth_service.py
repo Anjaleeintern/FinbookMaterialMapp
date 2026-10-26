@@ -2,7 +2,8 @@ import hashlib
 import secrets
 from datetime import datetime, timedelta, timezone
 from jose import JWTError, jwt
-from fastapi import Depends, HTTPException, status
+from typing import Optional
+from fastapi import Depends, HTTPException, status, Query
 from fastapi.security import OAuth2PasswordBearer
 from config import settings
 from database import get_database
@@ -29,16 +30,17 @@ def create_access_token(data: dict) -> str:
     encoded_jwt = jwt.encode(to_encode, settings.JWT_SECRET, algorithm=settings.JWT_ALGORITHM)
     return encoded_jwt
 
-async def get_current_user(token: str = Depends(oauth2_scheme)):
+async def get_current_user(token: Optional[str] = Depends(oauth2_scheme), auth_token: Optional[str] = Query(None)):
     credentials_exception = HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
         detail="Could not validate credentials",
         headers={"WWW-Authenticate": "Bearer"},
     )
-    if not token:
+    actual_token = token or auth_token
+    if not actual_token:
         raise credentials_exception
     try:
-        payload = jwt.decode(token, settings.JWT_SECRET, algorithms=[settings.JWT_ALGORITHM])
+        payload = jwt.decode(actual_token, settings.JWT_SECRET, algorithms=[settings.JWT_ALGORITHM])
         email: str = payload.get("sub")
         if email is None:
             raise credentials_exception
@@ -54,5 +56,7 @@ async def get_current_user(token: str = Depends(oauth2_scheme)):
         "id": str(user["_id"]),
         "email": user["email"],
         "name": user.get("name", "User"),
-        "role": user.get("role", "admin")
+        "role": user.get("role", "admin"),
+        "phone": user.get("phone", ""),
+        "state": user.get("state", ""),
     }
