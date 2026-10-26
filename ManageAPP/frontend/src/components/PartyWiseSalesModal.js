@@ -15,6 +15,7 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { api } from '../api/client';
+import { TopDownloadBanner } from './TopDownloadBanner';
 
 const isWeb = Platform.OS === 'web';
 
@@ -450,6 +451,7 @@ export const PartyWiseSalesModal = ({
           },
         ]}
       >
+        <TopDownloadBanner />
         {content}
       </View>
     </Modal>

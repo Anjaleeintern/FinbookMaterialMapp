@@ -15,6 +15,7 @@ import {
 import * as DocumentPicker from 'expo-document-picker';
 import { Ionicons } from '@expo/vector-icons';
 import { api } from '../api/client';
+import { downloadService } from '../services/downloadService';
 
 const CATEGORIES = [
   { id: 'VehicleNo', label: 'Vehicle No', singular: 'Vehicle Number', icon: 'car-outline', sample: 'MP09DD5763' },
@@ -557,18 +558,19 @@ export const MastersView = React.memo(({ masters, onRefresh }) => {
   // Download Unified Master Template (Excel .xlsx or CSV .csv with all master columns)
   const handleDownloadTemplate = async (format = 'xlsx') => {
     const url = api.getMasterTemplateUrl(format);
+    const filename = `master_template.${format}`;
+    const mimeType = format === 'xlsx' ? 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' : 'text/csv';
+
     try {
-      if (Platform.OS === 'web' && typeof window !== 'undefined') {
-        window.open(url, '_blank');
-      } else {
-        await Linking.openURL(url);
-      }
+      await downloadService.downloadFile({
+        url,
+        filename,
+        mimeType,
+        title: `Master Template (${format.toUpperCase()})`,
+        openImmediately: true,
+      });
     } catch (err) {
-      if (Platform.OS === 'web' && typeof window !== 'undefined') {
-        window.open(url, '_blank');
-      } else {
-        alert(`Master Template URL:\n${url}`);
-      }
+      console.warn('Master template download error:', err);
     }
   };
 

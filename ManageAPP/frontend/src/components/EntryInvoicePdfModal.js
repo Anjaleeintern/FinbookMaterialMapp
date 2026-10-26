@@ -16,8 +16,10 @@ import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as Print from 'expo-print';
 import * as Sharing from 'expo-sharing';
-import * as FileSystem from 'expo-file-system';
+import * as FileSystem from 'expo-file-system/legacy';
 import { api } from '../api/client';
+import { downloadService } from '../services/downloadService';
+import { TopDownloadBanner } from './TopDownloadBanner';
 
 // Converts numbers into Indian currency words matching Tally: 'INR Ninety Three Thousand Only'
 const numberToIndianWords = (num) => {
@@ -70,15 +72,16 @@ const formatINR = (val) => {
 };
 
 // Generates exact Tally Invoice HTML matching the user's reference image
-export const generateTallyInvoiceHtml = (entry, companyName = '') => {
+export const generateTallyInvoiceHtml = (entry, companyName = '', user = null) => {
   if (!entry) return '';
 
   const challanNo = entry.challan_no || entry.serial_no || entry.id || '-';
   const dateStr = entry.date || '';
 
-  const compName = companyName || entry.company_name || 'Organization';
-  const compAddress = entry.company_address || '';
-  const compEmail = entry.company_email || '';
+  const compName = companyName || user?.company_name || (user?.name ? `${user.name}'s Organization` : (entry.company_name || "Admin's Organization"));
+  const compAddress = entry.company_address || user?.address || user?.state || user?.location || '';
+  const compPhone = entry.company_phone || user?.phone || user?.mobile || '';
+  const compEmail = entry.company_email || user?.email || '';
 
   const partyName = entry.party_name || entry.customer_name || '-';
   const partyAddress = entry.party_address || entry.party_state || '';
@@ -264,8 +267,9 @@ export const generateTallyInvoiceHtml = (entry, companyName = '') => {
       <td width="50%" style="padding: 0; vertical-align: top;">
         <div style="padding: 5px 6px; min-height: 80px;">
           <div class="bold" style="font-size: 10pt;">${compName}</div>
-          ${compAddress ? `<div class="val">${compAddress}</div>` : ''}
-          ${compEmail ? `<div class="val">E-Mail : ${compEmail}</div>` : ''}
+          ${compAddress ? `<div class="val" style="margin-top: 2px;">${compAddress}</div>` : ''}
+          ${compPhone ? `<div class="val" style="font-size: 8pt; color: #333; margin-top: 2px;">Contact: ${compPhone}</div>` : ''}
+          ${compEmail ? `<div class="val" style="font-size: 8pt; color: #333; margin-top: 1px;">E-Mail : ${compEmail}</div>` : ''}
         </div>
         <div style="border-top: 1px solid #000000; padding: 5px 6px; min-height: 120px;">
           <div class="lbl">Buyer (Bill to)</div>
@@ -458,6 +462,7 @@ export const EntryInvoicePdfModal = ({ visible, entry, company, user, onClose })
   const [downloading, setDownloading] = useState(false);
   // Default to 'simple' view so user gets Full Simple View immediately
   const [viewMode, setViewMode] = useState('simple'); // 'simple' | 'a4'
+  const [a4FitMode, setA4FitMode] = useState('fit'); // 'fit' | 'wide'
 
   const showToast = (msg) => {
     setToastMsg(msg);
@@ -466,8 +471,9 @@ export const EntryInvoicePdfModal = ({ visible, entry, company, user, onClose })
 
   if (!entry) return null;
 
-  const companyName = company || user?.company_name || user?.name || 'Organization';
-  const compAddress = entry.company_address || user?.address || '';
+  const companyName = company || user?.company_name || (user?.name ? `${user.name}'s Organization` : (entry.company_name || "Admin's Organization"));
+  const compAddress = entry.company_address || user?.address || user?.state || user?.location || '';
+  const compPhone = entry.company_phone || user?.phone || user?.mobile || '';
   const compEmail = entry.company_email || user?.email || '';
   const challanNo = entry.challan_no || entry.serial_no || entry.id || '-';
   const dateStr = entry.date || '';
@@ -490,7 +496,7 @@ export const EntryInvoicePdfModal = ({ visible, entry, company, user, onClose })
   // 1. VIEW ACTION: Opens native system Print/PDF preview on phone, or new tab on web
   const handleView = async () => {
     if (Platform.OS === 'web' && typeof window !== 'undefined') {
-      const html = generateTallyInvoiceHtml(entry, companyName);
+      const html = generateTallyInvoiceHtml(entry, companyName, user);
       try {
         const blob = new Blob([html], { type: 'text/html' });
         const url = URL.createObjectURL(blob);
@@ -513,7 +519,7 @@ export const EntryInvoicePdfModal = ({ visible, entry, company, user, onClose })
       }
     } else {
       try {
-        const html = generateTallyInvoiceHtml(entry, companyName);
+        const html = generateTallyInvoiceHtml(entry, companyName, user);
         await Print.printAsync({ html });
       } catch (err) {
         console.warn('Native view error:', err);
@@ -557,7 +563,7 @@ export const EntryInvoicePdfModal = ({ visible, entry, company, user, onClose })
         container.style.top = '-9999px';
         container.style.left = '-9999px';
         container.style.width = '210mm';
-        container.innerHTML = generateTallyInvoiceHtml(entry, companyName);
+        container.innerHTML = generateTallyInvoiceHtml(entry, companyName, user);
         document.body.appendChild(container);
 
         await window.html2pdf()
@@ -581,24 +587,36 @@ export const EntryInvoicePdfModal = ({ visible, entry, company, user, onClose })
     } else {
       // Mobile Method (Android & iOS): Generate real PDF file and present native save/open dialog
       try {
-        const html = generateTallyInvoiceHtml(entry, companyName);
-        const { uri } = await Print.printToFileAsync({ html });
+        const html = generateTallyInvoiceHtml(entry, companyName, user);
         const safeChallan = String(challanNo).replace(/[^a-zA-Z0-9_-]/g, '_');
         const filename = `Invoice_${safeChallan}.pdf`;
-        const targetPath = `${FileSystem.cacheDirectory}${filename}`;
+        const targetPath = `${FileSystem.documentDirectory || FileSystem.cacheDirectory}${filename}`;
 
-        await FileSystem.copyAsync({ from: uri, to: targetPath });
+        // Generate PDF file with base64 encoded data so we don't depend on unreadable cache paths
+        const printResult = await Print.printToFileAsync({ html, base64: true });
+        let fileUri = printResult.uri;
 
-        if (await Sharing.isAvailableAsync()) {
-          await Sharing.shareAsync(targetPath, {
-            mimeType: 'application/pdf',
-            dialogTitle: `Save / Download ${filename}`,
-            UTI: 'com.adobe.pdf',
-          });
-          showToast('PDF ready! Choose save destination');
-        } else {
-          await Print.printAsync({ html });
+        if (printResult.base64) {
+          try {
+            await FileSystem.writeAsStringAsync(targetPath, printResult.base64, {
+              encoding: FileSystem.EncodingType.Base64,
+            });
+            fileUri = targetPath;
+          } catch (writeErr) {
+            console.warn('Could not write base64 to targetPath, using printResult.uri:', writeErr);
+          }
         }
+
+        // Register download with downloadService: Shows the top notification banner & triggers native open
+        await downloadService.registerCompletedDownload({
+          fileUri,
+          filename,
+          mimeType: 'application/pdf',
+          title: `Invoice #${challanNo} Ready`,
+          openImmediately: true,
+        });
+
+        showToast('Invoice PDF ready! Tap banner above to open anytime');
       } catch (err) {
         console.error('Mobile PDF download error:', err);
         showToast('Download error: ' + (err.message || 'Please try again'));
@@ -650,16 +668,27 @@ ${companyName}`;
     // On Native Phone (Android & iOS) -> Full System Share Sheet (WhatsApp, Gmail, Drive, Bluetooth, etc.)
     try {
       showToast('Opening sharing options...');
-      const html = generateTallyInvoiceHtml(entry, companyName);
-      const { uri } = await Print.printToFileAsync({ html });
+      const html = generateTallyInvoiceHtml(entry, companyName, user);
       const safeChallan = String(challanNo).replace(/[^a-zA-Z0-9_-]/g, '_');
       const filename = `Invoice_${safeChallan}.pdf`;
-      const sharePath = `${FileSystem.cacheDirectory}${filename}`;
+      const sharePath = `${FileSystem.documentDirectory || FileSystem.cacheDirectory}${filename}`;
 
-      await FileSystem.copyAsync({ from: uri, to: sharePath });
+      const printResult = await Print.printToFileAsync({ html, base64: true });
+      let fileUri = printResult.uri;
+
+      if (printResult.base64) {
+        try {
+          await FileSystem.writeAsStringAsync(sharePath, printResult.base64, {
+            encoding: FileSystem.EncodingType.Base64,
+          });
+          fileUri = sharePath;
+        } catch (writeErr) {
+          console.warn('Could not write base64 to sharePath, using printResult.uri:', writeErr);
+        }
+      }
 
       if (await Sharing.isAvailableAsync()) {
-        await Sharing.shareAsync(sharePath, {
+        await Sharing.shareAsync(fileUri, {
           mimeType: 'application/pdf',
           dialogTitle: `Share Invoice #${challanNo}`,
           UTI: 'com.adobe.pdf',
@@ -693,6 +722,7 @@ ${companyName}`;
           },
         ]}
       >
+        <TopDownloadBanner />
         <View style={[styles.modalCard, isMobile && styles.modalCardMobile]}>
           {/* Header Bar with Action Buttons */}
           <View style={styles.headerBar}>
@@ -815,6 +845,7 @@ ${companyName}`;
                 <View style={styles.msHeaderCard}>
                   <Text style={styles.msCompName}>{companyName}</Text>
                   {compAddress ? <Text style={styles.msCompSub}>{compAddress}</Text> : null}
+                  {compPhone ? <Text style={styles.msCompSub}>Contact: {compPhone}</Text> : null}
                   {compEmail ? <Text style={styles.msCompSub}>E-Mail: {compEmail}</Text> : null}
                   <View style={styles.msDivider} />
                   <View style={styles.msRowBetween}>
@@ -959,22 +990,60 @@ ${companyName}`;
               </View>
             ) : (
               /* OFFICIAL A4 SHEET VIEW */
-              <View style={{ width: '100%', alignItems: isMobile ? 'flex-start' : 'center' }}>
+              <View style={{ width: '100%', alignItems: isMobile ? 'stretch' : 'center' }}>
                 {isMobile ? (
-                  <Text style={styles.a4TipText}>
-                    👈 Scroll horizontally to view full A4 sheet 👉
-                  </Text>
+                  <View style={styles.a4ModeRow}>
+                    <TouchableOpacity
+                      style={[styles.a4ModePill, a4FitMode === 'fit' && styles.a4ModePillActive]}
+                      onPress={() => setA4FitMode('fit')}
+                      activeOpacity={0.8}
+                    >
+                      <Ionicons
+                        name="phone-portrait-outline"
+                        size={13}
+                        color={a4FitMode === 'fit' ? '#0284c7' : '#64748b'}
+                        style={{ marginRight: 4 }}
+                      />
+                      <Text style={[styles.a4ModePillText, a4FitMode === 'fit' && styles.a4ModePillTextActive]}>
+                        Fit Phone Screen
+                      </Text>
+                    </TouchableOpacity>
+
+                    <TouchableOpacity
+                      style={[styles.a4ModePill, a4FitMode === 'wide' && styles.a4ModePillActive]}
+                      onPress={() => setA4FitMode('wide')}
+                      activeOpacity={0.8}
+                    >
+                      <Ionicons
+                        name="expand-outline"
+                        size={13}
+                        color={a4FitMode === 'wide' ? '#0284c7' : '#64748b'}
+                        style={{ marginRight: 4 }}
+                      />
+                      <Text style={[styles.a4ModePillText, a4FitMode === 'wide' && styles.a4ModePillTextActive]}>
+                        Wide A4 (Scrollable)
+                      </Text>
+                    </TouchableOpacity>
+                  </View>
                 ) : null}
 
                 <ScrollView
-                  horizontal={isMobile}
+                  horizontal={isMobile && a4FitMode === 'wide'}
                   showsHorizontalScrollIndicator={true}
-                  contentContainerStyle={{ alignItems: 'flex-start' }}
+                  contentContainerStyle={{
+                    alignItems: isMobile && a4FitMode === 'fit' ? 'stretch' : 'flex-start',
+                    width: isMobile && a4FitMode === 'fit' ? '100%' : undefined,
+                  }}
                   style={{ width: '100%' }}
                 >
-                  <View style={[styles.tallySheet, isMobile && { width: 660, minWidth: 660 }]}>
+                  <View
+                    style={[
+                      styles.tallySheet,
+                      isMobile && (a4FitMode === 'fit' ? styles.tallySheetFit : { width: 660, minWidth: 660 }),
+                    ]}
+                  >
                     {/* Header Title */}
-                    <Text style={styles.tallyTitle}>INVOICE</Text>
+                    <Text style={[styles.tallyTitle, isMobile && a4FitMode === 'fit' && { fontSize: 13, marginBottom: 4 }]}>INVOICE</Text>
 
                     {/* Outer Tally Box */}
                     <View style={styles.tallyOuterBox}>
@@ -982,15 +1051,16 @@ ${companyName}`;
                       <View style={styles.tallyTopRow}>
                         {/* Left Column: Company & Buyer */}
                         <View style={styles.tallyLeftCol}>
-                          <View style={styles.tallyCompanyBox}>
-                            <Text style={styles.tallyCompName}>{companyName}</Text>
-                            {compAddress ? <Text style={styles.tallyValText}>{compAddress}</Text> : null}
-                            {compEmail ? <Text style={styles.tallyValText}>E-Mail : {compEmail}</Text> : null}
+                          <View style={[styles.tallyCompanyBox, isMobile && a4FitMode === 'fit' && { padding: 4, minHeight: 65 }]}>
+                            <Text style={[styles.tallyCompName, isMobile && a4FitMode === 'fit' && { fontSize: 11 }]}>{companyName}</Text>
+                            {compAddress ? <Text style={[styles.tallyValText, isMobile && a4FitMode === 'fit' && { fontSize: 8 }]}>{compAddress}</Text> : null}
+                            {compPhone ? <Text style={[styles.tallyValText, { fontSize: isMobile && a4FitMode === 'fit' ? 7.5 : 8.5, color: '#334155' }]}>Contact: {compPhone}</Text> : null}
+                            {compEmail ? <Text style={[styles.tallyValText, isMobile && a4FitMode === 'fit' && { fontSize: 8 }]}>E-Mail : {compEmail}</Text> : null}
                           </View>
-                          <View style={styles.tallyBuyerBox}>
-                            <Text style={styles.tallyLblText}>Buyer (Bill to)</Text>
-                            <Text style={styles.tallyBuyerName}>{partyName}</Text>
-                            {partyAddress ? <Text style={styles.tallyValText}>{partyAddress}</Text> : null}
+                          <View style={[styles.tallyBuyerBox, isMobile && a4FitMode === 'fit' && { padding: 4, minHeight: 80 }]}>
+                            <Text style={[styles.tallyLblText, isMobile && a4FitMode === 'fit' && { fontSize: 7 }]}>Buyer (Bill to)</Text>
+                            <Text style={[styles.tallyBuyerName, isMobile && a4FitMode === 'fit' && { fontSize: 10 }]}>{partyName}</Text>
+                            {partyAddress ? <Text style={[styles.tallyValText, isMobile && a4FitMode === 'fit' && { fontSize: 8 }]}>{partyAddress}</Text> : null}
                           </View>
                         </View>
 
@@ -1570,6 +1640,44 @@ const styles = StyleSheet.create({
     fontSize: 10,
     color: '#64748b',
     fontWeight: '500',
+  },
+  a4ModeRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    marginBottom: 8,
+    width: '100%',
+  },
+  a4ModePill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 5,
+    paddingHorizontal: 11,
+    borderRadius: 20,
+    backgroundColor: '#ffffff',
+    borderWidth: 1,
+    borderColor: '#cbd5e1',
+  },
+  a4ModePillActive: {
+    backgroundColor: '#e0f2fe',
+    borderColor: '#0284c7',
+  },
+  a4ModePillText: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: '#64748b',
+  },
+  a4ModePillTextActive: {
+    color: '#0284c7',
+    fontWeight: '700',
+  },
+  tallySheetFit: {
+    width: '100%',
+    minWidth: '100%',
+    maxWidth: '100%',
+    padding: 6,
+    borderRadius: 4,
   },
   tallySheet: {
     backgroundColor: '#ffffff',

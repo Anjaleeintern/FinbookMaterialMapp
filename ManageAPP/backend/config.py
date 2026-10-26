@@ -10,7 +10,7 @@ class Settings(BaseSettings):
     # JWT Authentication & Security
     JWT_SECRET: str = "materialmapp_super_secure_secret_key_2026_xyz"
     JWT_ALGORITHM: str = "HS256"
-    JWT_EXPIRATION_HOURS: int = 24
+    JWT_EXPIRATION_HOURS: int = 720
 
     # Server Configuration
     HOST: str = "0.0.0.0"

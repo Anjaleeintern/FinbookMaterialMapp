@@ -25,6 +25,7 @@ import { ProfileView } from './src/components/ProfileView';
 import { LoginView } from './src/components/LoginView';
 import { PartyWiseSalesModal } from './src/components/PartyWiseSalesModal';
 import { EntryInvoicePdfModal } from './src/components/EntryInvoicePdfModal';
+import { TopDownloadBanner } from './src/components/TopDownloadBanner';
 import { api } from './src/api/client';
 import './style.css';
 
@@ -248,6 +249,7 @@ const MainApp = () => {
   return (
     <View style={[styles.rootContainer, { paddingTop: topPadding }]}>
       <StatusBar style="light" backgroundColor="#134e4a" />
+      <TopDownloadBanner />
 
       {/* Top Navbar */}
       <Navbar
@@ -418,7 +420,7 @@ const MainApp = () => {
       <EntryInvoicePdfModal
         visible={isInvoiceModalOpen}
         entry={createdInvoiceEntry}
-        company={user?.company_name || 'STONE QUARRY & CRUSHER'}
+        company={user?.company_name || (user?.name ? `${user.name}'s Organization` : "Admin's Organization")}
         user={user}
         onClose={handleCloseInvoiceModal}
       />

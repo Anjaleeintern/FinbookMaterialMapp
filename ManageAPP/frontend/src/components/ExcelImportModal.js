@@ -15,6 +15,7 @@ import * as DocumentPicker from 'expo-document-picker';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { api } from '../api/client';
+import { downloadService } from '../services/downloadService';
 
 export const ExcelImportModal = ({ visible, onClose, onSuccess }) => {
   const { width } = useWindowDimensions();
@@ -171,18 +172,17 @@ export const ExcelImportModal = ({ visible, onClose, onSuccess }) => {
 
   const handleDownloadTemplate = async () => {
     const url = api.getTemplateDownloadUrl();
+    const filename = 'entries_import_template.xlsx';
     try {
-      if (Platform.OS === 'web' && typeof window !== 'undefined') {
-        window.open(url, '_blank');
-      } else {
-        await Linking.openURL(url);
-      }
+      await downloadService.downloadFile({
+        url,
+        filename,
+        mimeType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        title: 'Entries Sample Template',
+        openImmediately: true,
+      });
     } catch (err) {
-      if (Platform.OS === 'web' && typeof window !== 'undefined') {
-        window.open(url, '_blank');
-      } else {
-        setErrorMsg('Could not open download link: ' + (err.message || ''));
-      }
+      setErrorMsg('Could not download template: ' + (err.message || ''));
     }
   };
 

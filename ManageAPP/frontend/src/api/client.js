@@ -1,5 +1,11 @@
-import { Platform, NativeModules } from 'react-native';
+import { Platform, NativeModules, Linking } from 'react-native';
 import * as FileSystem from 'expo-file-system/legacy';
+import { downloadService } from '../services/downloadService';
+
+let onUnauthorizedCallback = null;
+export const setOnUnauthorized = (cb) => {
+  onUnauthorizedCallback = cb;
+};
 
 // Environment variables configured in frontend/.env (EXPO_PUBLIC_ prefix)
 const DEPLOYED_PROD_URL = 'https://finbookmaterialmapp.onrender.com';
@@ -161,6 +167,11 @@ const request = async (endpoint, options = {}) => {
   const data = await response.json().catch(() => null);
 
   if (!response.ok) {
+    if (response.status === 401 && onUnauthorizedCallback) {
+      try {
+        onUnauthorizedCallback();
+      } catch (e) {}
+    }
     const errorMsg = data?.detail || data?.message || `Request failed with status ${response.status}`;
     throw new Error(errorMsg);
   }
@@ -421,33 +432,17 @@ export const api = {
   downloadPartyWiseSalesExcel: async (month = '', label = '') => {
     const token = getAuthToken();
     const url = `${activeBaseUrl}/api/entries/party-wise-sales/export${month ? `?month=${encodeURIComponent(month)}` : ''}`;
-    const res = await fetch(url, {
-      headers: {
-        ...(token ? { Authorization: `Bearer ${token}` } : {}),
-      },
-    });
-    if (!res.ok) {
-      throw new Error(`Failed to download report (HTTP ${res.status})`);
-    }
-    const blob = await res.blob();
     const safeMonth = (label || month || 'all_time').replace(/\s+/g, '_').toLowerCase();
     const filename = `party_wise_sales_${safeMonth}.xlsx`;
 
-    if (Platform.OS === 'web' && typeof window !== 'undefined') {
-      const blobUrl = window.URL.createObjectURL(blob);
-      const link = document.createElement('a');
-      link.href = blobUrl;
-      link.download = filename;
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-      window.URL.revokeObjectURL(blobUrl);
-      return true;
-    } else {
-      const directUrl = `${activeBaseUrl}/api/entries/party-wise-sales/export?month=${encodeURIComponent(month)}&auth_token=${encodeURIComponent(token)}`;
-      await Linking.openURL(directUrl);
-      return true;
-    }
+    return downloadService.downloadFile({
+      url,
+      filename,
+      mimeType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      title: `Party-wise Sales (${label || month || 'All Time'})`,
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+      openImmediately: true,
+    });
   },
   importExcel: async (file, previewOnly = false, defaultTypeMode = null, selectedSheets = null) => {
     let url = `${activeBaseUrl}/api/entries/import-excel?preview_only=${previewOnly ? 'true' : 'false'}`;

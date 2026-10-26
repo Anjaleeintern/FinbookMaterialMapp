@@ -69,8 +69,9 @@ def generate_tally_invoice_html(entry: dict, company_name: str = "") -> str:
     date_str = str(entry.get("date") or "")
     
     comp_name = company_name or entry.get("company_name") or "Organization"
-    comp_address = entry.get("company_address") or ""
-    comp_email = entry.get("company_email") or ""
+    comp_address = entry.get("company_address") or entry.get("user_address") or entry.get("user_state") or entry.get("address") or entry.get("state") or ""
+    comp_phone = entry.get("company_phone") or entry.get("user_phone") or entry.get("phone") or ""
+    comp_email = entry.get("company_email") or entry.get("email") or ""
     
     party_name = entry.get("party_name") or entry.get("customer_name") or "-"
     party_address = entry.get("party_address") or entry.get("party_state") or ""
@@ -167,8 +168,9 @@ def generate_tally_invoice_html(entry: dict, company_name: str = "") -> str:
 
     amount_words = number_to_indian_words(total_amount)
 
-    comp_address_html = f'<div class="val">{comp_address}</div>' if comp_address else ''
-    comp_email_html = f'<div class="val">E-Mail : {comp_email}</div>' if comp_email else ''
+    comp_address_html = f'<div class="val" style="margin-top: 2px;">{comp_address}</div>' if comp_address else ''
+    comp_phone_html = f'<div class="val" style="font-size: 8pt; color: #333; margin-top: 2px;">Contact: {comp_phone}</div>' if comp_phone else ''
+    comp_email_html = f'<div class="val" style="font-size: 8pt; color: #333; margin-top: 1px;">E-Mail : {comp_email}</div>' if comp_email else ''
     party_address_html = f'<div class="val">{party_address}</div>' if party_address else ''
 
     html = f"""<!DOCTYPE html>
@@ -276,6 +278,7 @@ table.tally-outer {{
       <div style="padding: 5px 6px; min-height: 80px;">
         <div class="bold" style="font-size: 10pt;">{comp_name}</div>
         {comp_address_html}
+        {comp_phone_html}
         {comp_email_html}
       </div>
       <div style="border-top: 1px solid #000; padding: 5px 6px; min-height: 120px;">

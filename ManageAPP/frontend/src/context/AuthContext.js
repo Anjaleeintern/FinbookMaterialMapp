@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, useEffect, useMemo, useCallback } from 'react';
-import { api, setAuthToken } from '../api/client';
+import { api, setAuthToken, setOnUnauthorized } from '../api/client';
 
 const AuthContext = createContext(null);
 
@@ -7,6 +7,20 @@ export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(null);
   const [token, setToken] = useState(null);
   const [loading, setLoading] = useState(true);
+
+  const handleSessionExpired = useCallback(() => {
+    console.warn('[Auth] Session expired or invalid, clearing authentication state');
+    setAuthToken(null);
+    if (typeof localStorage !== 'undefined') {
+      localStorage.removeItem('materialmapp_token');
+    }
+    setToken(null);
+    setUser(null);
+  }, []);
+
+  useEffect(() => {
+    setOnUnauthorized(handleSessionExpired);
+  }, [handleSessionExpired]);
 
   useEffect(() => {
     // Check if token exists in storage or auto-login with default session
@@ -21,19 +35,14 @@ export const AuthProvider = ({ children }) => {
         }
       } catch (err) {
         console.warn('Auto auth validation failed:', err);
-        setAuthToken(null);
-        setToken(null);
-        setUser(null);
-        if (typeof localStorage !== 'undefined') {
-          localStorage.removeItem('materialmapp_token');
-        }
+        handleSessionExpired();
       } finally {
         setLoading(false);
       }
     };
 
     initAuth();
-  }, []);
+  }, [handleSessionExpired]);
 
   const login = useCallback(async (email, password) => {
     const data = await api.login(email, password);
