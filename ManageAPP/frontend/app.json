@@ -28,7 +28,8 @@
     },
     "plugins": [
       "expo-font",
-      "expo-sharing"
+      "expo-sharing",
+      "expo-status-bar"
     ],
     "runtimeVersion": {
       "policy": "appVersion"
