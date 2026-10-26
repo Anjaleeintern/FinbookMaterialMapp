@@ -22,6 +22,7 @@ import { DashboardView } from './src/components/DashboardView';
 import { ProfileView } from './src/components/ProfileView';
 import { LoginView } from './src/components/LoginView';
 import { PartyWiseSalesModal } from './src/components/PartyWiseSalesModal';
+import { EntryInvoicePdfModal } from './src/components/EntryInvoicePdfModal';
 import { api } from './src/api/client';
 import './style.css';
 
@@ -36,7 +37,10 @@ const MainApp = () => {
   const [search, setSearch] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [editingEntry, setEditingEntry] = useState(null);
   const [isImportModalOpen, setIsImportModalOpen] = useState(false);
+  const [createdInvoiceEntry, setCreatedInvoiceEntry] = useState(null);
+  const [isInvoiceModalOpen, setIsInvoiceModalOpen] = useState(false);
   const [directPartySalesMonth, setDirectPartySalesMonth] = useState(() => {
     if (Platform.OS === 'web' && typeof window !== 'undefined') {
       const params = new URLSearchParams(window.location.search);
@@ -108,13 +112,42 @@ const MainApp = () => {
   }, [user, debouncedSearch, loadEntries]);
 
   // Stable callbacks so child tab views wrapped in React.memo never re-render unnecessarily
-  const handleOpenAddModal = useCallback(() => setIsModalOpen(true), []);
-  const handleCloseAddModal = useCallback(() => setIsModalOpen(false), []);
+  const handleOpenAddModal = useCallback(() => {
+    setEditingEntry(null);
+    setIsModalOpen(true);
+  }, []);
+  const handleOpenEditModal = useCallback((entry) => {
+    setEditingEntry(entry);
+    setIsModalOpen(true);
+  }, []);
+  const handleCloseAddModal = useCallback(() => {
+    setIsModalOpen(false);
+    setEditingEntry(null);
+  }, []);
   const handleOpenImportModal = useCallback(() => setIsImportModalOpen(true), []);
   const handleCloseImportModal = useCallback(() => setIsImportModalOpen(false), []);
   const handleNavigateMasters = useCallback(() => handleSelectTab('masters'), [handleSelectTab]);
   const handleToggleSidebar = useCallback(() => setSidebarOpen((prev) => !prev), []);
   const handleCloseSidebar = useCallback(() => setSidebarOpen(false), []);
+
+  const handleEntryCreatedSuccess = useCallback((savedItem) => {
+    loadData();
+    if (savedItem) {
+      const entryObj = savedItem.entry || savedItem;
+      setCreatedInvoiceEntry(entryObj);
+      setIsInvoiceModalOpen(true);
+    }
+  }, [loadData]);
+
+  const handleOpenInvoiceModal = useCallback((entry) => {
+    setCreatedInvoiceEntry(entry);
+    setIsInvoiceModalOpen(true);
+  }, []);
+
+  const handleCloseInvoiceModal = useCallback(() => {
+    setIsInvoiceModalOpen(false);
+    setCreatedInvoiceEntry(null);
+  }, []);
 
   if (authLoading) {
     return (
@@ -201,6 +234,8 @@ const MainApp = () => {
                 loading={loading}
                 onOpenAddModal={handleOpenAddModal}
                 onOpenImportModal={handleOpenImportModal}
+                onViewInvoice={handleOpenInvoiceModal}
+                onEditEntry={handleOpenEditModal}
                 onRefresh={loadData}
               />
             </View>
@@ -312,8 +347,9 @@ const MainApp = () => {
       <DeliveryEntriesFormModal
         visible={isModalOpen}
         onClose={handleCloseAddModal}
-        onSuccess={loadData}
+        onSuccess={handleEntryCreatedSuccess}
         masters={masters}
+        initialData={editingEntry}
       />
 
       {/* Excel / CSV Bulk Import Modal */}
@@ -321,6 +357,15 @@ const MainApp = () => {
         visible={isImportModalOpen}
         onClose={handleCloseImportModal}
         onSuccess={loadData}
+      />
+
+      {/* Invoice / Delivery Slip PDF Modal (Tally & Stripe Style, View, Download, Share) */}
+      <EntryInvoicePdfModal
+        visible={isInvoiceModalOpen}
+        entry={createdInvoiceEntry}
+        company={user?.company_name || 'STONE QUARRY & CRUSHER'}
+        user={user}
+        onClose={handleCloseInvoiceModal}
       />
     </View>
   );

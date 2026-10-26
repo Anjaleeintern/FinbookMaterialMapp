@@ -25,8 +25,15 @@ from services.excel_service import (
     generate_sample_excel_template,
     generate_party_wise_sales_excel,
 )
+from services.pdf_service import generate_tally_invoice_pdf
 
 router = APIRouter(prefix="/api/entries", tags=["Entries"])
+
+
+def get_company_scope_query(current_user: dict) -> dict:
+    company_id = current_user.get("company_id") or current_user["id"]
+    user_id = current_user["id"]
+    return {"$or": [{"company_id": str(company_id)}, {"user_id": str(user_id)}]}
 
 
 def extract_month_key_and_label(date_val):
@@ -90,13 +97,13 @@ async def export_party_wise_sales(
     Download Party-wise Sales in Excel format for a selected month or all time.
     """
     db = get_database()
-    user_id = current_user["id"]
+    scope_filter = get_company_scope_query(current_user)
 
     collections = ["credit_sale", "cash_sale", "royalty_sale", "without_royalty"]
     all_entries = []
 
     for col in collections:
-        cursor = db[col].find({"user_id": user_id})
+        cursor = db[col].find(scope_filter)
         docs = await cursor.to_list(length=10000)
         for doc in docs:
             doc["_collection"] = col
@@ -319,7 +326,8 @@ async def import_excel_entries(
     import_result = await execute_bulk_import_to_mongodb(
         valid_entries,
         user_id=current_user["id"],
-        user_email=current_user["email"]
+        user_email=current_user["email"],
+        company_id=current_user.get("company_id") or current_user["id"]
     )
     import_result["filename"] = file.filename
     import_result["total_rows_found"] = len(raw_rows)
@@ -345,12 +353,13 @@ async def create_entry(entry: EntryCreate, current_user: dict = Depends(get_curr
         )
 
     user_id = current_user["id"]
+    company_id = current_user.get("company_id") or user_id
 
     if not entry.party_state and entry.party_name:
         party_doc = await db.masters.find_one({
             "category": "PartyName",
             "value": entry.party_name.strip(),
-            "$or": [{"user_id": user_id}, {"is_system": True}]
+            "$or": [{"company_id": company_id}, {"user_id": user_id}, {"is_system": True}]
         })
         if party_doc and party_doc.get("state"):
             entry.party_state = party_doc.get("state")
@@ -359,6 +368,7 @@ async def create_entry(entry: EntryCreate, current_user: dict = Depends(get_curr
     calc_data = process_entry_calculations(entry)
 
     calc_data["user_id"] = user_id
+    calc_data["company_id"] = company_id
     calc_data["user_email"] = current_user["email"]
 
     # Strictly unique auto-incrementing ChallanNo in continuous series (001, 002, 003...) for this user
@@ -408,10 +418,12 @@ async def get_all_entries(
     db = get_database()
     all_entries = []
     user_id = current_user["id"]
+    company_id = current_user.get("company_id") or user_id
+    scope_filter = get_company_scope_query(current_user)
 
-    # Get all collections from known map + dynamically from masters Type/Mode for this user
+    # Get all collections from known map + dynamically from masters Type/Mode for this user/company
     collections_to_query = set(settings.COLLECTION_MAP.values())
-    cursor_modes = db.masters.find({"category": "Type/Mode", "$or": [{"user_id": user_id}, {"is_system": True}]})
+    cursor_modes = db.masters.find({"category": "Type/Mode", "$or": [{"company_id": company_id}, {"user_id": user_id}, {"is_system": True}]})
     modes = await cursor_modes.to_list(length=500)
     for m in modes:
         val = m.get("value")
@@ -419,9 +431,10 @@ async def get_all_entries(
             collections_to_query.add(get_collection_name(val))
 
     for col_name in collections_to_query:
-        query_filter = {"user_id": user_id}
         if source and source.strip().lower() in ["excel", "manual"]:
-            query_filter["entry_source"] = source.strip().lower()
+            query_filter = {"$and": [scope_filter, {"entry_source": source.strip().lower()}]}
+        else:
+            query_filter = scope_filter
 
         cursor = db[col_name].find(query_filter).sort("created_at", -1).limit(limit)
         items = await cursor.to_list(length=limit)
@@ -465,9 +478,11 @@ async def get_summary(current_user: dict = Depends(get_current_user)):
     counts = {}
     total = 0
     user_id = current_user["id"]
+    company_id = current_user.get("company_id") or user_id
+    scope_filter = get_company_scope_query(current_user)
 
     collections_to_query = set(settings.COLLECTION_MAP.values())
-    cursor_modes = db.masters.find({"category": "Type/Mode", "$or": [{"user_id": user_id}, {"is_system": True}]})
+    cursor_modes = db.masters.find({"category": "Type/Mode", "$or": [{"company_id": company_id}, {"user_id": user_id}, {"is_system": True}]})
     modes = await cursor_modes.to_list(length=500)
     for m in modes:
         val = m.get("value")
@@ -475,7 +490,7 @@ async def get_summary(current_user: dict = Depends(get_current_user)):
             collections_to_query.add(get_collection_name(val))
 
     for col_name in collections_to_query:
-        c = await db[col_name].count_documents({"user_id": user_id})
+        c = await db[col_name].count_documents(scope_filter)
         counts[col_name] = c
         total += c
 
@@ -503,6 +518,8 @@ async def bulk_delete_entries(payload: BulkDeleteEntriesRequest, current_user: d
     db = get_database()
     deleted_count = 0
     user_id = current_user["id"]
+    company_id = current_user.get("company_id") or user_id
+    scope_filter = get_company_scope_query(current_user)
     grouped_by_col = {}
 
     if payload.items:
@@ -524,11 +541,11 @@ async def bulk_delete_entries(payload: BulkDeleteEntriesRequest, current_user: d
             except Exception:
                 pass
 
-    # Delete from specified collections ensuring user_id matches
+    # Delete from specified collections ensuring authorized company/user matches
     for col, ids in grouped_by_col.items():
         if col != "unknown" and ids:
             try:
-                res = await db[col].delete_many({"_id": {"$in": ids}, "user_id": user_id})
+                res = await db[col].delete_many({"_id": {"$in": ids}, **scope_filter})
                 deleted_count += res.deleted_count
             except Exception as e:
                 print(f"[BulkDelete Error] Failed deleting from {col}: {e}")
@@ -537,7 +554,7 @@ async def bulk_delete_entries(payload: BulkDeleteEntriesRequest, current_user: d
     unknown_ids = grouped_by_col.get("unknown", [])
     if unknown_ids:
         collections_to_query = set(settings.COLLECTION_MAP.values())
-        cursor_modes = db.masters.find({"category": "Type/Mode", "$or": [{"user_id": user_id}, {"is_system": True}]})
+        cursor_modes = db.masters.find({"category": "Type/Mode", "$or": [{"company_id": company_id}, {"user_id": user_id}, {"is_system": True}]})
         modes = await cursor_modes.to_list(length=500)
         for m in modes:
             val = m.get("value")
@@ -546,7 +563,7 @@ async def bulk_delete_entries(payload: BulkDeleteEntriesRequest, current_user: d
 
         for col in collections_to_query:
             try:
-                res = await db[col].delete_many({"_id": {"$in": unknown_ids}, "user_id": user_id})
+                res = await db[col].delete_many({"_id": {"$in": unknown_ids}, **scope_filter})
                 deleted_count += res.deleted_count
             except Exception as e:
                 print(f"[BulkDelete Error] Failed searching {col}: {e}")
@@ -556,6 +573,101 @@ async def bulk_delete_entries(payload: BulkDeleteEntriesRequest, current_user: d
         "deleted_count": deleted_count,
         "message": f"Successfully deleted {deleted_count} entries"
     }
+
+
+@router.put("/{entry_id}")
+async def update_entry(
+    entry_id: str,
+    entry: EntryCreate,
+    saved_in: Optional[str] = Query(None),
+    current_user: dict = Depends(get_current_user)
+):
+    """
+    Update an existing delivery entry by ID for current user/company.
+    Recalculates weights, rate, amounts, additional charges, and GST.
+    Handles moving to target collection if type_mode changed.
+    """
+    db = get_database()
+    user_id = current_user["id"]
+    company_id = current_user.get("company_id") or user_id
+    scope_filter = get_company_scope_query(current_user)
+
+    try:
+        obj_id = ObjectId(entry_id)
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid entry ID format")
+
+    calc_data = process_entry_calculations(entry)
+    calc_data["user_id"] = user_id
+    calc_data["company_id"] = company_id
+    calc_data["updated_at"] = datetime.now(timezone.utc)
+
+    target_collection = get_collection_name(calc_data["type_mode"])
+    calc_data["saved_in"] = target_collection
+
+    existing_doc = None
+    existing_col = None
+
+    if saved_in:
+        existing_doc = await db[saved_in].find_one({"_id": obj_id, **scope_filter})
+        if existing_doc:
+            existing_col = saved_in
+
+    if not existing_doc:
+        collections_to_query = set(settings.COLLECTION_MAP.values())
+        cursor_modes = db.masters.find({"category": "Type/Mode", "$or": [{"company_id": company_id}, {"user_id": user_id}, {"is_system": True}]})
+        modes = await cursor_modes.to_list(length=500)
+        for m in modes:
+            val = m.get("value")
+            if val:
+                collections_to_query.add(get_collection_name(val))
+
+        for col in collections_to_query:
+            doc = await db[col].find_one({"_id": obj_id, **scope_filter})
+            if doc:
+                existing_doc = doc
+                existing_col = col
+                break
+
+    if not existing_doc:
+        raise HTTPException(status_code=404, detail="Entry not found to update")
+
+    # Preserve challan_no if not provided
+    if not calc_data.get("challan_no"):
+        calc_data["challan_no"] = existing_doc.get("challan_no")
+
+    # Preserve created_at and entry_source
+    calc_data["created_at"] = existing_doc.get("created_at") or datetime.now(timezone.utc)
+    if not calc_data.get("entry_source"):
+        calc_data["entry_source"] = existing_doc.get("entry_source", "manual")
+
+    if existing_col == target_collection:
+        res = await db[target_collection].find_one_and_update(
+            {"_id": obj_id, **scope_filter},
+            {"$set": calc_data},
+            return_document=True
+        )
+        res["id"] = str(res["_id"])
+        del res["_id"]
+        return {
+            "success": True,
+            "message": "Entry updated successfully",
+            "saved_in": target_collection,
+            "entry": res
+        }
+    else:
+        # Move document to new collection
+        await db[existing_col].delete_one({"_id": obj_id, **scope_filter})
+        calc_data["_id"] = obj_id
+        await db[target_collection].insert_one(calc_data)
+        calc_data["id"] = str(obj_id)
+        del calc_data["_id"]
+        return {
+            "success": True,
+            "message": f"Entry updated and moved to '{target_collection}'",
+            "saved_in": target_collection,
+            "entry": calc_data
+        }
 
 
 @router.delete("/{entry_id}")
@@ -569,19 +681,21 @@ async def delete_single_entry(
     """
     db = get_database()
     user_id = current_user["id"]
+    company_id = current_user.get("company_id") or user_id
+    scope_filter = get_company_scope_query(current_user)
     try:
         obj_id = ObjectId(entry_id)
     except Exception:
         raise HTTPException(status_code=400, detail="Invalid entry ID format")
 
     if saved_in:
-        res = await db[saved_in].delete_one({"_id": obj_id, "user_id": user_id})
+        res = await db[saved_in].delete_one({"_id": obj_id, **scope_filter})
         if res.deleted_count > 0:
             return {"success": True, "deleted_count": 1, "collection": saved_in}
         raise HTTPException(status_code=404, detail="Entry not found in specified collection")
 
     collections_to_query = set(settings.COLLECTION_MAP.values())
-    cursor_modes = db.masters.find({"category": "Type/Mode", "$or": [{"user_id": user_id}, {"is_system": True}]})
+    cursor_modes = db.masters.find({"category": "Type/Mode", "$or": [{"company_id": company_id}, {"user_id": user_id}, {"is_system": True}]})
     modes = await cursor_modes.to_list(length=500)
     for m in modes:
         val = m.get("value")
@@ -589,9 +703,32 @@ async def delete_single_entry(
             collections_to_query.add(get_collection_name(val))
 
     for col in collections_to_query:
-        res = await db[col].delete_one({"_id": obj_id, "user_id": user_id})
+        res = await db[col].delete_one({"_id": obj_id, **scope_filter})
         if res.deleted_count > 0:
             return {"success": True, "deleted_count": 1, "collection": col}
 
     raise HTTPException(status_code=404, detail="Entry not found")
+
+
+class DownloadPdfPayload(BaseModel):
+    entry: dict
+    company_name: Optional[str] = None
+
+
+@router.post("/download-pdf")
+async def download_entry_pdf_direct(payload: DownloadPdfPayload):
+    """
+    Renders and directly downloads the delivery entry as a Tally invoice PDF.
+    """
+    entry_dict = payload.entry
+    challan_no = entry_dict.get("challan_no") or entry_dict.get("serial_no") or entry_dict.get("id") or "slip"
+    pdf_bytes = generate_tally_invoice_pdf(entry_dict, payload.company_name or "")
+
+    return Response(
+        content=pdf_bytes,
+        media_type="application/pdf",
+        headers={
+            "Content-Disposition": f'attachment; filename="Invoice_{challan_no}.pdf"'
+        }
+    )
 

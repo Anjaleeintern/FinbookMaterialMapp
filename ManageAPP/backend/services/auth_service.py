@@ -52,6 +52,8 @@ async def get_current_user(token: Optional[str] = Depends(oauth2_scheme), auth_t
     if user is None:
         raise credentials_exception
         
+    company_id = user.get("company_id") or user.get("org_id") or str(user["_id"])
+    company_name = user.get("company_name") or f"{user.get('name', 'User')}'s Organization"
     return {
         "id": str(user["_id"]),
         "email": user["email"],
@@ -59,4 +61,6 @@ async def get_current_user(token: Optional[str] = Depends(oauth2_scheme), auth_t
         "role": user.get("role", "admin"),
         "phone": user.get("phone", ""),
         "state": user.get("state", ""),
+        "company_id": str(company_id),
+        "company_name": str(company_name),
     }

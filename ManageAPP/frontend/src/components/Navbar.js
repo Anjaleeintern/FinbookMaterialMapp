@@ -112,9 +112,9 @@ export const Navbar = ({ search, setSearch, onRefresh, toggleSidebar, onNavigate
                       <Text style={[styles.avatarText, { fontSize: 16 }]}>{initial}</Text>
                     </View>
                     <View style={{ marginLeft: 10, flex: 1 }}>
-                      <Text style={styles.dropdownName}>{user?.name || 'Operator'}</Text>
+                      <Text style={styles.dropdownName}>{user?.name || 'User'}</Text>
                       <Text style={styles.dropdownEmail} numberOfLines={1}>
-                        {user?.email || 'admin@materialmapp.com'}
+                        {user?.email || ''}
                       </Text>
                     </View>
                   </View>

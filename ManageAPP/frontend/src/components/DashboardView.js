@@ -33,27 +33,31 @@ const SvgText = isWeb ? 'text' : SvgTextNative;
 
 // Colors for materials & modes (matching reference image palette)
 const MODE_COLORS = {
-  without_royalty: '#1e3a8a',    // Deep Navy: Without Royalty
-  qr: '#ea580c',                 // Vibrant Warm Orange: QR / UPI Sale
   royalty: '#d97706',            // Golden Mustard: Royalty Bills (GST)
+  without_royalty: '#1e3a8a',    // Deep Navy: Without Royalty
   credit: '#0d9488',             // Teal: Credit Sale
-  hr_royalty: '#7c3aed',         // Purple / Violet: HR Loading (Royalty Sale)
   cash: '#e11d48',               // Salmon Coral: Cash Sale
-  hr_without_royalty: '#94a3b8', // Slate Grey: HR Loading (Without Royalty)
+  qr: '#ea580c',                 // Vibrant Warm Orange: QR / UPI Sale
+  bank: '#2563eb',               // Vibrant Royal Blue: Bank Sale
 };
 
 const MATERIAL_PALETTE = ['#0284c7', '#10b981', '#f59e0b', '#8b5cf6', '#ec4899', '#06b6d4', '#64748b'];
 
-// Distinct modes matching all quarry sales & HR loading types
-const STACKED_MODES = [
-  { key: 'without_royalty', label: 'Without Royalty', color: '#1e3a8a' },
-  { key: 'qr', label: 'QR / UPI Sale', color: '#ea580c' },
-  { key: 'royalty', label: 'Royalty Bills (GST)', color: '#d97706' },
-  { key: 'credit', label: 'Credit Sale', color: '#0d9488' },
-  { key: 'hr_royalty', label: 'HR Loading (Royalty)', color: '#7c3aed' },
+// Dimension 1: Sale Mode (Cash / Bank / QR / Credit Sale)
+const SALE_MODES = [
   { key: 'cash', label: 'Cash Sale', color: '#e11d48' },
-  { key: 'hr_without_royalty', label: 'HR Loading (Non-Royalty)', color: '#94a3b8' },
+  { key: 'bank', label: 'Bank Sale', color: '#2563eb' },
+  { key: 'qr', label: 'QR / UPI Sale', color: '#ea580c' },
+  { key: 'credit', label: 'Credit Sale', color: '#0d9488' },
 ];
+
+// Dimension 2: Royalty Type (Royalty Sale / Without Royalty)
+const ROYALTY_MODES = [
+  { key: 'royalty', label: 'Royalty Sale (GST)', color: '#d97706' },
+  { key: 'without_royalty', label: 'Without Royalty', color: '#1e3a8a' },
+];
+
+const STACKED_MODES = SALE_MODES;
 
 const computeNiceTicks = (maxVal) => {
   const val = Number(maxVal) || 0;
@@ -159,36 +163,69 @@ const toDisplayDateString = (date) => {
 };
 
 const formatDateKey = (dateStr) => {
-  if (!dateStr) return '15-Oct';
+  if (!dateStr) return '';
   const d = parseEntryDate(dateStr);
   if (d && !isNaN(d.getTime())) {
     const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
     const dayNum = String(d.getDate()).padStart(2, '0');
-    const mName = monthNames[d.getMonth()] || 'Oct';
+    const mName = monthNames[d.getMonth()] || '';
     return `${dayNum}-${mName}`;
   }
   return String(dateStr);
 };
 
 const getSaleModeBucket = (entry) => {
-  const mode = String(entry.type_mode || entry.saved_in || '').toLowerCase();
-  const hrType = String(entry.hr_loading_type || '').toLowerCase();
+  if (!entry) return 'credit';
+  const pm = String(entry.payment_mode || '').trim().toLowerCase();
+  const tm = String(entry.sales_mode || entry.type_mode || entry.saved_in || '').trim().toLowerCase();
 
-  // 1. HR Loading has two distinct subtypes (separate from normal royalty/without royalty)
-  if (mode.includes('hr')) {
-    if (hrType.includes('with') || (hrType.includes('royalty') && !hrType.includes('without'))) {
-      return 'hr_royalty';
-    }
-    return 'hr_without_royalty';
+  // 1. Payment modes inside Cash Sale (Bank, QR, Cash)
+  if (pm === 'bank' || pm.includes('bank') || tm.includes('bank')) {
+    return 'bank';
+  }
+  if (pm === 'qr' || pm.includes('qr') || pm.includes('upi') || tm.includes('qr') || tm.includes('upi')) {
+    return 'qr';
+  }
+  if (pm === 'cash' || tm.includes('cash') || tm.includes('case')) {
+    return 'cash';
   }
 
-  // 2. Standard Payment and Sale Modes
-  if (mode.includes('cash') || mode.includes('case')) return 'cash';
-  if (mode.includes('qr')) return 'qr';
-  if (mode.includes('without')) return 'without_royalty';
-  if (mode.includes('royalty')) return 'royalty';
-  if (mode.includes('credit')) return 'credit';
+  // 2. Credit Sale
+  if (tm.includes('credit') || entry.saved_in === 'credit_sale') {
+    return 'credit';
+  }
+
+  // 3. Fallbacks
+  if (entry.saved_in === 'cash_sale') {
+    return 'cash';
+  }
+
   return 'credit';
+};
+
+const getRoyaltyBucket = (entry) => {
+  if (!entry) return 'without_royalty';
+  const st = String(entry.sale_type || '').trim().toLowerCase();
+  const tm = String(entry.type_mode || '').trim().toLowerCase();
+  const savedIn = String(entry.saved_in || '').trim().toLowerCase();
+
+  // 1. Explicit sale_type from Create Entry form
+  if (st.includes('without')) return 'without_royalty';
+  if (st.includes('royalty')) return 'royalty';
+
+  // 2. saved_in collection
+  if (savedIn === 'without_royalty') return 'without_royalty';
+  if (savedIn === 'royalty_sale') return 'royalty';
+
+  // 3. type_mode
+  if (tm.includes('without')) return 'without_royalty';
+  if (tm.includes('royalty') || tm.includes('with royalty')) return 'royalty';
+
+  // 4. GST indicates Royalty bill
+  const gst = Number(entry.gst_amount) || Number(entry.gst_rate) || 0;
+  if (gst > 0) return 'royalty';
+
+  return 'without_royalty';
 };
 
 const formatINR = (val) => {
@@ -235,6 +272,7 @@ export const DashboardView = React.memo(({ entries = [], onOpenAddModal, onNavig
   const [hoveredMaterialIdx, setHoveredMaterialIdx] = useState(null);
   const [hoveredModeKey, setHoveredModeKey] = useState(null);
   const [showPartySalesModal, setShowPartySalesModal] = useState(false);
+  const [chartDimension, setChartDimension] = useState('sale_mode'); // 'sale_mode' | 'royalty_type'
 
   // App-Based Date Filter State
   const [dateFilter, setDateFilter] = useState('all');
@@ -372,6 +410,7 @@ export const DashboardView = React.memo(({ entries = [], onOpenAddModal, onNavig
     maxTimelineVal,
     stackedTicks,
     modeShares,
+    activeStackedModes,
     partyData,
     maxPartyVal,
   } = useMemo(() => {
@@ -481,14 +520,15 @@ export const DashboardView = React.memo(({ entries = [], onOpenAddModal, onNavig
     let gstCollected = 0;
 
     const dateMap = {};
-    const modeTotals = {
+    const saleModeTotals = {
+      cash: 0,
+      bank: 0,
+      qr: 0,
+      credit: 0,
+    };
+    const royaltyTotals = {
       royalty: 0,
       without_royalty: 0,
-      hr_royalty: 0,
-      hr_without_royalty: 0,
-      credit: 0,
-      cash: 0,
-      qr: 0,
     };
     const matTotals = {};
     const partyMap = {};
@@ -503,11 +543,20 @@ export const DashboardView = React.memo(({ entries = [], onOpenAddModal, onNavig
       taxableAmount += taxAmt;
       gstCollected += gstAmt;
 
-      const bucket = getSaleModeBucket(e);
-      if (modeTotals[bucket] !== undefined) {
-        modeTotals[bucket] += saleAmt;
+      // 1. Sale Mode classification (Cash / Bank / QR / Credit)
+      const saleMode = getSaleModeBucket(e);
+      if (saleModeTotals[saleMode] !== undefined) {
+        saleModeTotals[saleMode] += saleAmt;
       } else {
-        modeTotals.credit += saleAmt;
+        saleModeTotals.credit += saleAmt;
+      }
+
+      // 2. Royalty Type classification (Royalty / Without Royalty)
+      const royaltyType = getRoyaltyBucket(e);
+      if (royaltyTotals[royaltyType] !== undefined) {
+        royaltyTotals[royaltyType] += saleAmt;
+      } else {
+        royaltyTotals.without_royalty += saleAmt;
       }
 
       // Material
@@ -520,10 +569,11 @@ export const DashboardView = React.memo(({ entries = [], onOpenAddModal, onNavig
         partyMap[pName] = { name: pName, royalty: 0, non_royalty: 0, credit: 0, cash: 0, total: 0 };
       }
       partyMap[pName].total += saleAmt;
-      if (bucket === 'royalty' || bucket === 'hr_royalty') partyMap[pName].royalty += saleAmt;
-      else if (bucket === 'cash') partyMap[pName].cash += saleAmt;
-      else if (bucket === 'credit') partyMap[pName].credit += saleAmt;
+      if (royaltyType === 'royalty') partyMap[pName].royalty += saleAmt;
       else partyMap[pName].non_royalty += saleAmt;
+
+      if (saleMode === 'credit') partyMap[pName].credit += saleAmt;
+      else partyMap[pName].cash += saleAmt;
 
       // Date-wise aggregation for timeline chart
       if (e.date) {
@@ -533,20 +583,22 @@ export const DashboardView = React.memo(({ entries = [], onOpenAddModal, onNavig
           dateMap[dKey] = {
             date: dKey,
             total: 0,
+            cash: 0,
+            bank: 0,
+            qr: 0,
+            credit: 0,
             royalty: 0,
             without_royalty: 0,
-            hr_royalty: 0,
-            hr_without_royalty: 0,
-            credit: 0,
-            cash: 0,
-            qr: 0,
             count: 0,
           };
         }
         dateMap[dKey].total += saleAmt;
         dateMap[dKey].count += 1;
-        if (dateMap[dKey][bucket] !== undefined) {
-          dateMap[dKey][bucket] += saleAmt;
+        if (dateMap[dKey][saleMode] !== undefined) {
+          dateMap[dKey][saleMode] += saleAmt;
+        }
+        if (dateMap[dKey][royaltyType] !== undefined) {
+          dateMap[dKey][royaltyType] += saleAmt;
         }
       }
     });
@@ -568,17 +620,35 @@ export const DashboardView = React.memo(({ entries = [], onOpenAddModal, onNavig
       matList.push({ name: 'No Material Data', amount: 0, percent: 100, color: '#94a3b8' });
     }
 
-    // Mode Shares - Matching reference image labels & colors
-    const sumAllModes = Object.values(modeTotals).reduce((a, b) => a + b, 0);
-    const shares = [
-      { key: 'without_royalty', label: 'Without Royalty', amount: modeTotals.without_royalty, percent: sumAllModes > 0 ? Math.round((modeTotals.without_royalty / sumAllModes) * 100) : 0, color: MODE_COLORS.without_royalty },
-      { key: 'qr', label: 'QR / UPI Sale', amount: modeTotals.qr, percent: sumAllModes > 0 ? Math.round((modeTotals.qr / sumAllModes) * 100) : 0, color: MODE_COLORS.qr },
-      { key: 'royalty', label: 'Royalty Bills (GST)', amount: modeTotals.royalty, percent: sumAllModes > 0 ? Math.round((modeTotals.royalty / sumAllModes) * 100) : 0, color: MODE_COLORS.royalty },
-      { key: 'credit', label: 'Credit Sale', amount: modeTotals.credit, percent: sumAllModes > 0 ? Math.round((modeTotals.credit / sumAllModes) * 100) : 0, color: MODE_COLORS.credit },
-      { key: 'hr_royalty', label: 'HR Loading (Royalty)', amount: modeTotals.hr_royalty, percent: sumAllModes > 0 ? Math.round((modeTotals.hr_royalty / sumAllModes) * 100) : 0, color: MODE_COLORS.hr_royalty },
-      { key: 'cash', label: 'Cash Sale', amount: modeTotals.cash, percent: sumAllModes > 0 ? Math.round((modeTotals.cash / sumAllModes) * 100) : 0, color: MODE_COLORS.cash },
-      { key: 'hr_without_royalty', label: 'HR Loading (Without Royalty)', amount: modeTotals.hr_without_royalty, percent: sumAllModes > 0 ? Math.round((modeTotals.hr_without_royalty / sumAllModes) * 100) : 0, color: MODE_COLORS.hr_without_royalty },
-    ];
+    // Dynamic Active Modes & Mode Shares based on selected Tab
+    const activeStackedModes = chartDimension === 'sale_mode' ? SALE_MODES : ROYALTY_MODES;
+
+    let shares = [];
+    if (chartDimension === 'sale_mode') {
+      const sumModes = Object.values(saleModeTotals).reduce((a, b) => a + b, 0);
+      shares = SALE_MODES.map((m) => {
+        const amt = saleModeTotals[m.key] || 0;
+        return {
+          key: m.key,
+          label: m.label,
+          amount: amt,
+          percent: sumModes > 0 ? Math.round((amt / sumModes) * 100) : 0,
+          color: m.color,
+        };
+      });
+    } else {
+      const sumRoyalty = Object.values(royaltyTotals).reduce((a, b) => a + b, 0);
+      shares = ROYALTY_MODES.map((m) => {
+        const amt = royaltyTotals[m.key] || 0;
+        return {
+          key: m.key,
+          label: m.label,
+          amount: amt,
+          percent: sumRoyalty > 0 ? Math.round((amt / sumRoyalty) * 100) : 0,
+          color: m.color,
+        };
+      });
+    }
 
     // Date-wise Timeline Data: Dynamic based on dateFilter
     let timelineKeys = [];
@@ -628,13 +698,12 @@ export const DashboardView = React.memo(({ entries = [], onOpenAddModal, onNavig
       return {
         date: k,
         total: item.total || 0,
+        cash: item.cash || 0,
+        bank: item.bank || 0,
+        qr: item.qr || 0,
+        credit: item.credit || 0,
         royalty: item.royalty || 0,
         without_royalty: item.without_royalty || 0,
-        hr_royalty: item.hr_royalty || 0,
-        hr_without_royalty: item.hr_without_royalty || 0,
-        cash: item.cash || 0,
-        credit: item.credit || 0,
-        qr: item.qr || 0,
         count: item.count || 0,
       };
     });
@@ -671,10 +740,13 @@ export const DashboardView = React.memo(({ entries = [], onOpenAddModal, onNavig
       maxTimelineVal: maxTVal,
       stackedTicks,
       modeShares: shares,
+      activeStackedModes,
       partyData: pList,
       maxPartyVal: maxPVal,
     };
-  }, [entries, dateFilter, customStartDate, customEndDate]);
+  }, [entries, dateFilter, customStartDate, customEndDate, chartDimension]);
+
+  const currentStackedModes = activeStackedModes || (chartDimension === 'sale_mode' ? SALE_MODES : ROYALTY_MODES);
 
   // Dynamic KPI cards showing filtered or overall metrics
   const isFiltered = dateFilter !== 'all';
@@ -922,13 +994,104 @@ export const DashboardView = React.memo(({ entries = [], onOpenAddModal, onNavig
 
       {/* 3. THE 4 CHARTS (Rearranged: 1. Date-wise Sales by Mode, 2. Sales by Mode, 3. Sales by Material, 4. Top Party-wise Sales) */}
       <View style={styles.chartsGrid}>
+        {/* Dimension Toggle Tabs: Sale Mode vs Royalty Type */}
+        <View style={[styles.dimensionToggleBar, isMobile && styles.dimensionToggleBarMobile]}>
+          <TouchableOpacity
+            style={[
+              styles.dimensionTabBtn,
+              chartDimension === 'sale_mode' && styles.dimensionTabBtnActive,
+              isMobile && styles.dimensionTabBtnMobile,
+            ]}
+            onPress={() => {
+              setChartDimension('sale_mode');
+              setHoveredModeKey(null);
+            }}
+            activeOpacity={0.8}
+          >
+            <Ionicons
+              name="wallet"
+              size={isMobile ? 14 : 16}
+              color={chartDimension === 'sale_mode' ? '#0284c7' : '#64748b'}
+            />
+            <Text
+              style={[
+                styles.dimensionTabText,
+                chartDimension === 'sale_mode' && styles.dimensionTabTextActive,
+                isMobile && styles.dimensionTabTextMobile,
+              ]}
+              numberOfLines={1}
+            >
+              {isMobile ? 'Sale Mode (4 Types)' : 'Sale Mode (Cash / Bank / QR / Credit)'}
+            </Text>
+            <View
+              style={[
+                styles.dimensionBadge,
+                chartDimension === 'sale_mode' && styles.dimensionBadgeActive,
+              ]}
+            >
+              <Text
+                style={[
+                  styles.dimensionBadgeText,
+                  chartDimension === 'sale_mode' && styles.dimensionBadgeTextActive,
+                ]}
+              >
+                {isMobile ? '4' : '4 Modes'}
+              </Text>
+            </View>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={[
+              styles.dimensionTabBtn,
+              chartDimension === 'royalty_type' && styles.dimensionTabBtnActive,
+              isMobile && styles.dimensionTabBtnMobile,
+            ]}
+            onPress={() => {
+              setChartDimension('royalty_type');
+              setHoveredModeKey(null);
+            }}
+            activeOpacity={0.8}
+          >
+            <Ionicons
+              name="document-text"
+              size={isMobile ? 14 : 16}
+              color={chartDimension === 'royalty_type' ? '#0284c7' : '#64748b'}
+            />
+            <Text
+              style={[
+                styles.dimensionTabText,
+                chartDimension === 'royalty_type' && styles.dimensionTabTextActive,
+                isMobile && styles.dimensionTabTextMobile,
+              ]}
+              numberOfLines={1}
+            >
+              {isMobile ? 'Royalty Type (2 Types)' : 'Royalty Type (Royalty / Without Royalty)'}
+            </Text>
+            <View
+              style={[
+                styles.dimensionBadge,
+                chartDimension === 'royalty_type' && styles.dimensionBadgeActive,
+              ]}
+            >
+              <Text
+                style={[
+                  styles.dimensionBadgeText,
+                  chartDimension === 'royalty_type' && styles.dimensionBadgeTextActive,
+                ]}
+              >
+                {isMobile ? '2' : '2 Types'}
+              </Text>
+            </View>
+          </TouchableOpacity>
+        </View>
+
         {/* ROW 1: Date-wise Sales by Sale Mode & Sales by Mode (Monthly Overview) */}
         <View style={[styles.chartsRow, isMobile && styles.chartsRowMobile]}>
-          {/* Chart 1: Date-wise Sales by Sale Mode (₹) */}
+          {/* Chart 1: Date-wise Sales (₹) */}
           <View style={[styles.chartCard, styles.stackedChartCard, isMobile && styles.chartCardMobile, !isMobile && styles.chartCardHalf]}>
             <View style={styles.chartHeaderRow}>
               <Text style={[styles.chartCardTitle, isMobile && styles.chartCardTitleMobile, { flexShrink: 1 }]} numberOfLines={1}>
-                Date-wise Sales by Sale Mode (₹)
+                {chartDimension === 'sale_mode' ? 'Date-wise Sales by Sale Mode (₹)' : 'Date-wise Sales by Royalty Status (₹)'}
               </Text>
               <View style={styles.headerBadgeContainer}>
                 {hoveredTrendIdx !== null && timelineData[hoveredTrendIdx] ? (
@@ -980,13 +1143,13 @@ export const DashboardView = React.memo(({ entries = [], onOpenAddModal, onNavig
                         const isHovered = hoveredTrendIdx === i;
 
                         // Find topmost active mode for rounded cap
-                        const activeModes = STACKED_MODES.filter((m) => (d[m.key] || 0) > 0);
+                        const activeModes = currentStackedModes.filter((m) => (d[m.key] || 0) > 0);
                         const topModeKey = activeModes.length > 0 ? activeModes[activeModes.length - 1].key : null;
 
                         let currentY = 182; // baseline
 
                         // Compute segments
-                        const segments = STACKED_MODES.map((mode) => {
+                        const segments = currentStackedModes.map((mode) => {
                           const val = d[mode.key] || 0;
                           if (val <= 0) return null;
                           const segHeight = stackedTicks.maxScale > 0 ? (val / stackedTicks.maxScale) * 155 : 0;
@@ -1154,7 +1317,7 @@ export const DashboardView = React.memo(({ entries = [], onOpenAddModal, onNavig
                             </SvgText>
                             <Line x1={boxX + 8} y1={boxY + 19} x2={boxX + boxW - 8} y2={boxY + 19} stroke="#f1f5f9" strokeWidth="1" />
                             {(() => {
-                              const activeModes = STACKED_MODES.filter((m) => (cur[m.key] || 0) > 0);
+                              const activeModes = currentStackedModes.filter((m) => (cur[m.key] || 0) > 0);
                               if (activeModes.length === 0) {
                                 return (
                                   <SvgText x={boxX + 8} y={boxY + 36} fill="#64748b" fontSize="9.5">
@@ -1182,7 +1345,7 @@ export const DashboardView = React.memo(({ entries = [], onOpenAddModal, onNavig
 
             {/* Horizontal Legend at Bottom */}
             <View style={styles.stackedBarLegendRow}>
-              {STACKED_MODES.map((m) => (
+              {currentStackedModes.map((m) => (
                 <View key={m.key} style={styles.stackedBarLegendItem}>
                   <View style={[styles.stackedLegendCircle, { backgroundColor: m.color }]} />
                   <Text style={[styles.stackedLegendText, isMobile && { fontSize: 10.5 }]}>{m.label}</Text>
@@ -1195,11 +1358,11 @@ export const DashboardView = React.memo(({ entries = [], onOpenAddModal, onNavig
             </View>
           </View>
 
-          {/* Chart 2: Sales by Mode (Monthly Overview) - Animated Pie Chart matching Reference Image */}
+          {/* Chart 2: Sales by Mode / Royalty (Monthly Overview) */}
           <View style={[styles.chartCard, isMobile && styles.chartCardMobile, !isMobile && styles.chartCardHalf]}>
             <View style={styles.chartHeaderRow}>
               <Text style={[styles.chartCardTitle, isMobile && styles.chartCardTitleMobile, { flexShrink: 1 }]} numberOfLines={1}>
-                Sales by Mode (Monthly Overview)
+                {chartDimension === 'sale_mode' ? 'Sales by Mode (Monthly Overview)' : 'Sales by Royalty (Monthly Overview)'}
               </Text>
               <View style={styles.headerBadgeContainer}>
                 {hoveredModeKey ? (() => {
@@ -1339,9 +1502,10 @@ export const DashboardView = React.memo(({ entries = [], onOpenAddModal, onNavig
                             );
                           })}
 
-                          {/* 2. White Percentage Text inside prominent slices (>= 12%) */}
+                          {/* 2. White Percentage Text inside slices - Show for all slices (> 0%) */}
                           {slices.map((slice) => {
-                            if (!slice.hasSales || slice.percent < 12) return null;
+                            if (!slice.hasSales || !slice.percent || slice.percent <= 0) return null;
+                            const fSize = slice.isFullCircle ? "13" : (slice.percent < 5 ? "9" : (slice.percent < 10 ? "10.5" : "12"));
                             return (
                               <SvgText
                                 key={`pct-${slice.key}`}
@@ -1349,7 +1513,7 @@ export const DashboardView = React.memo(({ entries = [], onOpenAddModal, onNavig
                                 y={slice.ly + 4}
                                 textAnchor="middle"
                                 fill="#ffffff"
-                                fontSize={slice.isFullCircle ? "13" : "12"}
+                                fontSize={fSize}
                                 fontWeight="800"
                                 style={isWeb ? { pointerEvents: 'none' } : undefined}
                               >
@@ -1535,13 +1699,13 @@ export const DashboardView = React.memo(({ entries = [], onOpenAddModal, onNavig
                                 transition: 'd 0.32s cubic-bezier(0.34, 1.56, 0.64, 1), opacity 0.25s ease',
                               } : undefined}
                             />
-                            {/* Direct Percentage on Donut Slice - NO CLICK NEEDED! */}
-                            {m.percent >= 8 && (
+                            {/* Direct Percentage on Donut Slice - Show for all non-zero percent */}
+                            {m.percent > 0 && (
                               <SvgText
                                 x={isFullCircle ? cx : (cx + shiftX) + ((R + r) / 2) * Math.cos(midRad)}
                                 y={isFullCircle ? cy - ((R + r) / 2) + 4.5 : (cy + shiftY) + ((R + r) / 2) * Math.sin(midRad) + 3.5}
                                 fill="#ffffff"
-                                fontSize={isFullCircle ? "13" : "11"}
+                                fontSize={isFullCircle ? "13" : (m.percent < 5 ? "8.5" : (m.percent < 10 ? "10" : "11"))}
                                 fontWeight="800"
                                 textAnchor="middle"
                                 style={isWeb ? { pointerEvents: 'none' } : undefined}
@@ -3207,6 +3371,76 @@ const styles = StyleSheet.create({
   partyChartFooterBtnText: {
     fontSize: 11.5,
     fontWeight: '600',
+    color: '#0284c7',
+  },
+  dimensionToggleBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#f1f5f9',
+    borderRadius: 12,
+    padding: 4,
+    gap: 6,
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+  },
+  dimensionToggleBarMobile: {
+    padding: 3,
+    gap: 4,
+  },
+  dimensionTabBtn: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 9,
+    paddingHorizontal: 12,
+    borderRadius: 9,
+    gap: 7,
+    backgroundColor: 'transparent',
+  },
+  dimensionTabBtnMobile: {
+    paddingVertical: 7,
+    paddingHorizontal: 8,
+    gap: 5,
+  },
+  dimensionTabBtnActive: {
+    backgroundColor: '#ffffff',
+    shadowColor: '#0f172a',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.08,
+    shadowRadius: 5,
+    elevation: 2,
+    borderColor: '#e2e8f0',
+    borderWidth: 1,
+  },
+  dimensionTabText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#64748b',
+  },
+  dimensionTabTextMobile: {
+    fontSize: 11,
+    fontWeight: '600',
+  },
+  dimensionTabTextActive: {
+    color: '#0284c7',
+    fontWeight: '700',
+  },
+  dimensionBadge: {
+    paddingHorizontal: 6,
+    paddingVertical: 1.5,
+    borderRadius: 10,
+    backgroundColor: '#e2e8f0',
+  },
+  dimensionBadgeActive: {
+    backgroundColor: '#e0f2fe',
+  },
+  dimensionBadgeText: {
+    fontSize: 10,
+    fontWeight: '700',
+    color: '#64748b',
+  },
+  dimensionBadgeTextActive: {
     color: '#0284c7',
   },
 });

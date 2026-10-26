@@ -151,7 +151,7 @@ const DropdownSelect = ({ label, required, value, options = [], onSelect, isMobi
   );
 };
 
-export const DeliveryEntriesFormModal = ({ visible, onClose, onSuccess, masters }) => {
+export const DeliveryEntriesFormModal = ({ visible, onClose, onSuccess, masters, initialData = null }) => {
   const { width } = useWindowDimensions();
   const insets = useSafeAreaInsets();
   const isMobile = width < 768;
@@ -324,32 +324,78 @@ export const DeliveryEntriesFormModal = ({ visible, onClose, onSuccess, masters 
 
   useEffect(() => {
     if (visible) {
-      api.getNextChallan()
-        .then((data) => setChallanNo(data.next_challan_no))
-        .catch(() => setChallanNo(''));
+      if (initialData) {
+        setChallanNo(initialData.challan_no || '');
+        setDate(initialData.date || getTodayStr());
+        setVehicleNo(initialData.vehicle_no || '');
+        setTransportType(initialData.transport_type || initialData.transport_name || '');
+        setTypeMode(initialData.type_mode || '');
+        setSaleType(initialData.sale_type || '');
+        setHrLoadingType(initialData.hr_loading_type || '');
+        setMaterialName(initialData.material_name || '');
+        setPartyName(initialData.party_name || '');
+        setCustomerName(initialData.customer_name || '');
+        setPartyState(initialData.party_state || 'Madhya Pradesh');
+        setCum(String(initialData.cum !== undefined && initialData.cum !== null ? initialData.cum : '0'));
+        setEtpNo(initialData.etp_no || '');
+        setGWt(String(initialData.g_wt !== undefined && initialData.g_wt !== null ? initialData.g_wt : '0'));
+        setTWt(String(initialData.t_wt !== undefined && initialData.t_wt !== null ? initialData.t_wt : '0'));
+        setRate(String(initialData.rate !== undefined && initialData.rate !== null ? initialData.rate : '0'));
 
-      setDate(getTodayStr());
-      setVehicleNo('');
-      setTransportType('');
-      setTypeMode('');
-      setSaleType('');
-      setHrLoadingType('');
-      setMaterialName('');
-      setPartyName('');
-      setCustomerName('');
-      setPartyState('Madhya Pradesh');
-      setCum('0');
-      setEtpNo('');
-      setGWt('0');
-      setTWt('0');
-      setRate('0');
-      setAdditionalChargesList([{ id: '1', name: '', amount: '0' }]);
-      setPaymentMode('Cash');
-      setGstRate('0');
-      setRateCalcUnit('MT');
-      setErrorMsg('');
-      setPickerConfig(null);
-      setPickerSearch('');
+        if (Array.isArray(initialData.additional_charges) && initialData.additional_charges.length > 0) {
+          setAdditionalChargesList(
+            initialData.additional_charges.map((c, i) => ({
+              id: String(i + 1),
+              name: c.name || '',
+              amount: String(c.amount || '0'),
+            }))
+          );
+        } else if (initialData.additional_charge_amount > 0 || initialData.additional_charge_name) {
+          setAdditionalChargesList([
+            {
+              id: '1',
+              name: initialData.additional_charge_name || '',
+              amount: String(initialData.additional_charge_amount || '0'),
+            },
+          ]);
+        } else {
+          setAdditionalChargesList([{ id: '1', name: '', amount: '0' }]);
+        }
+
+        setPaymentMode(initialData.payment_mode || (initialData.type_mode === 'Cash Sale' ? 'Cash' : ''));
+        setGstRate(String(initialData.gst_rate !== undefined && initialData.gst_rate !== null ? initialData.gst_rate : '0'));
+        setRateCalcUnit(initialData.rate_calc_unit || 'MT');
+        setErrorMsg('');
+        setPickerConfig(null);
+        setPickerSearch('');
+      } else {
+        api.getNextChallan()
+          .then((data) => setChallanNo(data.next_challan_no))
+          .catch(() => setChallanNo(''));
+
+        setDate(getTodayStr());
+        setVehicleNo('');
+        setTransportType('');
+        setTypeMode('');
+        setSaleType('');
+        setHrLoadingType('');
+        setMaterialName('');
+        setPartyName('');
+        setCustomerName('');
+        setPartyState('Madhya Pradesh');
+        setCum('0');
+        setEtpNo('');
+        setGWt('0');
+        setTWt('0');
+        setRate('0');
+        setAdditionalChargesList([{ id: '1', name: '', amount: '0' }]);
+        setPaymentMode('Cash');
+        setGstRate('0');
+        setRateCalcUnit('MT');
+        setErrorMsg('');
+        setPickerConfig(null);
+        setPickerSearch('');
+      }
 
       if (masters) {
         if (Array.isArray(masters.VehicleNo)) setVehicleOptions(masters.VehicleNo);
@@ -359,7 +405,7 @@ export const DeliveryEntriesFormModal = ({ visible, onClose, onSuccess, masters 
         if (Array.isArray(masters.AdditionalCharges)) setAdditionalChargeOptions(masters.AdditionalCharges);
       }
     }
-  }, [visible, masters]);
+  }, [visible, masters, initialData]);
 
   // When partyName changes, automatically load its registered state from masters
   useEffect(() => {
@@ -498,9 +544,15 @@ export const DeliveryEntriesFormModal = ({ visible, onClose, onSuccess, masters 
         total_amount: totalAmount,
       };
 
-      const res = await api.createEntry(payload);
+      let res;
+      if (initialData && initialData.id) {
+        res = await api.updateEntry(initialData.id, payload, initialData.saved_in);
+      } else {
+        res = await api.createEntry(payload);
+      }
       setSubmitting(false);
-      onSuccess(res);
+      const savedEntry = res?.entry || (res?.id ? res : { ...payload, id: initialData?.id || Date.now().toString() });
+      onSuccess(savedEntry);
       onClose();
     } catch (err) {
       setSubmitting(false);
@@ -519,7 +571,7 @@ export const DeliveryEntriesFormModal = ({ visible, onClose, onSuccess, masters 
                 <Ionicons name="close" size={24} color="#334155" />
               </TouchableOpacity>
               <Text style={styles.modalTitle} numberOfLines={1}>
-                {isMobile ? 'New Delivery Entry' : 'Delivery Entries Form'}
+                {initialData ? 'Edit Delivery Entry' : (isMobile ? 'New Delivery Entry' : 'Delivery Entries Form')}
               </Text>
             </View>
             <View style={styles.modalHeaderButtons}>
@@ -536,7 +588,7 @@ export const DeliveryEntriesFormModal = ({ visible, onClose, onSuccess, masters 
                 {submitting ? (
                   <ActivityIndicator size="small" color="#ffffff" />
                 ) : (
-                  <Text style={styles.saveBtnText}>Save</Text>
+                  <Text style={styles.saveBtnText}>{initialData ? 'Update' : 'Save'}</Text>
                 )}
               </TouchableOpacity>
             </View>
@@ -1016,7 +1068,9 @@ export const DeliveryEntriesFormModal = ({ visible, onClose, onSuccess, masters 
                 ) : (
                   <>
                     <Ionicons name="checkmark-circle" size={20} color="#ffffff" style={{ marginRight: 8 }} />
-                    <Text style={styles.mobileBottomSaveText}>Save Delivery Entry</Text>
+                    <Text style={styles.mobileBottomSaveText}>
+                      {initialData ? 'Update Delivery Entry' : 'Save Delivery Entry'}
+                    </Text>
                   </>
                 )}
               </TouchableOpacity>

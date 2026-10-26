@@ -348,6 +348,11 @@ export const api = {
       method: 'POST',
       body: JSON.stringify(entryData),
     }),
+  updateEntry: (id, entryData, savedIn = null) =>
+    request(`/api/entries/${id}${savedIn ? `?saved_in=${encodeURIComponent(savedIn)}` : ''}`, {
+      method: 'PUT',
+      body: JSON.stringify(entryData),
+    }),
   getSummary: () => request('/api/entries/summary'),
   deleteEntry: (id, savedIn) =>
     request(`/api/entries/${id}${savedIn ? `?saved_in=${encodeURIComponent(savedIn)}` : ''}`, {
@@ -358,6 +363,42 @@ export const api = {
       method: 'POST',
       body: JSON.stringify(Array.isArray(items) && typeof items[0] === 'string' ? { ids: items } : { items }),
     }),
+  downloadEntryPdf: async (entry, companyName = '') => {
+    const token = getAuthToken();
+    const challanNo = entry.challan_no || entry.serial_no || entry.id || 'slip';
+    const filename = `Invoice_${challanNo}.pdf`;
+    const url = `${activeBaseUrl}/api/entries/download-pdf`;
+
+    const res = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
+      body: JSON.stringify({
+        entry,
+        company_name: companyName,
+      }),
+    });
+
+    if (!res.ok) {
+      throw new Error(`Failed to generate PDF (HTTP ${res.status})`);
+    }
+
+    const blob = await res.blob();
+    if (Platform.OS === 'web' && typeof window !== 'undefined') {
+      const blobUrl = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = blobUrl;
+      link.download = filename;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      window.URL.revokeObjectURL(blobUrl);
+      return true;
+    }
+    return false;
+  },
 
   // Excel Bulk Import & Template
   getTemplateDownloadUrl: () => `${activeBaseUrl}/api/entries/template`,

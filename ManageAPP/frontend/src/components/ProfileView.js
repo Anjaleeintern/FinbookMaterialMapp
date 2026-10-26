@@ -152,13 +152,20 @@ export const ProfileView = () => {
               </View>
 
               <Text style={styles.profileEmail} numberOfLines={1}>
-                {user?.email || 'admin@materialmapp.com'}
+                {user?.email || ''}
               </Text>
 
               <View style={styles.badgesRow}>
+                {user?.company_name ? (
+                  <View style={[styles.roleBadge, { backgroundColor: '#f0fdf4', borderColor: '#bbf7d0' }]}>
+                    <Text style={[styles.roleBadgeText, { color: '#16a34a' }]}>
+                      {user.company_name}
+                    </Text>
+                  </View>
+                ) : null}
                 <View style={styles.roleBadge}>
                   <Text style={styles.roleBadgeText}>
-                    {user?.role ? user.role.toUpperCase() : 'ADMIN'}
+                    {user?.role ? user.role.toUpperCase() : 'USER'}
                   </Text>
                 </View>
 

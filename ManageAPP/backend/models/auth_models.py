@@ -10,6 +10,8 @@ class UserRegister(BaseModel):
     password: str
     name: str
     role: Optional[str] = "admin"
+    company_id: Optional[str] = None
+    company_name: Optional[str] = None
 
 class UserOut(BaseModel):
     id: str
@@ -18,6 +20,8 @@ class UserOut(BaseModel):
     role: str
     phone: Optional[str] = ""
     state: Optional[str] = ""
+    company_id: Optional[str] = ""
+    company_name: Optional[str] = ""
 
 class Token(BaseModel):
     access_token: str

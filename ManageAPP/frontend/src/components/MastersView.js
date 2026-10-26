@@ -67,7 +67,6 @@ const STATIC_TYPE_MODES = [
   'Cash Sale',
   'Credit Sale',
   'QR Sale',
-  'HR Loading',
   'Royalty Sale',
   'Without Royalty',
   'With Royalty',
@@ -82,13 +81,13 @@ const isItemStatic = (item) => {
 };
 
 const formatDate = (isoStr) => {
-  if (!isoStr) return '12 Oct 2025 10:24 AM';
+  if (!isoStr) return '-';
   try {
     const d = new Date(isoStr);
     if (isNaN(d.getTime())) return isoStr;
     const day = String(d.getDate()).padStart(2, '0');
     const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-    const month = months[d.getMonth()] || 'Oct';
+    const month = months[d.getMonth()] || '';
     const year = d.getFullYear();
     let hours = d.getHours();
     const minutes = String(d.getMinutes()).padStart(2, '0');
@@ -235,15 +234,7 @@ export const MastersView = React.memo(({ masters, onRefresh }) => {
     CATEGORIES.forEach((c) => {
       const catKey = c.id === 'Type/Mode' ? 'TypeMode' : c.id;
       const fromDetails = masterList.filter((m) => m.category === c.id);
-      if (c.id === 'Type/Mode') {
-        const mainTypes = fromDetails.filter(
-          (m) =>
-            m.value.toLowerCase() !== 'royalty sale' &&
-            m.value.toLowerCase() !== 'without royalty' &&
-            m.value.toLowerCase() !== 'with royalty'
-        );
-        counts[c.id] = mainTypes.length > 0 ? mainTypes.length : 4;
-      } else if (fromDetails.length > 0) {
+      if (fromDetails.length > 0) {
         counts[c.id] = fromDetails.length;
       } else {
         counts[c.id] = masters?.[catKey]?.length || 0;
@@ -291,22 +282,7 @@ export const MastersView = React.memo(({ masters, onRefresh }) => {
       }));
     }
 
-    if (activeCategory === 'Type/Mode') {
-      // Find or attach sub_types to HR Loading
-      const hrItem = items.find((m) => m.value.trim().toLowerCase() === 'hr loading');
-      if (hrItem) {
-        hrItem.sub_types = [
-          { label: 'Royalty (With Royalty)', value: 'Royalty Sale', is_static: true },
-          { label: 'Without Royalty', value: 'Without Royalty', is_static: true },
-        ];
-      }
 
-      // Filter out standalone Royalty Sale and Without Royalty from top-level list
-      items = items.filter((m) => {
-        const v = m.value.trim().toLowerCase();
-        return v !== 'royalty sale' && v !== 'without royalty' && v !== 'with royalty';
-      });
-    }
 
     // Apply Search Filter across all fields for all master categories
     if (searchQuery.trim()) {
@@ -342,16 +318,8 @@ export const MastersView = React.memo(({ masters, onRefresh }) => {
 
   // Status counts for pills
   const statusCounts = useMemo(() => {
-    let items = masterList.filter((m) => m.category === activeCategory);
-    if (activeCategory === 'Type/Mode') {
-      items = items.filter(
-        (m) =>
-          m.value.toLowerCase() !== 'royalty sale' &&
-          m.value.toLowerCase() !== 'without royalty' &&
-          m.value.toLowerCase() !== 'with royalty'
-      );
-    }
-    const allCount = items.length > 0 ? items.length : (activeCategory === 'Type/Mode' ? 4 : (masters?.[activeCategory]?.length || 0));
+    const items = masterList.filter((m) => m.category === activeCategory);
+    const allCount = items.length > 0 ? items.length : (masters?.[activeCategory]?.length || 0);
     const activeCount = items.filter((m) => m.status === 'Active').length || allCount;
     const inactiveCount = items.filter((m) => m.status === 'Inactive').length;
 
@@ -1090,7 +1058,7 @@ export const MastersView = React.memo(({ masters, onRefresh }) => {
                       </TouchableOpacity>
                     </View>
 
-                    {/* If HR Loading sub-types */}
+                    {/* Sub-types if any */}
                     {hasSubTypes && (
                       <View style={styles.mobileSubTypesBox}>
                         <Text style={styles.mobileSubTypesTitle}>Sub-types / Options:</Text>

@@ -21,7 +21,7 @@ const formatSavedInLabel = (val) => {
 
 const formatINR = (val) => Number(val || 0).toLocaleString('en-IN');
 
-export const AllEntriesView = React.memo(({ entries, loading, onOpenAddModal, onOpenImportModal, onRefresh }) => {
+export const AllEntriesView = React.memo(({ entries, loading, onOpenAddModal, onOpenImportModal, onRefresh, onViewInvoice, onEditEntry }) => {
   const { width } = useWindowDimensions();
   const isMobile = width < 768;
 
@@ -1162,11 +1162,53 @@ export const AllEntriesView = React.memo(({ entries, loading, onOpenAddModal, on
 
                 {/* 5. Footer Row: Truck Icon Badge on Left | Source Badge on Right */}
                 <View style={styles.refCardFooterRow}>
-                  <View style={styles.refTruckBadge}>
-                    <Ionicons name="bus" size={13} color="#7c3aed" style={{ marginRight: 5 }} />
-                    <Text style={styles.refTruckBadgeText} numberOfLines={1}>
-                      {entry.saved_in || 'hr_loading'}
-                    </Text>
+                  <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                    <View style={styles.refTruckBadge}>
+                      <Ionicons name="bus" size={13} color="#7c3aed" style={{ marginRight: 5 }} />
+                      <Text style={styles.refTruckBadgeText} numberOfLines={1}>
+                        {entry.saved_in || 'hr_loading'}
+                      </Text>
+                    </View>
+                    {onViewInvoice && (
+                      <TouchableOpacity
+                        style={{
+                          flexDirection: 'row',
+                          alignItems: 'center',
+                          backgroundColor: '#ecfdf5',
+                          borderColor: '#a7f3d0',
+                          borderWidth: 1,
+                          paddingVertical: 3,
+                          paddingHorizontal: 8,
+                          borderRadius: 6,
+                          marginLeft: 6,
+                        }}
+                        onPress={() => onViewInvoice(entry)}
+                        activeOpacity={0.7}
+                      >
+                        <Ionicons name="receipt-outline" size={13} color="#059669" style={{ marginRight: 4 }} />
+                        <Text style={{ fontSize: 11, fontWeight: '700', color: '#059669' }}>Slip</Text>
+                      </TouchableOpacity>
+                    )}
+                    {onEditEntry && (
+                      <TouchableOpacity
+                        style={{
+                          flexDirection: 'row',
+                          alignItems: 'center',
+                          backgroundColor: '#eff6ff',
+                          borderColor: '#bfdbfe',
+                          borderWidth: 1,
+                          paddingVertical: 3,
+                          paddingHorizontal: 8,
+                          borderRadius: 6,
+                          marginLeft: 6,
+                        }}
+                        onPress={() => onEditEntry(entry)}
+                        activeOpacity={0.7}
+                      >
+                        <Ionicons name="pencil-outline" size={13} color="#2563eb" style={{ marginRight: 4 }} />
+                        <Text style={{ fontSize: 11, fontWeight: '700', color: '#2563eb' }}>Edit</Text>
+                      </TouchableOpacity>
+                    )}
                   </View>
                   <View style={[styles.refSourcePill, entry.entry_source === 'manual' ? styles.refSourcePillManual : styles.refSourcePillExcel]}>
                     <Text style={[styles.refSourcePillText, entry.entry_source === 'manual' ? styles.refSourcePillTextManual : styles.refSourcePillTextExcel]}>
@@ -1219,6 +1261,8 @@ export const AllEntriesView = React.memo(({ entries, loading, onOpenAddModal, on
                   color={selectedIds.size > 0 ? '#0284c7' : '#94a3b8'}
                 />
               </TouchableOpacity>
+              <Text style={[styles.thCell, { width: 68, textAlign: 'center' }]}>SLIP</Text>
+              <Text style={[styles.thCell, { width: 68, textAlign: 'center' }]}>EDIT</Text>
               <Text style={[styles.thCell, { width: 95 }]}>DATE</Text>
               <Text style={[styles.thCell, { width: 110 }]}>CHALLAN NO.</Text>
               <Text style={[styles.thCell, { width: 115 }]}>VEHICLE NO</Text>
@@ -1254,6 +1298,12 @@ export const AllEntriesView = React.memo(({ entries, loading, onOpenAddModal, on
                 ) : (
                   <Ionicons name="search" size={13} color="#94a3b8" />
                 )}
+              </View>
+              <View style={[styles.thFilterCell, { width: 68, alignItems: 'center', justifyContent: 'center' }]}>
+                <Ionicons name="receipt-outline" size={13} color="#94a3b8" />
+              </View>
+              <View style={[styles.thFilterCell, { width: 68, alignItems: 'center', justifyContent: 'center' }]}>
+                <Ionicons name="pencil-outline" size={13} color="#94a3b8" />
               </View>
               <View style={[styles.thFilterCell, { width: 95 }]}>
                 <TextInput
@@ -1462,6 +1512,46 @@ export const AllEntriesView = React.memo(({ entries, loading, onOpenAddModal, on
                         size={17}
                         color={isSelected ? '#0284c7' : '#cbd5e1'}
                       />
+                    </TouchableOpacity>
+                    {/* Slip / Invoice Action */}
+                    <TouchableOpacity
+                      style={[styles.tdCell, { width: 68, alignItems: 'center', justifyContent: 'center' }]}
+                      onPress={() => onViewInvoice && onViewInvoice(entry)}
+                      activeOpacity={0.7}
+                    >
+                      <View style={{
+                        flexDirection: 'row',
+                        alignItems: 'center',
+                        backgroundColor: '#ecfdf5',
+                        borderColor: '#a7f3d0',
+                        borderWidth: 1,
+                        paddingVertical: 2,
+                        paddingHorizontal: 6,
+                        borderRadius: 4,
+                      }}>
+                        <Ionicons name="receipt-outline" size={12} color="#059669" style={{ marginRight: 3 }} />
+                        <Text style={{ fontSize: 10, fontWeight: '700', color: '#059669' }}>Slip</Text>
+                      </View>
+                    </TouchableOpacity>
+                    {/* Edit Action */}
+                    <TouchableOpacity
+                      style={[styles.tdCell, { width: 68, alignItems: 'center', justifyContent: 'center' }]}
+                      onPress={() => onEditEntry && onEditEntry(entry)}
+                      activeOpacity={0.7}
+                    >
+                      <View style={{
+                        flexDirection: 'row',
+                        alignItems: 'center',
+                        backgroundColor: '#eff6ff',
+                        borderColor: '#bfdbfe',
+                        borderWidth: 1,
+                        paddingVertical: 2,
+                        paddingHorizontal: 6,
+                        borderRadius: 4,
+                      }}>
+                        <Ionicons name="pencil-outline" size={12} color="#2563eb" style={{ marginRight: 3 }} />
+                        <Text style={{ fontSize: 10, fontWeight: '700', color: '#2563eb' }}>Edit</Text>
+                      </View>
                     </TouchableOpacity>
                     {/* 1. DATE */}
                     <Text style={[styles.tdCell, { width: 95 }]}>{entry.date || '-'}</Text>

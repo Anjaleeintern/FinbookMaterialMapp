@@ -586,11 +586,12 @@ def process_raw_imported_rows(
 async def execute_bulk_import_to_mongodb(
     valid_entries: List[Dict[str, Any]],
     user_id: Optional[str] = None,
-    user_email: Optional[str] = None
+    user_email: Optional[str] = None,
+    company_id: Optional[str] = None
 ) -> Dict[str, Any]:
     """
     Saves entries one by one into MongoDB directly into their respective destination collections
-    with unique auto-incrementing challan sequences for this user.
+    with unique auto-incrementing challan sequences for this user and company.
     """
     db = get_database()
     saved_count = 0
@@ -613,6 +614,8 @@ async def execute_bulk_import_to_mongodb(
             entry["user_id"] = user_id
         if user_email:
             entry["user_email"] = user_email
+        if company_id or user_id:
+            entry["company_id"] = company_id or user_id
 
         # Direct destination insert — zero staging
         result = await db[target_collection].insert_one(entry)

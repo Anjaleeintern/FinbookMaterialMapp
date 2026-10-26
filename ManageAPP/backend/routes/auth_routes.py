@@ -72,8 +72,12 @@ async def register(user: UserRegister):
         "role": user.role or "admin",
         "phone": "",
         "state": "",
+        "company_id": user.company_id.strip() if user.company_id else None,
+        "company_name": user.company_name.strip() if user.company_name else f"{user.name.strip()}'s Organization",
     }
     result = await db.users.insert_one(user_doc)
+    cid = user_doc["company_id"] or str(result.inserted_id)
+    cname = user_doc["company_name"] or f"{user.name.strip()}'s Organization"
     return {
         "id": str(result.inserted_id),
         "email": user_doc["email"],
@@ -81,6 +85,8 @@ async def register(user: UserRegister):
         "role": user_doc["role"],
         "phone": user_doc.get("phone", ""),
         "state": user_doc.get("state", ""),
+        "company_id": str(cid),
+        "company_name": str(cname),
     }
 
 @router.post("/login", response_model=Token)
@@ -100,6 +106,8 @@ async def login(credentials: UserLogin, request: Request):
         )
     
     access_token = create_access_token(data={"sub": user["email"], "role": user.get("role", "admin")})
+    cid = user.get("company_id") or user.get("org_id") or str(user["_id"])
+    cname = user.get("company_name") or f"{user.get('name', 'User')}'s Organization"
     return {
         "access_token": access_token,
         "token_type": "bearer",
@@ -110,6 +118,8 @@ async def login(credentials: UserLogin, request: Request):
             "role": user.get("role", "admin"),
             "phone": user.get("phone", ""),
             "state": user.get("state", ""),
+            "company_id": str(cid),
+            "company_name": str(cname),
         }
     }
 
@@ -144,6 +154,8 @@ async def update_profile(
         await db.users.update_one({"_id": ObjectId(user_id)}, {"$set": update_fields})
 
     updated = await db.users.find_one({"_id": ObjectId(user_id)})
+    cid = updated.get("company_id") or updated.get("org_id") or str(updated["_id"])
+    cname = updated.get("company_name") or f"{updated.get('name', 'User')}'s Organization"
     return {
         "id": str(updated["_id"]),
         "email": updated["email"],
@@ -151,6 +163,8 @@ async def update_profile(
         "role": updated.get("role", "admin"),
         "phone": updated.get("phone", ""),
         "state": updated.get("state", ""),
+        "company_id": str(cid),
+        "company_name": str(cname),
     }
 
 @router.post("/change-password")

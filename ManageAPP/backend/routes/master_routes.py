@@ -83,18 +83,23 @@ STANDARD_INDIAN_STATES = [
     "Puducherry"
 ]
 
+def get_master_scope_query(current_user: dict) -> dict:
+    company_id = current_user.get("company_id") or current_user["id"]
+    user_id = current_user["id"]
+    return {"$or": [{"company_id": str(company_id)}, {"user_id": str(user_id)}, {"is_system": True}]}
+
 @router.get("", response_model=MasterListResponse)
 async def get_all_masters(current_user: dict = Depends(get_current_user)):
     """
     Returns string arrays per category for form dropdowns.
-    Only returns Active items belonging to current user or system defaults.
+    Only returns Active items belonging to current user, authorized company, or system defaults.
     """
     db = get_database()
-    user_id = current_user["id"]
+    scope_query = get_master_scope_query(current_user)
     cursor = db.masters.find(
         {
             "status": {"$ne": "Inactive"},
-            "$or": [{"user_id": user_id}, {"is_system": True}]
+            **scope_query
         },
         {"_id": 0, "category": 1, "value": 1, "state": 1}
     )
@@ -164,8 +169,7 @@ async def get_masters_details(
     Includes ID, Category, Value, Status, CreatedAt, UpdatedAt for current user.
     """
     db = get_database()
-    user_id = current_user["id"]
-    query = {"$or": [{"user_id": user_id}, {"is_system": True}]}
+    query = get_master_scope_query(current_user)
     if category and category != "All":
         query["category"] = category
     else:
@@ -243,16 +247,17 @@ async def get_masters_details(
 async def add_master_item(item: MasterItemCreate, current_user: dict = Depends(get_current_user)):
     db = get_database()
     user_id = current_user["id"]
+    company_id = current_user.get("company_id") or user_id
     category = item.category.strip()
     value = item.value.strip()
     status_val = (item.status or "Active").strip()
 
-    # Case-insensitive duplicate check within this category for this user
+    # Case-insensitive duplicate check within this category for this user/company
     regex_pattern = f"^{re.escape(value)}$"
     existing = await db.masters.find_one({
         "category": category,
         "value": {"$regex": regex_pattern, "$options": "i"},
-        "$or": [{"user_id": user_id}, {"is_system": True}]
+        "$or": [{"company_id": company_id}, {"user_id": user_id}, {"is_system": True}]
     })
 
     now_iso = format_iso_now()
@@ -265,6 +270,7 @@ async def add_master_item(item: MasterItemCreate, current_user: dict = Depends(g
 
     doc = {
         "user_id": user_id,
+        "company_id": company_id,
         "category": category,
         "value": value,
         "status": status_val,
@@ -318,12 +324,13 @@ async def add_master_item(item: MasterItemCreate, current_user: dict = Depends(g
 async def update_master_item(item_id: str, payload: MasterItemUpdate, current_user: dict = Depends(get_current_user)):
     db = get_database()
     user_id = current_user["id"]
+    company_id = current_user.get("company_id") or user_id
     try:
         obj_id = ObjectId(item_id)
     except Exception:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid master ID format")
 
-    doc = await db.masters.find_one({"_id": obj_id, "user_id": user_id})
+    doc = await db.masters.find_one({"_id": obj_id, "$or": [{"company_id": company_id}, {"user_id": user_id}]})
     if not doc:
         sys_doc = await db.masters.find_one({"_id": obj_id, "is_system": True})
         if sys_doc:
@@ -343,7 +350,7 @@ async def update_master_item(item_id: str, payload: MasterItemUpdate, current_us
             existing = await db.masters.find_one({
                 "category": doc.get("category"),
                 "value": {"$regex": regex_pattern, "$options": "i"},
-                "$or": [{"user_id": user_id}, {"is_system": True}],
+                "$or": [{"company_id": company_id}, {"user_id": user_id}, {"is_system": True}],
                 "_id": {"$ne": obj_id}
             })
             if existing:
@@ -367,7 +374,7 @@ async def update_master_item(item_id: str, payload: MasterItemUpdate, current_us
             else:
                 update_fields[f] = val.strip()
 
-    await db.masters.update_one({"_id": obj_id, "user_id": user_id}, {"$set": update_fields})
+    await db.masters.update_one({"_id": obj_id, "$or": [{"company_id": company_id}, {"user_id": user_id}]}, {"$set": update_fields})
     updated_doc = await db.masters.find_one({"_id": obj_id})
 
     return MasterItemDetail(
@@ -392,6 +399,7 @@ async def update_master_item(item_id: str, payload: MasterItemUpdate, current_us
 async def bulk_add_masters(payload: BulkMasterCreate, current_user: dict = Depends(get_current_user)):
     db = get_database()
     user_id = current_user["id"]
+    company_id = current_user.get("company_id") or user_id
     category = payload.category.strip()
     status_val = payload.status or "Active"
     now_iso = format_iso_now()
@@ -407,13 +415,14 @@ async def bulk_add_masters(payload: BulkMasterCreate, current_user: dict = Depen
         existing = await db.masters.find_one({
             "category": category,
             "value": {"$regex": regex_pattern, "$options": "i"},
-            "$or": [{"user_id": user_id}, {"is_system": True}]
+            "$or": [{"company_id": company_id}, {"user_id": user_id}, {"is_system": True}]
         })
         if existing:
             skipped.append(val)
         else:
             doc = {
                 "user_id": user_id,
+                "company_id": company_id,
                 "category": category,
                 "value": val,
                 "status": status_val,
@@ -458,7 +467,10 @@ async def bulk_delete_masters(payload: BulkDeleteRequest, current_user: dict = D
             deletable_ids = [i for i in valid_ids if i not in protected_id_set]
 
             if deletable_ids:
-                res = await db.masters.delete_many({"_id": {"$in": deletable_ids}, "user_id": user_id})
+                res = await db.masters.delete_many({
+                    "_id": {"$in": deletable_ids},
+                    "$or": [{"company_id": current_user.get("company_id") or user_id}, {"user_id": user_id}]
+                })
                 deleted_count += res.deleted_count
 
     if payload.category and payload.values:
@@ -470,14 +482,15 @@ async def bulk_delete_masters(payload: BulkDeleteRequest, current_user: dict = D
             res = await db.masters.delete_many({
                 "category": cat,
                 "value": {"$in": deletable_values},
-                "user_id": user_id
+                "$or": [{"company_id": current_user.get("company_id") or user_id}, {"user_id": user_id}]
             })
             deleted_count += res.deleted_count
 
     return {"success": True, "deleted_count": deleted_count}
 
-async def remove_master_logic(category: str, value: str, user_id: str):
+async def remove_master_logic(category: str, value: str, user_id: str, company_id: Optional[str] = None):
     db = get_database()
+    cid = company_id or user_id
     category = category.strip()
     value = value.strip()
 
@@ -492,7 +505,7 @@ async def remove_master_logic(category: str, value: str, user_id: str):
     result = await db.masters.delete_one({
         "category": category,
         "value": {"$regex": regex_pattern, "$options": "i"},
-        "user_id": user_id
+        "$or": [{"company_id": cid}, {"user_id": user_id}]
     })
 
     if result.deleted_count == 0:
@@ -505,11 +518,11 @@ async def remove_master_logic(category: str, value: str, user_id: str):
 
 @router.delete("")
 async def delete_master_query(category: str = Query(...), value: str = Query(...), current_user: dict = Depends(get_current_user)):
-    return await remove_master_logic(category, value, user_id=current_user["id"])
+    return await remove_master_logic(category, value, user_id=current_user["id"], company_id=current_user.get("company_id"))
 
 @router.delete("/{category:path}/{value}")
 async def delete_master_path(category: str, value: str, current_user: dict = Depends(get_current_user)):
-    return await remove_master_logic(category, value, user_id=current_user["id"])
+    return await remove_master_logic(category, value, user_id=current_user["id"], company_id=current_user.get("company_id"))
 
 # =============================================================================
 # MULTI-COLUMN EXCEL / CSV MASTER DATA IMPORT ENGINE
@@ -828,7 +841,13 @@ def parse_pasted_text_to_rows(raw_text: str) -> List[List[Any]]:
         rows.append(parts)
     return rows
 
-async def process_master_extracted(extracted: Dict[str, List[str]], preview_only: bool, filename: str, user_id: str = None):
+async def process_master_extracted(
+    extracted: Dict[str, List[str]],
+    preview_only: bool,
+    filename: str,
+    user_id: str = None,
+    company_id: str = None
+):
     db = get_database()
     now_iso = format_iso_now()
 
@@ -852,8 +871,8 @@ async def process_master_extracted(extracted: Dict[str, List[str]], preview_only
             continue
 
         query = {"category": cat}
-        if user_id:
-            query["$or"] = [{"user_id": user_id}, {"is_system": True}]
+        if user_id or company_id:
+            query["$or"] = [{"company_id": company_id or user_id}, {"user_id": user_id or company_id}, {"is_system": True}]
         cursor = db.masters.find(query, {"value": 1})
         existing_docs = await cursor.to_list(length=10000)
         existing_set = {d.get("value", "").strip().lower() for d in existing_docs}
@@ -894,6 +913,8 @@ async def process_master_extracted(extracted: Dict[str, List[str]], preview_only
                 }
                 if user_id:
                     doc_to_save["user_id"] = user_id
+                if company_id or user_id:
+                    doc_to_save["company_id"] = company_id or user_id
                 docs_to_insert.append(doc_to_save)
         if docs_to_insert:
             await db.masters.insert_many(docs_to_insert)
@@ -1022,7 +1043,13 @@ async def import_masters_from_file(
     if not extracted:
         raise HTTPException(status_code=400, detail="No valid master items found in the file.")
 
-    return await process_master_extracted(extracted, is_preview, file.filename, user_id=current_user["id"])
+    return await process_master_extracted(
+        extracted,
+        is_preview,
+        file.filename,
+        user_id=current_user["id"],
+        company_id=current_user.get("company_id")
+    )
 
 @router.post("/import-pasted")
 async def import_masters_from_pasted(
@@ -1043,4 +1070,10 @@ async def import_masters_from_pasted(
     if not extracted:
         raise HTTPException(status_code=400, detail="No valid master items detected in pasted text.")
 
-    return await process_master_extracted(extracted, is_preview, "pasted_text", user_id=current_user["id"])
+    return await process_master_extracted(
+        extracted,
+        is_preview,
+        "pasted_text",
+        user_id=current_user["id"],
+        company_id=current_user.get("company_id")
+    )
