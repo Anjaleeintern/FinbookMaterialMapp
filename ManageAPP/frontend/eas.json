@@ -6,7 +6,8 @@
   "build": {
     "development": {
       "developmentClient": true,
-      "distribution": "internal"
+      "distribution": "internal",
+      "channel": "development"
     },
     "preview": {
       "distribution": "internal",
@@ -16,7 +17,8 @@
       "env": {
         "EXPO_PUBLIC_API_URL": "https://finbookmaterialmapp.onrender.com",
         "EXPO_PUBLIC_PROD_API_URL": "https://finbookmaterialmapp.onrender.com"
-      }
+      },
+      "channel": "preview"
     },
     "preview-simulator": {
       "distribution": "internal",
@@ -26,14 +28,27 @@
       "env": {
         "EXPO_PUBLIC_API_URL": "https://finbookmaterialmapp.onrender.com",
         "EXPO_PUBLIC_PROD_API_URL": "https://finbookmaterialmapp.onrender.com"
-      }
+      },
+      "channel": "preview-simulator"
     },
     "production": {
       "autoIncrement": true,
       "env": {
         "EXPO_PUBLIC_API_URL": "https://finbookmaterialmapp.onrender.com",
         "EXPO_PUBLIC_PROD_API_URL": "https://finbookmaterialmapp.onrender.com"
-      }
+      },
+      "channel": "production"
+    },
+    "production-apk": {
+      "distribution": "internal",
+      "android": {
+        "buildType": "apk"
+      },
+      "env": {
+        "EXPO_PUBLIC_API_URL": "https://finbookmaterialmapp.onrender.com",
+        "EXPO_PUBLIC_PROD_API_URL": "https://finbookmaterialmapp.onrender.com"
+      },
+      "channel": "production"
     }
   },
   "submit": {

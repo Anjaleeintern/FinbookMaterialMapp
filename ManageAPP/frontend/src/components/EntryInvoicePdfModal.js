@@ -9,8 +9,12 @@ import {
   useWindowDimensions,
   Platform,
   ActivityIndicator,
+  Share as RNShare,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import * as Print from 'expo-print';
+import * as Sharing from 'expo-sharing';
+import * as FileSystem from 'expo-file-system';
 import { api } from '../api/client';
 
 // Converts numbers into Indian currency words matching Tally: 'INR Ninety Three Thousand Only'
@@ -471,8 +475,8 @@ export const EntryInvoicePdfModal = ({ visible, entry, company, user, onClose })
   const totalAmount = Number(entry.total_amount || amount);
   const amountWords = numberToIndianWords(totalAmount);
 
-  // 1. VIEW ACTION: Opens clean full A4 HTML in new window/tab
-  const handleView = () => {
+  // 1. VIEW ACTION: Opens native system Print/PDF preview on phone, or new tab on web
+  const handleView = async () => {
     if (Platform.OS === 'web' && typeof window !== 'undefined') {
       const html = generateTallyInvoiceHtml(entry, companyName);
       const printWin = window.open('', '_blank');
@@ -484,31 +488,37 @@ export const EntryInvoicePdfModal = ({ visible, entry, company, user, onClose })
         showToast('Please allow popups to view invoice in new window');
       }
     } else {
-      showToast('Viewing invoice slip on screen');
+      try {
+        const html = generateTallyInvoiceHtml(entry, companyName);
+        await Print.printAsync({ html });
+      } catch (err) {
+        console.warn('Native view error:', err);
+        showToast('Invoice slip is displayed below');
+      }
     }
   };
 
-  // 2. DIRECT DOWNLOAD ACTION: Immediately downloads the PDF file to Downloads folder
+  // 2. DIRECT DOWNLOAD ACTION: Downloads/saves the PDF directly on phone or web
   const handleDownload = async () => {
     if (downloading) return;
     setDownloading(true);
-    showToast('Starting direct PDF download...');
+    showToast('Preparing invoice PDF...');
 
-    // Method 1: Backend direct binary PDF download (exact xhtml2pdf stream)
-    try {
-      const downloaded = await api.downloadEntryPdf(entry, companyName);
-      if (downloaded) {
-        showToast('Invoice PDF downloaded directly!');
-        setDownloading(false);
-        return;
+    if (Platform.OS === 'web' && typeof window !== 'undefined') {
+      // Web Method 1: Backend direct binary PDF download
+      try {
+        const downloaded = await api.downloadEntryPdf(entry, companyName);
+        if (downloaded) {
+          showToast('Invoice PDF downloaded directly!');
+          setDownloading(false);
+          return;
+        }
+      } catch (err) {
+        console.warn('Backend PDF download error, trying client fallback:', err);
       }
-    } catch (err) {
-      console.warn('Backend PDF download error, trying client-side fallback:', err);
-    }
 
-    // Method 2: Client-side html2pdf.js direct download fallback
-    try {
-      if (Platform.OS === 'web' && typeof window !== 'undefined') {
+      // Web Method 2: Client-side html2pdf fallback
+      try {
         if (!window.html2pdf) {
           await new Promise((resolve, reject) => {
             const script = document.createElement('script');
@@ -541,41 +551,40 @@ export const EntryInvoicePdfModal = ({ visible, entry, company, user, onClose })
         showToast('Invoice PDF downloaded directly!');
         setDownloading(false);
         return;
+      } catch (clientErr) {
+        console.error('Client PDF download error:', clientErr);
       }
-    } catch (clientErr) {
-      console.error('Client PDF download error:', clientErr);
-    }
-
-    // Method 3: Iframe print fallback if direct download was blocked
-    try {
-      if (Platform.OS === 'web' && typeof window !== 'undefined') {
+    } else {
+      // Mobile Method (Android & iOS): Generate real PDF file and present native save/open dialog
+      try {
         const html = generateTallyInvoiceHtml(entry, companyName);
-        let printFrame = document.getElementById('invoice-pdf-frame');
-        if (!printFrame) {
-          printFrame = document.createElement('iframe');
-          printFrame.id = 'invoice-pdf-frame';
-          printFrame.style.position = 'fixed';
-          printFrame.style.top = '-9999px';
-          printFrame.style.left = '-9999px';
-          printFrame.style.width = '0px';
-          printFrame.style.height = '0px';
-          document.body.appendChild(printFrame);
+        const { uri } = await Print.printToFileAsync({ html });
+        const safeChallan = String(challanNo).replace(/[^a-zA-Z0-9_-]/g, '_');
+        const filename = `Invoice_${safeChallan}.pdf`;
+        const targetPath = `${FileSystem.cacheDirectory}${filename}`;
+
+        await FileSystem.copyAsync({ from: uri, to: targetPath });
+
+        if (await Sharing.isAvailableAsync()) {
+          await Sharing.shareAsync(targetPath, {
+            mimeType: 'application/pdf',
+            dialogTitle: `Save / Download ${filename}`,
+            UTI: 'com.adobe.pdf',
+          });
+          showToast('PDF ready! Choose save destination');
+        } else {
+          await Print.printAsync({ html });
         }
-        const doc = printFrame.contentWindow.document;
-        doc.open();
-        doc.write(html);
-        doc.close();
-        setTimeout(() => {
-          printFrame.contentWindow.focus();
-          printFrame.contentWindow.print();
-        }, 300);
+      } catch (err) {
+        console.error('Mobile PDF download error:', err);
+        showToast('Download error: ' + (err.message || 'Please try again'));
       }
-    } catch (e) {}
+    }
 
     setDownloading(false);
   };
 
-  // 3. SHARE ACTION: WhatsApp share or Web Share API
+  // 3. SHARE ACTION: Opens native Android/iOS system share sheet with PDF attached
   const handleShare = async () => {
     const summaryText = `*INVOICE*
 --------------------------------
@@ -590,25 +599,62 @@ export const EntryInvoicePdfModal = ({ visible, entry, company, user, onClose })
 --------------------------------
 ${companyName}`;
 
-    if (Platform.OS === 'web' && typeof navigator !== 'undefined' && navigator.share) {
-      try {
-        await navigator.share({
-          title: `Invoice #${challanNo}`,
-          text: summaryText,
-        });
-        showToast('Shared successfully!');
-        return;
-      } catch (err) {
-        if (err.name !== 'AbortError') {
-          console.log('Web share failed, falling back to WhatsApp');
+    if (Platform.OS === 'web') {
+      if (typeof navigator !== 'undefined' && navigator.share) {
+        try {
+          await navigator.share({
+            title: `Invoice #${challanNo}`,
+            text: summaryText,
+          });
+          showToast('Shared successfully!');
+          return;
+        } catch (err) {
+          if (err.name !== 'AbortError') {
+            console.log('Web share failed, falling back to WhatsApp');
+          }
         }
       }
+
+      if (typeof window !== 'undefined') {
+        const waUrl = `https://api.whatsapp.com/send?text=${encodeURIComponent(summaryText)}`;
+        window.open(waUrl, '_blank');
+        showToast('Opening WhatsApp to share invoice...');
+      }
+      return;
     }
 
-    if (Platform.OS === 'web' && typeof window !== 'undefined') {
-      const waUrl = `https://api.whatsapp.com/send?text=${encodeURIComponent(summaryText)}`;
-      window.open(waUrl, '_blank');
-      showToast('Opening WhatsApp to share invoice...');
+    // On Native Phone (Android & iOS) -> Full System Share Sheet (WhatsApp, Gmail, Drive, Bluetooth, etc.)
+    try {
+      showToast('Opening sharing options...');
+      const html = generateTallyInvoiceHtml(entry, companyName);
+      const { uri } = await Print.printToFileAsync({ html });
+      const safeChallan = String(challanNo).replace(/[^a-zA-Z0-9_-]/g, '_');
+      const filename = `Invoice_${safeChallan}.pdf`;
+      const sharePath = `${FileSystem.cacheDirectory}${filename}`;
+
+      await FileSystem.copyAsync({ from: uri, to: sharePath });
+
+      if (await Sharing.isAvailableAsync()) {
+        await Sharing.shareAsync(sharePath, {
+          mimeType: 'application/pdf',
+          dialogTitle: `Share Invoice #${challanNo}`,
+          UTI: 'com.adobe.pdf',
+        });
+        return;
+      }
+    } catch (err) {
+      console.warn('Native PDF file share error, falling back to text share:', err);
+    }
+
+    // Fallback: React Native built-in system Share sheet
+    try {
+      await RNShare.share({
+        title: `Invoice #${challanNo}`,
+        message: summaryText,
+      });
+    } catch (err) {
+      console.error('System share error:', err);
+      showToast('Could not open share options');
     }
   };
 
@@ -687,10 +733,19 @@ ${companyName}`;
           ) : null}
 
           {/* Authentic Tally Invoice Sheet Preview */}
-          <ScrollView style={styles.scrollArea} contentContainerStyle={styles.scrollContent}>
-            <View style={styles.tallySheet}>
-              {/* Header Title */}
-              <Text style={styles.tallyTitle}>INVOICE</Text>
+          <ScrollView
+            style={styles.scrollArea}
+            contentContainerStyle={styles.scrollContent}
+            showsVerticalScrollIndicator={true}
+          >
+            <ScrollView
+              horizontal={true}
+              showsHorizontalScrollIndicator={true}
+              contentContainerStyle={isMobile ? { minWidth: 620 } : { width: '100%', alignItems: 'center' }}
+            >
+              <View style={[styles.tallySheet, isMobile && { width: 620, minWidth: 620 }]}>
+                {/* Header Title */}
+                <Text style={styles.tallyTitle}>INVOICE</Text>
 
               {/* Outer Tally Box */}
               <View style={styles.tallyOuterBox}>
@@ -937,6 +992,7 @@ ${companyName}`;
                 </View>
               </View>
             </View>
+            </ScrollView>
           </ScrollView>
         </View>
       </View>
@@ -950,13 +1006,14 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(15, 23, 42, 0.75)',
     justifyContent: 'center',
     alignItems: 'center',
-    padding: 12,
+    padding: 10,
   },
   modalCard: {
     backgroundColor: '#f1f5f9',
     borderRadius: 10,
     width: '100%',
     maxWidth: 820,
+    height: '92%',
     maxHeight: '94%',
     overflow: 'hidden',
     shadowColor: '#000',
@@ -964,11 +1021,14 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.3,
     shadowRadius: 20,
     elevation: 20,
+    display: 'flex',
+    flexDirection: 'column',
   },
   modalCardMobile: {
-    maxWidth: '100%',
+    width: '100%',
+    height: '95%',
     maxHeight: '98%',
-    borderRadius: 6,
+    borderRadius: 8,
   },
   headerBar: {
     flexDirection: 'row',
