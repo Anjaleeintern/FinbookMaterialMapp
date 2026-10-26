@@ -138,11 +138,20 @@ const request = async (endpoint, options = {}) => {
         response = await fetchWithTimeout(`${fallbackUrl}${endpoint}`, {
           ...options,
           headers,
-        }, 6000);
+        }, 5000);
         // Switch to working URL for future calls
         activeBaseUrl = fallbackUrl;
       } catch (fallbackErr) {
-        throw new Error(`Mobile connection failed. Please ensure your phone is connected to the same Wi-Fi as your laptop (${LOCAL_PC_IP}).`);
+        console.warn(`[API] Local connection to ${fallbackUrl} also failed, trying deployed Render fallback: ${DEPLOYED_PROD_URL}`);
+        try {
+          response = await fetchWithTimeout(`${DEPLOYED_PROD_URL}${endpoint}`, {
+            ...options,
+            headers,
+          }, 8000);
+          activeBaseUrl = DEPLOYED_PROD_URL;
+        } catch (prodErr) {
+          throw new Error(`Mobile connection failed. Please ensure your phone is connected to the same Wi-Fi as your laptop (${LOCAL_PC_IP}) or internet is active.`);
+        }
       }
     } else {
       throw err;
