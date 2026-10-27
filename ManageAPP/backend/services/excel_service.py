@@ -977,3 +977,355 @@ def generate_party_wise_sales_excel(
     return output.getvalue()
 
 
+def normalize_date_display(val: Any) -> str:
+    """
+    Normalizes any date (string or datetime object) into standard DD/MM/YYYY format.
+    Handles:
+      - 24/10/26 or 24/10/2026 (DD/MM/YY or DD/MM/YYYY)
+      - 10/27/2026 (MM/DD/YYYY)
+      - 2026-10-27 or 2026/10/27 (YYYY-MM-DD)
+      - 27-10-2026 (DD-MM-YYYY)
+      - datetime or date objects
+    """
+    if not val:
+        return "-"
+    if isinstance(val, (datetime, date)):
+        return val.strftime("%d/%m/%Y")
+
+    s = str(val).strip()
+    if not s:
+        return "-"
+
+    # ISO format YYYY-MM-DD
+    iso_match = re.match(r"^(\d{4})[-/.](\d{1,2})[-/.](\d{1,2})", s)
+    if iso_match:
+        y, m, d = int(iso_match.group(1)), int(iso_match.group(2)), int(iso_match.group(3))
+        return f"{d:02d}/{m:02d}/{y:04d}"
+
+    # DD/MM/YYYY, MM/DD/YYYY, or DD/MM/YY
+    parts_match = re.match(r"^(\d{1,2})[-/.](\d{1,2})[-/.](\d{2,4})", s)
+    if parts_match:
+        p1, p2, p3 = int(parts_match.group(1)), int(parts_match.group(2)), int(parts_match.group(3))
+        year = p3 if p3 >= 1000 else (2000 + p3 if p3 < 70 else 1900 + p3)
+
+        if p1 > 12 and p2 <= 12:
+            day, month = p1, p2
+        elif p2 > 12 and p1 <= 12:
+            day, month = p2, p1
+        else:
+            day, month = p1, p2
+
+        return f"{day:02d}/{month:02d}/{year:04d}"
+
+    return s
+
+
+def generate_all_entries_excel(entries: List[Dict[str, Any]], title_label: str = "All Delivery Entries") -> bytes:
+    """
+    Generate a beautifully formatted Excel spreadsheet containing all columns and details
+    of delivery entries, complete with professional styling, uniform DD/MM/YYYY dates,
+    properly aligned headings, and a Grand Total row.
+    """
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = "Delivery Entries"
+    ws.views.sheetView[0].showGridLines = True
+
+    primary_color = "0284C7"       # Vibrant Ocean Blue header
+    header_fill = PatternFill(start_color=primary_color, end_color=primary_color, fill_type="solid")
+    header_font = Font(name="Calibri", size=11, bold=True, color="FFFFFF")
+
+    zebra_fill = PatternFill(start_color="F8FAFC", end_color="F8FAFC", fill_type="solid")
+    regular_font = Font(name="Calibri", size=10, color="0F172A")
+    bold_font = Font(name="Calibri", size=10, bold=True, color="0F172A")
+
+    total_fill = PatternFill(start_color="E0F2FE", end_color="E0F2FE", fill_type="solid")
+    total_font = Font(name="Calibri", size=11, bold=True, color="0369A1")
+
+    thin_border = Border(
+        left=Side(style="thin", color="E2E8F0"),
+        right=Side(style="thin", color="E2E8F0"),
+        top=Side(style="thin", color="E2E8F0"),
+        bottom=Side(style="thin", color="E2E8F0")
+    )
+
+    total_border = Border(
+        left=Side(style="thin", color="CBD5E1"),
+        right=Side(style="thin", color="CBD5E1"),
+        top=Side(style="medium", color="0284C7"),
+        bottom=Side(style="double", color="0284C7")
+    )
+
+    headers = [
+        "S.No.",
+        "Date",
+        "Challan No.",
+        "Vehicle No.",
+        "Transport Name",
+        "Sales Mode",
+        "Payment Mode",
+        "Customer / Party Name",
+        "Sale Type",
+        "Material Name",
+        "State",
+        "ETP No.",
+        "CUM",
+        "Gross Wt (MT)",
+        "Tare Wt (MT)",
+        "Net Wt (MT)",
+        "Rate Unit",
+        "Rate (₹)",
+        "Material Amount (₹)",
+        "Addl Charge Name",
+        "Addl Charge (₹)",
+        "Taxable Amount (₹)",
+        "GST Rate (%)",
+        "CGST (₹)",
+        "SGST (₹)",
+        "IGST (₹)",
+        "Total GST (₹)",
+        "Round Off (₹)",
+        "Total Amount (₹)",
+        "Entry Source"
+    ]
+
+    num_cols = len(headers)
+
+    # 1. Row 1: Title Banner
+    ws.merge_cells(start_row=1, start_column=1, end_row=1, end_column=num_cols)
+    title_cell = ws.cell(row=1, column=1)
+    title_cell.value = "MaterialMApp • All Delivery Entries Report"
+    title_cell.font = Font(name="Calibri", size=14, bold=True, color="0F172A")
+    title_cell.alignment = Alignment(horizontal="left", vertical="center")
+    ws.row_dimensions[1].height = 28
+
+    # 2. Row 2: Subtitle Info
+    ws.merge_cells(start_row=2, start_column=1, end_row=2, end_column=num_cols)
+    sub_cell = ws.cell(row=2, column=1)
+    generated_at = datetime.now().strftime("%d-%b-%Y %I:%M %p")
+    sub_cell.value = f"Report: {title_label}  |  Generated on: {generated_at}  |  Total Records: {len(entries)}"
+    sub_cell.font = Font(name="Calibri", size=10, italic=True, color="64748B")
+    sub_cell.alignment = Alignment(horizontal="left", vertical="center")
+    ws.row_dimensions[2].height = 18
+
+    # 3. Row 3: Blank separator row
+    ws.row_dimensions[3].height = 10
+
+    # 4. Row 4: Column Headers (written directly cell-by-cell without ws.append to avoid misalignments)
+    header_row = 4
+    ws.row_dimensions[header_row].height = 30
+    for col_idx, h_text in enumerate(headers, start=1):
+        cell = ws.cell(row=header_row, column=col_idx)
+        cell.value = h_text
+        cell.fill = header_fill
+        cell.font = header_font
+        cell.alignment = Alignment(horizontal="center", vertical="center", wrap_text=False)
+        cell.border = thin_border
+
+    tot_cum = 0.0
+    tot_gwt = 0.0
+    tot_twt = 0.0
+    tot_netwt = 0.0
+    tot_amt = 0.0
+    tot_add_charge = 0.0
+    tot_taxable = 0.0
+    tot_cgst = 0.0
+    tot_sgst = 0.0
+    tot_igst = 0.0
+    tot_gst = 0.0
+    tot_round_off = 0.0
+    tot_total = 0.0
+
+    current_row = 5
+    for idx, e in enumerate(entries, start=1):
+        ws.row_dimensions[current_row].height = 22
+
+        cum = float(e.get("cum") or 0.0)
+        gwt = float(e.get("g_wt") or 0.0)
+        twt = float(e.get("t_wt") or 0.0)
+        netwt = float(e.get("net_wt") or (gwt - twt if gwt >= twt else 0.0))
+        rate = float(e.get("rate") or 0.0)
+        rate_unit = str(e.get("rate_calc_unit") or "MT").strip().upper()
+        amt = float(e.get("amount") or 0.0)
+        if amt == 0.0 and rate > 0:
+            amt = round(cum * rate if rate_unit == "CUM" else netwt * rate, 2)
+
+        add_name = str(e.get("additional_charge_name") or "").strip()
+        add_amt = float(e.get("additional_charge_amount") or 0.0)
+        taxable = float(e.get("taxable_amount") or (amt + add_amt))
+        gst_r = float(e.get("gst_rate") or 0.0)
+        cgst = float(e.get("cgst_amount") or 0.0)
+        sgst = float(e.get("sgst_amount") or 0.0)
+        igst = float(e.get("igst_amount") or 0.0)
+        gst_total = float(e.get("gst_amount") or (cgst + sgst + igst))
+        round_off = float(e.get("round_off") or 0.0)
+        total = float(e.get("total_amount") or (taxable + gst_total + round_off))
+
+        tot_cum += cum
+        tot_gwt += gwt
+        tot_twt += twt
+        tot_netwt += netwt
+        tot_amt += amt
+        tot_add_charge += add_amt
+        tot_taxable += taxable
+        tot_cgst += cgst
+        tot_sgst += sgst
+        tot_igst += igst
+        tot_gst += gst_total
+        tot_round_off += round_off
+        tot_total += total
+
+        type_mode = str(e.get("type_mode") or "").strip()
+        cust_name = str(e.get("customer_name") or "").strip()
+        pty_name = str(e.get("party_name") or "").strip()
+        display_party = cust_name if (type_mode == "Cash Sale" and cust_name) else (pty_name or cust_name or "-")
+
+        payment_mode = str(e.get("payment_mode") or "").strip()
+        if not payment_mode and type_mode == "Cash Sale":
+            payment_mode = "Cash"
+        elif not payment_mode and type_mode == "Credit Sale":
+            payment_mode = "Credit"
+
+        # Normalized unified DD/MM/YYYY date
+        date_str = normalize_date_display(e.get("date"))
+
+        row_vals = [
+            idx,
+            date_str,
+            str(e.get("challan_no") or ""),
+            str(e.get("vehicle_no") or ""),
+            str(e.get("transport_type") or e.get("transport_name") or "-"),
+            type_mode or "-",
+            payment_mode or "-",
+            display_party,
+            str(e.get("sale_type") or e.get("hr_loading_type") or "-"),
+            str(e.get("material_name") or "-"),
+            str(e.get("party_state") or "Madhya Pradesh"),
+            str(e.get("etp_no") or "-"),
+            round(cum, 2),
+            round(gwt, 2),
+            round(twt, 2),
+            round(netwt, 2),
+            rate_unit,
+            round(rate, 2),
+            round(amt, 2),
+            add_name or "-",
+            round(add_amt, 2),
+            round(taxable, 2),
+            f"{gst_r:.1f}%" if gst_r > 0 else "0%",
+            round(cgst, 2),
+            round(sgst, 2),
+            round(igst, 2),
+            round(gst_total, 2),
+            round(round_off, 2),
+            round(total, 2),
+            "Manual" if str(e.get("entry_source") or "").lower() == "manual" else "Excel"
+        ]
+
+        is_even = (idx % 2 == 0)
+        row_fill = zebra_fill if is_even else None
+
+        for c_idx, val in enumerate(row_vals, start=1):
+            cell = ws.cell(row=current_row, column=c_idx)
+            cell.value = val
+            cell.font = regular_font
+            if row_fill:
+                cell.fill = row_fill
+            cell.border = thin_border
+
+            # S.No., Date, Challan, Vehicle, Unit, GST Rate, Source -> Center
+            if c_idx in [1, 2, 3, 4, 12, 17, 23, 30]:
+                cell.alignment = Alignment(horizontal="center", vertical="center")
+            # Text columns -> Left
+            elif c_idx in [5, 6, 7, 8, 9, 10, 11, 20]:
+                cell.alignment = Alignment(horizontal="left", vertical="center")
+            # Numeric columns -> Right formatted
+            else:
+                cell.alignment = Alignment(horizontal="right", vertical="center")
+                cell.number_format = "#,##0.00"
+
+        current_row += 1
+
+    # Grand Total Row
+    ws.row_dimensions[current_row].height = 26
+    total_row_vals = [
+        "TOTAL",
+        f"{len(entries)} Entries",
+        "", "", "", "", "", "", "", "", "", "",
+        round(tot_cum, 2),
+        round(tot_gwt, 2),
+        round(tot_twt, 2),
+        round(tot_netwt, 2),
+        "",
+        "",
+        round(tot_amt, 2),
+        "",
+        round(tot_add_charge, 2),
+        round(tot_taxable, 2),
+        "",
+        round(tot_cgst, 2),
+        round(tot_sgst, 2),
+        round(tot_igst, 2),
+        round(tot_gst, 2),
+        round(tot_round_off, 2),
+        round(tot_total, 2),
+        ""
+    ]
+
+    for c_idx, val in enumerate(total_row_vals, start=1):
+        cell = ws.cell(row=current_row, column=c_idx)
+        cell.value = val
+        cell.fill = total_fill
+        cell.font = total_font
+        cell.border = total_border
+        if c_idx in [1, 2]:
+            cell.alignment = Alignment(horizontal="center", vertical="center")
+        elif c_idx in [13, 14, 15, 16, 19, 21, 22, 24, 25, 26, 27, 28, 29]:
+            cell.alignment = Alignment(horizontal="right", vertical="center")
+            cell.number_format = "#,##0.00"
+        else:
+            cell.alignment = Alignment(horizontal="center", vertical="center")
+
+    col_widths = {
+        1: 8,   # S.No
+        2: 15,  # Date (DD/MM/YYYY)
+        3: 14,  # Challan No.
+        4: 16,  # Vehicle No.
+        5: 20,  # Transport Name
+        6: 15,  # Sales Mode
+        7: 15,  # Payment Mode
+        8: 26,  # Customer / Party Name
+        9: 16,  # Sale Type
+        10: 18, # Material Name
+        11: 18, # State
+        12: 14, # ETP No.
+        13: 12, # CUM
+        14: 16, # Gross Wt (MT)
+        15: 16, # Tare Wt (MT)
+        16: 16, # Net Wt (MT)
+        17: 12, # Rate Unit
+        18: 14, # Rate
+        19: 18, # Material Amount
+        20: 20, # Addl Charge Name
+        21: 16, # Addl Charge
+        22: 18, # Taxable Amount
+        23: 14, # GST Rate
+        24: 14, # CGST
+        25: 14, # SGST
+        26: 14, # IGST
+        27: 16, # Total GST
+        28: 14, # Round Off
+        29: 18, # Total Amount
+        30: 14, # Entry Source
+    }
+
+    for col_idx, width in col_widths.items():
+        col_letter = openpyxl.utils.get_column_letter(col_idx)
+        ws.column_dimensions[col_letter].width = width
+
+    output = io.BytesIO()
+    wb.save(output)
+    return output.getvalue()
+
+
+

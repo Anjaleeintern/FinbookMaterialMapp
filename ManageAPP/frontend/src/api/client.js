@@ -427,6 +427,44 @@ export const api = {
       openImmediately: true,
     });
   },
+
+  getAllEntriesExportUrl: (params = {}) => {
+    const token = getAuthToken();
+    const query = new URLSearchParams();
+    if (params.search) query.append('search', params.search);
+    if (params.date && params.date !== 'All') query.append('date', params.date);
+    if (params.sale_type && params.sale_type !== 'All') query.append('sale_type', params.sale_type);
+    if (params.sales_mode && params.sales_mode !== 'All') query.append('sales_mode', params.sales_mode);
+    if (params.material && params.material !== 'All') query.append('material', params.material);
+    if (params.source && params.source !== 'All') query.append('source', params.source);
+    if (token) query.append('auth_token', token);
+    const qs = query.toString();
+    return `${activeBaseUrl}/api/entries/export-all-excel${qs ? `?${qs}` : ''}`;
+  },
+
+  downloadAllEntriesExcel: async (params = {}) => {
+    const token = getAuthToken();
+    const query = new URLSearchParams();
+    if (params.search) query.append('search', params.search);
+    if (params.date && params.date !== 'All') query.append('date', params.date);
+    if (params.sale_type && params.sale_type !== 'All') query.append('sale_type', params.sale_type);
+    if (params.sales_mode && params.sales_mode !== 'All') query.append('sales_mode', params.sales_mode);
+    if (params.material && params.material !== 'All') query.append('material', params.material);
+    if (params.source && params.source !== 'All') query.append('source', params.source);
+    const qs = query.toString();
+    const url = `${activeBaseUrl}/api/entries/export-all-excel${qs ? `?${qs}` : ''}`;
+    const today = new Date().toISOString().split('T')[0];
+    const filename = `all_delivery_entries_${today}.xlsx`;
+
+    return downloadService.downloadFile({
+      url,
+      filename,
+      mimeType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      title: 'Exporting All Delivery Entries to Excel...',
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+      openImmediately: true,
+    });
+  },
   importExcel: async (file, previewOnly = false, defaultTypeMode = null, selectedSheets = null) => {
     let url = `${activeBaseUrl}/api/entries/import-excel?preview_only=${previewOnly ? 'true' : 'false'}`;
     if (defaultTypeMode && defaultTypeMode !== 'auto') {

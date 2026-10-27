@@ -13,6 +13,8 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { api } from '../api/client';
+import { downloadService } from '../services/downloadService';
+import * as FileSystem from 'expo-file-system/legacy';
 
 const formatSavedInLabel = (val) => {
   if (!val) return 'Sale';
@@ -20,6 +22,227 @@ const formatSavedInLabel = (val) => {
 };
 
 const formatINR = (val) => Number(val || 0).toLocaleString('en-IN');
+
+export const formatDisplayDate = (val) => {
+  if (!val) return '-';
+  const s = String(val).trim();
+  if (!s || s === '-') return '-';
+
+  // ISO format YYYY-MM-DD
+  const isoMatch = s.match(/^(\d{4})[-/.](\d{1,2})[-/.](\d{1,2})/);
+  if (isoMatch) {
+    const [, y, m, d] = isoMatch;
+    return `${String(d).padStart(2, '0')}/${String(m).padStart(2, '0')}/${y}`;
+  }
+
+  // DD/MM/YYYY, MM/DD/YYYY, or DD/MM/YY
+  const partsMatch = s.match(/^(\d{1,2})[-/.](\d{1,2})[-/.](\d{2,4})/);
+  if (partsMatch) {
+    const [, p1, p2, p3] = partsMatch;
+    const n1 = parseInt(p1, 10);
+    const n2 = parseInt(p2, 10);
+    const n3 = parseInt(p3, 10);
+    const year = n3 >= 1000 ? n3 : (n3 < 70 ? 2000 + n3 : 1900 + n3);
+
+    let day = n1;
+    let month = n2;
+    if (n1 > 12 && n2 <= 12) {
+      day = n1;
+      month = n2;
+    } else if (n2 > 12 && n1 <= 12) {
+      day = n2;
+      month = n1;
+    }
+    return `${String(day).padStart(2, '0')}/${String(month).padStart(2, '0')}/${year}`;
+  }
+
+  return s;
+};
+
+// Client-side fallback export ensuring CSV download never fails even if offline
+const exportEntriesToClientCsv = async (list) => {
+  if (!list || list.length === 0) {
+    alert('No entries to export.');
+    return;
+  }
+
+  const headers = [
+    'S.No.',
+    'Date',
+    'Challan No.',
+    'Vehicle No.',
+    'Transport Name',
+    'Sales Mode',
+    'Payment Mode',
+    'Customer / Party Name',
+    'Sale Type',
+    'Material Name',
+    'State',
+    'ETP No.',
+    'CUM',
+    'Gross Wt (MT)',
+    'Tare Wt (MT)',
+    'Net Wt (MT)',
+    'Rate Unit',
+    'Rate (INR)',
+    'Material Amount (INR)',
+    'Addl Charge Name',
+    'Addl Charge (INR)',
+    'Taxable Amount (INR)',
+    'GST Rate (%)',
+    'CGST (INR)',
+    'SGST (INR)',
+    'IGST (INR)',
+    'Total GST (INR)',
+    'Round Off (INR)',
+    'Total Amount (INR)',
+    'Entry Source',
+  ];
+
+  let totCum = 0;
+  let totGWt = 0;
+  let totTWt = 0;
+  let totNetWt = 0;
+  let totAmt = 0;
+  let totAddl = 0;
+  let totTaxable = 0;
+  let totCgst = 0;
+  let totSgst = 0;
+  let totIgst = 0;
+  let totGst = 0;
+  let totRoundOff = 0;
+  let totTotal = 0;
+
+  const escapeCsv = (str) => `"${String(str || '').replace(/"/g, '""')}"`;
+
+  const rows = list.map((e, idx) => {
+    const cum = parseFloat(e.cum) || 0;
+    const gwt = parseFloat(e.g_wt) || 0;
+    const twt = parseFloat(e.t_wt) || 0;
+    const netwt = parseFloat(e.net_wt) || Math.max(0, gwt - twt);
+    const rate = parseFloat(e.rate) || 0;
+    const rateUnit = (e.rate_calc_unit || 'MT').toUpperCase();
+    const amt = parseFloat(e.amount) || 0;
+    const addName = (e.additional_charge_name || '').trim();
+    const addAmt = parseFloat(e.additional_charge_amount) || 0;
+    const taxable = parseFloat(e.taxable_amount) || (amt + addAmt);
+    const gstRate = parseFloat(e.gst_rate) || 0;
+    const cgst = parseFloat(e.cgst_amount) || 0;
+    const sgst = parseFloat(e.sgst_amount) || 0;
+    const igst = parseFloat(e.igst_amount) || 0;
+    const gst = parseFloat(e.gst_amount) || (cgst + sgst + igst);
+    const roundOff = parseFloat(e.round_off) || 0;
+    const total = parseFloat(e.total_amount) || (taxable + gst + roundOff);
+
+    totCum += cum;
+    totGWt += gwt;
+    totTWt += twt;
+    totNetWt += netwt;
+    totAmt += amt;
+    totAddl += addAmt;
+    totTaxable += taxable;
+    totCgst += cgst;
+    totSgst += sgst;
+    totIgst += igst;
+    totGst += gst;
+    totRoundOff += roundOff;
+    totTotal += total;
+
+    const typeMode = (e.type_mode || '').trim();
+    const custName = (e.customer_name || '').trim();
+    const ptyName = (e.party_name || '').trim();
+    const displayName = typeMode === 'Cash Sale' && custName ? custName : (ptyName || custName || '-');
+    const paymentMode = (e.payment_mode || (typeMode === 'Cash Sale' ? 'Cash' : typeMode === 'Credit Sale' ? 'Credit' : '-')).trim();
+
+    return [
+      idx + 1,
+      escapeCsv(formatDisplayDate(e.date)),
+      escapeCsv(e.challan_no || ''),
+      escapeCsv(e.vehicle_no || ''),
+      escapeCsv(e.transport_type || e.transport_name || '-'),
+      escapeCsv(typeMode || '-'),
+      escapeCsv(paymentMode),
+      escapeCsv(displayName),
+      escapeCsv(e.sale_type || e.hr_loading_type || '-'),
+      escapeCsv(e.material_name || '-'),
+      escapeCsv(e.party_state || 'Madhya Pradesh'),
+      escapeCsv(e.etp_no || '-'),
+      cum.toFixed(2),
+      gwt.toFixed(2),
+      twt.toFixed(2),
+      netwt.toFixed(2),
+      escapeCsv(rateUnit),
+      rate.toFixed(2),
+      amt.toFixed(2),
+      escapeCsv(addName || '-'),
+      addAmt.toFixed(2),
+      taxable.toFixed(2),
+      `${gstRate}%`,
+      cgst.toFixed(2),
+      sgst.toFixed(2),
+      igst.toFixed(2),
+      gst.toFixed(2),
+      roundOff.toFixed(2),
+      total.toFixed(2),
+      escapeCsv((e.entry_source || '').toLowerCase() === 'manual' ? 'Manual' : 'Excel'),
+    ].join(',');
+  });
+
+  const totalRow = [
+    'TOTAL',
+    `"${list.length} Entries"`,
+    '', '', '', '', '', '', '', '', '', '',
+    totCum.toFixed(2),
+    totGWt.toFixed(2),
+    totTWt.toFixed(2),
+    totNetWt.toFixed(2),
+    '', '',
+    totAmt.toFixed(2),
+    '',
+    totAddl.toFixed(2),
+    totTaxable.toFixed(2),
+    '',
+    totCgst.toFixed(2),
+    totSgst.toFixed(2),
+    totIgst.toFixed(2),
+    totGst.toFixed(2),
+    totRoundOff.toFixed(2),
+    totTotal.toFixed(2),
+    '',
+  ].join(',');
+
+  const csvContent = '\uFEFF' + [headers.join(','), ...rows, totalRow].join('\n');
+  const today = new Date().toISOString().split('T')[0];
+  const filename = `all_delivery_entries_${today}.csv`;
+
+  if (Platform.OS === 'web' && typeof window !== 'undefined') {
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    setTimeout(() => window.URL.revokeObjectURL(url), 1000);
+    return;
+  }
+
+  // Native Mobile (Android / iOS)
+  const baseDir = FileSystem.documentDirectory || FileSystem.cacheDirectory;
+  const targetUri = `${baseDir}${filename}`;
+  await FileSystem.writeAsStringAsync(targetUri, csvContent, {
+    encoding: FileSystem.EncodingType.UTF8,
+  });
+
+  await downloadService.registerCompletedDownload({
+    fileUri: targetUri,
+    filename,
+    mimeType: 'text/csv',
+    title: 'All Delivery Entries CSV Ready',
+    openImmediately: true,
+  });
+};
 
 export const AllEntriesView = React.memo(({
   entries,
@@ -41,6 +264,36 @@ export const AllEntriesView = React.memo(({
   const [viewMode, setViewMode] = useState(isMobile ? 'cards' : 'table');
   const [selectedIds, setSelectedIds] = useState(new Set());
   const [deleting, setDeleting] = useState(false);
+  const [exporting, setExporting] = useState(false);
+
+  const handleExportExcel = async () => {
+    if (!entries || entries.length === 0) {
+      alert('No entries available to export.');
+      return;
+    }
+
+    setExporting(true);
+    try {
+      const params = {};
+      if (selectedDate !== 'All') params.date = selectedDate;
+      if (selectedType !== 'All') params.sale_type = selectedType;
+      if (selectedMode !== 'All') params.sales_mode = selectedMode;
+      if (selectedMaterial !== 'All') params.material = selectedMaterial;
+      if (selectedSource !== 'All') params.source = selectedSource;
+      if (searchTerm && searchTerm.trim()) params.search = searchTerm.trim();
+
+      await api.downloadAllEntriesExcel(params);
+    } catch (err) {
+      console.warn('Backend excel export failed, falling back to client CSV export:', err);
+      try {
+        await exportEntriesToClientCsv(filteredEntries && filteredEntries.length > 0 ? filteredEntries : entries);
+      } catch (clientErr) {
+        alert('Could not download Excel: ' + (clientErr.message || ''));
+      }
+    } finally {
+      setExporting(false);
+    }
+  };
 
   // Filters State: Date, Sale Type, Sales Mode, Material, Party, Source, Column Filters
   const [selectedDate, setSelectedDate] = useState('All');
@@ -711,6 +964,22 @@ export const AllEntriesView = React.memo(({
                 <Text style={styles.mobileImportBtnText}>Import Excel</Text>
               </TouchableOpacity>
 
+              <TouchableOpacity
+                style={styles.mobileExportBtn}
+                onPress={handleExportExcel}
+                activeOpacity={0.85}
+                disabled={exporting}
+              >
+                {exporting ? (
+                  <ActivityIndicator size="small" color="#0284c7" />
+                ) : (
+                  <>
+                    <Ionicons name="download-outline" size={14} color="#0284c7" style={{ marginRight: 3 }} />
+                    <Text style={styles.mobileExportBtnText}>Download Excel</Text>
+                  </>
+                )}
+              </TouchableOpacity>
+
               {selectedIds.size > 0 && (
                 <TouchableOpacity
                   style={styles.mobileDeleteBtn}
@@ -835,6 +1104,20 @@ export const AllEntriesView = React.memo(({
                 >
                   <Ionicons name="cloud-upload-outline" size={15} color="#059669" style={{ marginRight: 4 }} />
                   <Text style={styles.importExcelBtnText}>Import Excel</Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  style={styles.exportExcelBtn}
+                  onPress={handleExportExcel}
+                  activeOpacity={0.8}
+                  disabled={exporting}
+                >
+                  {exporting ? (
+                    <ActivityIndicator size="small" color="#0284c7" style={{ marginRight: 4 }} />
+                  ) : (
+                    <Ionicons name="download-outline" size={15} color="#0284c7" style={{ marginRight: 4 }} />
+                  )}
+                  <Text style={styles.exportExcelBtnText}>Download Excel</Text>
                 </TouchableOpacity>
               </View>
             </View>
@@ -1110,7 +1393,7 @@ export const AllEntriesView = React.memo(({
                     />
                   </TouchableOpacity>
                   <Text style={[styles.refCardSubVal, { flex: 1.1 }]} numberOfLines={1}>
-                    {entry.date || '-'}
+                    {formatDisplayDate(entry.date)}
                   </Text>
                   <Text style={[styles.refCardSubValBold, { flex: 1 }]} numberOfLines={1}>
                     {entry.challan_no || '-'}
@@ -1685,7 +1968,7 @@ export const AllEntriesView = React.memo(({
                       </View>
                     </TouchableOpacity>
                     {/* 1. DATE */}
-                    <Text style={[styles.tdCell, { width: 95 }]}>{entry.date || '-'}</Text>
+                    <Text style={[styles.tdCell, { width: 95 }]}>{formatDisplayDate(entry.date)}</Text>
                     {/* 2. CHALLAN NO. */}
                     <Text style={[styles.tdCell, styles.boldCell, { width: 110 }]}>
                       {entry.challan_no || '-'}
@@ -1985,6 +2268,22 @@ const styles = StyleSheet.create({
   },
   importExcelBtnText: {
     color: '#065f46',
+    fontWeight: '700',
+    fontSize: 12,
+  },
+  exportExcelBtn: {
+    backgroundColor: '#f0f9ff',
+    borderWidth: 1,
+    borderColor: '#bae6fd',
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 9,
+    paddingVertical: 5,
+    borderRadius: 6,
+    marginRight: 6,
+  },
+  exportExcelBtnText: {
+    color: '#0369a1',
     fontWeight: '700',
     fontSize: 12,
   },
@@ -2791,6 +3090,22 @@ const styles = StyleSheet.create({
     fontSize: 11,
     fontWeight: '700',
     color: '#059669',
+  },
+  mobileExportBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#ffffff',
+    borderWidth: 1,
+    borderColor: '#0284c7',
+    borderRadius: 8,
+    height: 36,
+    paddingHorizontal: 4,
+  },
+  mobileExportBtnText: {
+    fontSize: 9.8,
+    fontWeight: '700',
+    color: '#0284c7',
   },
   mobileDeleteBtn: {
     flexDirection: 'row',

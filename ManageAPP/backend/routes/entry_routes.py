@@ -24,6 +24,7 @@ from services.excel_service import (
     execute_bulk_import_to_mongodb,
     generate_sample_excel_template,
     generate_party_wise_sales_excel,
+    generate_all_entries_excel,
 )
 from services.pdf_service import generate_tally_invoice_pdf
 
@@ -206,6 +207,102 @@ async def export_party_wise_sales(
             "Access-Control-Expose-Headers": "Content-Disposition"
         }
     )
+
+
+@router.get("/export-all-excel")
+async def export_all_entries_excel(
+    search: Optional[str] = Query(None),
+    date: Optional[str] = Query(None),
+    sale_type: Optional[str] = Query(None),
+    sales_mode: Optional[str] = Query(None),
+    material: Optional[str] = Query(None),
+    source: Optional[str] = Query(None),
+    current_user: dict = Depends(get_current_user)
+):
+    """
+    Download All Delivery Entries in Excel (.xlsx) format with all columns,
+    formatted numbers, and grand total row.
+    """
+    db = get_database()
+    scope_filter = get_company_scope_query(current_user)
+
+    collections = ["credit_sale", "cash_sale", "royalty_sale", "without_royalty"]
+    all_entries = []
+
+    for col in collections:
+        cursor = db[col].find(scope_filter)
+        docs = await cursor.to_list(length=20000)
+        for doc in docs:
+            doc["_collection"] = col
+            all_entries.append(doc)
+
+    # Sort descending by date, challan
+    def entry_sort_key(e):
+        return (str(e.get("date") or ""), str(e.get("challan_no") or "").zfill(10))
+
+    all_entries.sort(key=entry_sort_key, reverse=True)
+
+    filtered = all_entries
+    if date and date.strip() and date.strip().lower() != "all":
+        d_val = date.strip().lower()
+        filtered = [e for e in filtered if str(e.get("date") or "").strip().lower() == d_val]
+
+    if sale_type and sale_type.strip() and sale_type.strip().lower() != "all":
+        st_val = sale_type.strip().lower()
+        filtered = [e for e in filtered if st_val in str(e.get("sale_type") or e.get("hr_loading_type") or "").lower()]
+
+    if sales_mode and sales_mode.strip() and sales_mode.strip().lower() != "all":
+        sm_val = sales_mode.strip().lower()
+        def match_mode(e):
+            pm = str(e.get("payment_mode") or "").lower()
+            tm = str(e.get("type_mode") or "").lower()
+            if sm_val in ["cash", "bank", "qr"]:
+                return sm_val == pm or (sm_val == "cash" and "cash" in tm and not pm)
+            elif "credit" in sm_val:
+                return "credit" in tm
+            return sm_val in tm or sm_val in pm
+        filtered = [e for e in filtered if match_mode(e)]
+
+    if material and material.strip() and material.strip().lower() != "all":
+        m_val = material.strip().lower()
+        filtered = [e for e in filtered if m_val in str(e.get("material_name") or "").lower()]
+
+    if source and source.strip() and source.strip().lower() != "all":
+        src_val = source.strip().lower()
+        if "manual" in src_val:
+            filtered = [e for e in filtered if str(e.get("entry_source") or "").lower() == "manual"]
+        elif "excel" in src_val:
+            filtered = [e for e in filtered if str(e.get("entry_source") or "").lower() != "manual"]
+
+    if search and search.strip():
+        q = search.strip().lower()
+        filtered = [
+            e for e in filtered
+            if q in str(e.get("challan_no") or "").lower()
+            or q in str(e.get("vehicle_no") or "").lower()
+            or q in str(e.get("party_name") or "").lower()
+            or q in str(e.get("customer_name") or "").lower()
+            or q in str(e.get("material_name") or "").lower()
+            or q in str(e.get("transport_type") or e.get("transport_name") or "").lower()
+            or q in str(e.get("etp_no") or "").lower()
+            or q in str(e.get("date") or "").lower()
+        ]
+
+    excel_bytes = generate_all_entries_excel(
+        filtered,
+        title_label="Filtered Delivery Entries" if len(filtered) != len(all_entries) else "All Delivery Entries"
+    )
+    today_str = datetime.now().strftime("%Y-%m-%d")
+
+    return Response(
+        content=excel_bytes,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={
+            "Content-Disposition": f"attachment; filename=all_delivery_entries_{today_str}.xlsx",
+            "Access-Control-Expose-Headers": "Content-Disposition"
+        }
+    )
+
 
 
 @router.get("/template")
