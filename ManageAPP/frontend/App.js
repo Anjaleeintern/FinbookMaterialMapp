@@ -115,7 +115,16 @@ const MainApp = () => {
   const [masters, setMasters] = useState(null);
   const [loading, setLoading] = useState(false);
 
+  // Track visited tabs: lazy-mount tabs on their first visit, then keep them alive in memory for 0ms instant smooth switching
+  const [visitedTabs, setVisitedTabs] = useState(() => new Set(['dashboard']));
+
   const handleSelectTab = useCallback((tab) => {
+    setVisitedTabs((prev) => {
+      if (prev.has(tab)) return prev;
+      const next = new Set(prev);
+      next.add(tab);
+      return next;
+    });
     setActiveTab(tab);
   }, []);
 
@@ -187,6 +196,8 @@ const MainApp = () => {
   const handleOpenImportModal = useCallback(() => setIsImportModalOpen(true), []);
   const handleCloseImportModal = useCallback(() => setIsImportModalOpen(false), []);
   const handleNavigateMasters = useCallback(() => handleSelectTab('masters'), [handleSelectTab]);
+  const handleNavigateEntries = useCallback(() => handleSelectTab('entries'), [handleSelectTab]);
+  const handleNavigateProfile = useCallback(() => handleSelectTab('profile'), [handleSelectTab]);
   const handleToggleSidebar = useCallback(() => setSidebarOpen((prev) => !prev), []);
   const handleCloseSidebar = useCallback(() => setSidebarOpen(false), []);
 
@@ -257,7 +268,7 @@ const MainApp = () => {
         setSearch={setSearch}
         onRefresh={loadData}
         toggleSidebar={handleToggleSidebar}
-        onNavigateProfile={() => handleSelectTab('profile')}
+        onNavigateProfile={handleNavigateProfile}
       />
 
       {/* Main Layout */}
@@ -271,21 +282,33 @@ const MainApp = () => {
           />
         )}
 
-        {/* Dynamic Active Tab View: Only active tab is mounted in DOM for maximum 60FPS mobile performance */}
+        {/* Dynamic Tab View: Visited tabs stay mounted in memory with absolute pinning for 0ms instant smooth switching */}
         <View style={styles.contentArea}>
-          {activeTab === 'dashboard' && (
-            <View style={styles.tabPane}>
+          {visitedTabs.has('dashboard') && (
+            <View
+              style={[
+                styles.tabPane,
+                activeTab === 'dashboard' ? styles.tabPaneActive : styles.tabPaneHidden,
+              ]}
+              pointerEvents={activeTab === 'dashboard' ? 'auto' : 'none'}
+            >
               <DashboardView
                 entries={entries}
                 onOpenAddModal={handleOpenAddModal}
                 onNavigateMasters={handleNavigateMasters}
-                onNavigateEntries={() => handleSelectTab('entries')}
+                onNavigateEntries={handleNavigateEntries}
               />
             </View>
           )}
 
-          {activeTab === 'entries' && (
-            <View style={styles.tabPane}>
+          {visitedTabs.has('entries') && (
+            <View
+              style={[
+                styles.tabPane,
+                activeTab === 'entries' ? styles.tabPaneActive : styles.tabPaneHidden,
+              ]}
+              pointerEvents={activeTab === 'entries' ? 'auto' : 'none'}
+            >
               <AllEntriesView
                 entries={entries}
                 loading={loading}
@@ -298,8 +321,14 @@ const MainApp = () => {
             </View>
           )}
 
-          {activeTab === 'masters' && (
-            <View style={styles.tabPane}>
+          {visitedTabs.has('masters') && (
+            <View
+              style={[
+                styles.tabPane,
+                activeTab === 'masters' ? styles.tabPaneActive : styles.tabPaneHidden,
+              ]}
+              pointerEvents={activeTab === 'masters' ? 'auto' : 'none'}
+            >
               <MastersView
                 masters={masters}
                 onRefresh={loadMasters}
@@ -307,22 +336,28 @@ const MainApp = () => {
             </View>
           )}
 
-          {activeTab === 'profile' && (
-            <View style={styles.tabPane}>
+          {visitedTabs.has('profile') && (
+            <View
+              style={[
+                styles.tabPane,
+                activeTab === 'profile' ? styles.tabPaneActive : styles.tabPaneHidden,
+              ]}
+              pointerEvents={activeTab === 'profile' ? 'auto' : 'none'}
+            >
               <ProfileView />
             </View>
           )}
         </View>
       </View>
 
-      {/* Mobile Bottom Navigation Bar: Dashboard, All Entries, Masters, Profile */}
+      {/* Mobile Bottom Navigation Bar: Fixed height, permanent indicators, zero layout shifting */}
       {isMobile && (
-        <View style={[styles.bottomBar, { paddingBottom: Math.max(bottomPadding, 6) }]}>
+        <View style={[styles.bottomBar, { height: 58 + Math.max(bottomPadding, 0), paddingBottom: Math.max(bottomPadding, 0) }]}>
           {/* 1. Dashboard */}
           <TouchableOpacity
             style={styles.bottomTab}
             onPress={() => handleSelectTab('dashboard')}
-            activeOpacity={0.75}
+            activeOpacity={0.7}
           >
             <Ionicons
               name={activeTab === 'dashboard' ? 'home' : 'home-outline'}
@@ -335,14 +370,19 @@ const MainApp = () => {
             >
               Dashboard
             </Text>
-            {activeTab === 'dashboard' && <View style={styles.activeTabIndicator} />}
+            <View
+              style={[
+                styles.activeTabIndicator,
+                { backgroundColor: activeTab === 'dashboard' ? '#0284c7' : 'transparent' },
+              ]}
+            />
           </TouchableOpacity>
 
           {/* 2. All Entries */}
           <TouchableOpacity
             style={styles.bottomTab}
             onPress={() => handleSelectTab('entries')}
-            activeOpacity={0.75}
+            activeOpacity={0.7}
           >
             <Ionicons
               name={activeTab === 'entries' ? 'list' : 'list-outline'}
@@ -355,14 +395,19 @@ const MainApp = () => {
             >
               All Entries
             </Text>
-            {activeTab === 'entries' && <View style={styles.activeTabIndicator} />}
+            <View
+              style={[
+                styles.activeTabIndicator,
+                { backgroundColor: activeTab === 'entries' ? '#0284c7' : 'transparent' },
+              ]}
+            />
           </TouchableOpacity>
 
           {/* 3. Masters */}
           <TouchableOpacity
             style={styles.bottomTab}
             onPress={() => handleSelectTab('masters')}
-            activeOpacity={0.75}
+            activeOpacity={0.7}
           >
             <Ionicons
               name={activeTab === 'masters' ? 'layers' : 'layers-outline'}
@@ -375,14 +420,19 @@ const MainApp = () => {
             >
               Masters
             </Text>
-            {activeTab === 'masters' && <View style={styles.activeTabIndicator} />}
+            <View
+              style={[
+                styles.activeTabIndicator,
+                { backgroundColor: activeTab === 'masters' ? '#0284c7' : 'transparent' },
+              ]}
+            />
           </TouchableOpacity>
 
           {/* 4. Profile */}
           <TouchableOpacity
             style={styles.bottomTab}
             onPress={() => handleSelectTab('profile')}
-            activeOpacity={0.75}
+            activeOpacity={0.7}
           >
             <Ionicons
               name={activeTab === 'profile' ? 'person-circle' : 'person-circle-outline'}
@@ -395,7 +445,12 @@ const MainApp = () => {
             >
               Profile
             </Text>
-            {activeTab === 'profile' && <View style={styles.activeTabIndicator} />}
+            <View
+              style={[
+                styles.activeTabIndicator,
+                { backgroundColor: activeTab === 'profile' ? '#0284c7' : 'transparent' },
+              ]}
+            />
           </TouchableOpacity>
         </View>
       )}
@@ -453,13 +508,25 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#f8fafc',
     position: 'relative',
+    overflow: 'hidden',
   },
   tabPane: {
-    flex: 1,
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
     width: '100%',
     height: '100%',
   },
+  tabPaneActive: {
+    opacity: 1,
+    zIndex: 1,
+    display: 'flex',
+  },
   tabPaneHidden: {
+    opacity: 0,
+    zIndex: -1,
     display: 'none',
   },
   centerContainer: {
@@ -475,7 +542,6 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-around',
-    paddingTop: 8,
     paddingHorizontal: 4,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: -2 },
@@ -487,26 +553,24 @@ const styles = StyleSheet.create({
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
+    height: '100%',
     paddingVertical: 2,
-    position: 'relative',
   },
   bottomTabText: {
     fontSize: 11,
     color: '#64748b',
-    marginTop: 3,
-    fontWeight: '500',
+    marginTop: 2,
+    fontWeight: '600',
     textAlign: 'center',
   },
   bottomTabTextActive: {
     color: '#0284c7',
-    fontWeight: '700',
   },
   activeTabIndicator: {
-    width: 36,
+    width: 28,
     height: 3,
-    backgroundColor: '#0284c7',
     borderRadius: 2,
-    marginTop: 4,
+    marginTop: 3,
   },
   loadingScreenRoot: {
     flex: 1,

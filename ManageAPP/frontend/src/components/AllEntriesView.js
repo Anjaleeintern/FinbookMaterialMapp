@@ -41,6 +41,7 @@ export const AllEntriesView = React.memo(({ entries, loading, onOpenAddModal, on
   const [selectedParty, setSelectedParty] = useState('All');
   const [selectedSource, setSelectedSource] = useState('All');
   const [colFilters, setColFilters] = useState({});
+  const [searchTerm, setSearchTerm] = useState('');
   const [mobilePicker, setMobilePicker] = useState(null);
 
   // Unique options extracted dynamically from current entries
@@ -109,6 +110,33 @@ export const AllEntriesView = React.memo(({ entries, loading, onOpenAddModal, on
   // Combined filtered entries
   const filteredEntries = useMemo(() => {
     return entries.filter((entry) => {
+      // 0. Quick Search across major fields (Challan, Vehicle, Party, Customer, Material, ETP, etc.)
+      if (searchTerm && searchTerm.trim()) {
+        const q = searchTerm.trim().toLowerCase();
+        const challan = String(entry.challan_no || '').toLowerCase();
+        const vehicle = String(entry.vehicle_no || '').toLowerCase();
+        const party = String(entry.party_name || '').toLowerCase();
+        const customer = String(entry.customer_name || '').toLowerCase();
+        const material = String(entry.material_name || '').toLowerCase();
+        const transport = String(entry.transport_type || '').toLowerCase();
+        const etp = String(entry.etp_no || '').toLowerCase();
+        const date = String(entry.date || '').toLowerCase();
+        const mode = String(entry.payment_mode || entry.type_mode || '').toLowerCase();
+
+        const match =
+          challan.includes(q) ||
+          vehicle.includes(q) ||
+          party.includes(q) ||
+          customer.includes(q) ||
+          material.includes(q) ||
+          transport.includes(q) ||
+          etp.includes(q) ||
+          date.includes(q) ||
+          mode.includes(q);
+
+        if (!match) return false;
+      }
+
       // 1. Date Filter
       if (selectedDate !== 'All') {
         if (String(entry.date || '').trim() !== selectedDate.trim()) {
@@ -244,7 +272,7 @@ export const AllEntriesView = React.memo(({ entries, loading, onOpenAddModal, on
 
       return true;
     });
-  }, [entries, selectedDate, selectedType, selectedMode, selectedMaterial, selectedParty, selectedSource, colFilters]);
+  }, [entries, selectedDate, selectedType, selectedMode, selectedMaterial, selectedParty, selectedSource, colFilters, searchTerm]);
 
   const hasActiveFilter =
     selectedDate !== 'All' ||
@@ -253,6 +281,7 @@ export const AllEntriesView = React.memo(({ entries, loading, onOpenAddModal, on
     selectedMaterial !== 'All' ||
     selectedParty !== 'All' ||
     selectedSource !== 'All' ||
+    Boolean(searchTerm && searchTerm.trim()) ||
     Object.values(colFilters).some((v) => v && v.trim());
 
   const handleClearFilters = () => {
@@ -262,6 +291,7 @@ export const AllEntriesView = React.memo(({ entries, loading, onOpenAddModal, on
     setSelectedMaterial('All');
     setSelectedParty('All');
     setSelectedSource('All');
+    setSearchTerm('');
     setColFilters({});
   };
 
@@ -442,6 +472,23 @@ export const AllEntriesView = React.memo(({ entries, loading, onOpenAddModal, on
                 Manual ({countsBySource.manual})
               </Text>
             </TouchableOpacity>
+          </View>
+
+          {/* Quick Search Bar across all entries */}
+          <View style={styles.mobileSearchRow}>
+            <Ionicons name="search" size={16} color="#64748b" style={{ marginRight: 8 }} />
+            <TextInput
+              style={styles.mobileSearchField}
+              placeholder="Search Challan, Vehicle, Party, Material, ETP..."
+              placeholderTextColor="#94a3b8"
+              value={searchTerm}
+              onChangeText={setSearchTerm}
+            />
+            {searchTerm ? (
+              <TouchableOpacity onPress={() => setSearchTerm('')} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+                <Ionicons name="close-circle" size={17} color="#94a3b8" />
+              </TouchableOpacity>
+            ) : null}
           </View>
 
           {/* Row 3: 2x2 Filter Dropdowns on Left + Add/Import Actions on Right */}
@@ -1285,189 +1332,247 @@ export const AllEntriesView = React.memo(({ entries, loading, onOpenAddModal, on
               <Text style={[styles.thCell, styles.thRight, { width: 115 }]}>Gross Amount</Text>
             </View>
 
-            {/* Row-level Search Filter Inputs for every column */}
+            {/* Row-level Search Filter Inputs for every column (perfect column-wise alignment) */}
             <View style={styles.tableFilterRow}>
+              {/* Checkbox column */}
               <View style={[styles.thFilterCell, { width: 44, alignItems: 'center', justifyContent: 'center' }]}>
                 {Object.values(colFilters).some((v) => v && v.trim()) ? (
                   <TouchableOpacity
                     onPress={() => setColFilters({})}
                     hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                    title="Clear all column filters"
                   >
-                    <Ionicons name="close-circle" size={16} color="#ef4444" />
+                    <Ionicons name="close-circle" size={17} color="#ef4444" />
                   </TouchableOpacity>
                 ) : (
-                  <Ionicons name="search" size={13} color="#94a3b8" />
+                  <Ionicons name="search" size={14} color="#64748b" />
                 )}
               </View>
+
+              {/* SLIP column */}
               <View style={[styles.thFilterCell, { width: 68, alignItems: 'center', justifyContent: 'center' }]}>
-                <Ionicons name="receipt-outline" size={13} color="#94a3b8" />
+                <Text style={{ fontSize: 11, color: '#94a3b8' }}>-</Text>
               </View>
+
+              {/* EDIT column */}
               <View style={[styles.thFilterCell, { width: 68, alignItems: 'center', justifyContent: 'center' }]}>
-                <Ionicons name="pencil-outline" size={13} color="#94a3b8" />
+                <Text style={{ fontSize: 11, color: '#94a3b8' }}>-</Text>
               </View>
+
+              {/* DATE */}
               <View style={[styles.thFilterCell, { width: 95 }]}>
                 <TextInput
                   style={styles.colSearchInput}
-                  placeholder="Search..."
+                  placeholder="Date"
                   placeholderTextColor="#94a3b8"
                   value={colFilters.date || ''}
                   onChangeText={(txt) => setColFilters((prev) => ({ ...prev, date: txt }))}
                 />
               </View>
+
+              {/* CHALLAN NO. */}
               <View style={[styles.thFilterCell, { width: 110 }]}>
                 <TextInput
                   style={styles.colSearchInput}
-                  placeholder="Search..."
+                  placeholder="Challan"
                   placeholderTextColor="#94a3b8"
                   value={colFilters.challan_no || ''}
                   onChangeText={(txt) => setColFilters((prev) => ({ ...prev, challan_no: txt }))}
                 />
               </View>
+
+              {/* VEHICLE NO */}
               <View style={[styles.thFilterCell, { width: 115 }]}>
                 <TextInput
                   style={styles.colSearchInput}
-                  placeholder="Search..."
+                  placeholder="Vehicle"
                   placeholderTextColor="#94a3b8"
                   value={colFilters.vehicle_no || ''}
                   onChangeText={(txt) => setColFilters((prev) => ({ ...prev, vehicle_no: txt }))}
                 />
               </View>
+
+              {/* TRANSPORT Name */}
               <View style={[styles.thFilterCell, { width: 125 }]}>
                 <TextInput
                   style={styles.colSearchInput}
-                  placeholder="Search..."
+                  placeholder="Transport"
                   placeholderTextColor="#94a3b8"
                   value={colFilters.transport_type || ''}
                   onChangeText={(txt) => setColFilters((prev) => ({ ...prev, transport_type: txt }))}
                 />
               </View>
-              <View style={[styles.thFilterCell, { width: 125, alignItems: 'center', justifyContent: 'center' }]}>
-                <Text style={{ fontSize: 11, color: '#cbd5e1' }}>-</Text>
+
+              {/* SALES Mode */}
+              <View style={[styles.thFilterCell, { width: 125 }]}>
+                <TextInput
+                  style={styles.colSearchInput}
+                  placeholder="Mode"
+                  placeholderTextColor="#94a3b8"
+                  value={colFilters.sales_mode || ''}
+                  onChangeText={(txt) => setColFilters((prev) => ({ ...prev, sales_mode: txt }))}
+                />
               </View>
+
+              {/* Customer Name */}
               <View style={[styles.thFilterCell, { width: 130 }]}>
                 <TextInput
                   style={styles.colSearchInput}
-                  placeholder="Search..."
+                  placeholder="Customer"
                   placeholderTextColor="#94a3b8"
                   value={colFilters.customer_name || ''}
                   onChangeText={(txt) => setColFilters((prev) => ({ ...prev, customer_name: txt }))}
                 />
               </View>
-              <View style={[styles.thFilterCell, { width: 120, alignItems: 'center', justifyContent: 'center' }]}>
-                <Text style={{ fontSize: 11, color: '#cbd5e1' }}>-</Text>
+
+              {/* Sales Type */}
+              <View style={[styles.thFilterCell, { width: 120 }]}>
+                <TextInput
+                  style={styles.colSearchInput}
+                  placeholder="Type"
+                  placeholderTextColor="#94a3b8"
+                  value={colFilters.sale_type || ''}
+                  onChangeText={(txt) => setColFilters((prev) => ({ ...prev, sale_type: txt }))}
+                />
               </View>
+
+              {/* ETP No. */}
               <View style={[styles.thFilterCell, { width: 105 }]}>
                 <TextInput
                   style={styles.colSearchInput}
-                  placeholder="Search..."
+                  placeholder="ETP No."
                   placeholderTextColor="#94a3b8"
                   value={colFilters.etp_no || ''}
                   onChangeText={(txt) => setColFilters((prev) => ({ ...prev, etp_no: txt }))}
                 />
               </View>
+
+              {/* CUM */}
               <View style={[styles.thFilterCell, { width: 75 }]}>
                 <TextInput
                   style={[styles.colSearchInput, { textAlign: 'right' }]}
-                  placeholder="Search..."
+                  placeholder="CUM"
                   placeholderTextColor="#94a3b8"
                   value={colFilters.cum || ''}
                   onChangeText={(txt) => setColFilters((prev) => ({ ...prev, cum: txt }))}
                 />
               </View>
+
+              {/* G Wt */}
               <View style={[styles.thFilterCell, { width: 85 }]}>
                 <TextInput
                   style={[styles.colSearchInput, { textAlign: 'right' }]}
-                  placeholder="Search..."
+                  placeholder="G Wt"
                   placeholderTextColor="#94a3b8"
                   value={colFilters.g_wt || ''}
                   onChangeText={(txt) => setColFilters((prev) => ({ ...prev, g_wt: txt }))}
                 />
               </View>
+
+              {/* T Wt */}
               <View style={[styles.thFilterCell, { width: 85 }]}>
                 <TextInput
                   style={[styles.colSearchInput, { textAlign: 'right' }]}
-                  placeholder="Search..."
+                  placeholder="T Wt"
                   placeholderTextColor="#94a3b8"
                   value={colFilters.t_wt || ''}
                   onChangeText={(txt) => setColFilters((prev) => ({ ...prev, t_wt: txt }))}
                 />
               </View>
+
+              {/* Net Wt */}
               <View style={[styles.thFilterCell, { width: 85 }]}>
                 <TextInput
                   style={[styles.colSearchInput, { textAlign: 'right' }]}
-                  placeholder="Search..."
+                  placeholder="Net Wt"
                   placeholderTextColor="#94a3b8"
                   value={colFilters.net_wt || ''}
                   onChangeText={(txt) => setColFilters((prev) => ({ ...prev, net_wt: txt }))}
                 />
               </View>
+
+              {/* Rate */}
               <View style={[styles.thFilterCell, { width: 80 }]}>
                 <TextInput
                   style={[styles.colSearchInput, { textAlign: 'right' }]}
-                  placeholder="Search..."
+                  placeholder="Rate"
                   placeholderTextColor="#94a3b8"
                   value={colFilters.rate || ''}
                   onChangeText={(txt) => setColFilters((prev) => ({ ...prev, rate: txt }))}
                 />
               </View>
+
+              {/* Amount */}
               <View style={[styles.thFilterCell, { width: 95 }]}>
                 <TextInput
                   style={[styles.colSearchInput, { textAlign: 'right' }]}
-                  placeholder="Search..."
+                  placeholder="Amount"
                   placeholderTextColor="#94a3b8"
                   value={colFilters.amount || ''}
                   onChangeText={(txt) => setColFilters((prev) => ({ ...prev, amount: txt }))}
                 />
               </View>
+
+              {/* Royalty */}
               <View style={[styles.thFilterCell, { width: 90 }]}>
                 <TextInput
                   style={[styles.colSearchInput, { textAlign: 'right' }]}
-                  placeholder="Search..."
+                  placeholder="Royalty"
                   placeholderTextColor="#94a3b8"
                   value={colFilters.royalty || ''}
                   onChangeText={(txt) => setColFilters((prev) => ({ ...prev, royalty: txt }))}
                 />
               </View>
+
+              {/* Freight */}
               <View style={[styles.thFilterCell, { width: 90 }]}>
                 <TextInput
                   style={[styles.colSearchInput, { textAlign: 'right' }]}
-                  placeholder="Search..."
+                  placeholder="Freight"
                   placeholderTextColor="#94a3b8"
                   value={colFilters.freight || ''}
                   onChangeText={(txt) => setColFilters((prev) => ({ ...prev, freight: txt }))}
                 />
               </View>
+
+              {/* CGST */}
               <View style={[styles.thFilterCell, { width: 85 }]}>
                 <TextInput
                   style={[styles.colSearchInput, { textAlign: 'right' }]}
-                  placeholder="Search..."
+                  placeholder="CGST"
                   placeholderTextColor="#94a3b8"
                   value={colFilters.cgst || ''}
                   onChangeText={(txt) => setColFilters((prev) => ({ ...prev, cgst: txt }))}
                 />
               </View>
+
+              {/* SGST */}
               <View style={[styles.thFilterCell, { width: 85 }]}>
                 <TextInput
                   style={[styles.colSearchInput, { textAlign: 'right' }]}
-                  placeholder="Search..."
+                  placeholder="SGST"
                   placeholderTextColor="#94a3b8"
                   value={colFilters.sgst || ''}
                   onChangeText={(txt) => setColFilters((prev) => ({ ...prev, sgst: txt }))}
                 />
               </View>
+
+              {/* IGST */}
               <View style={[styles.thFilterCell, { width: 85 }]}>
                 <TextInput
                   style={[styles.colSearchInput, { textAlign: 'right' }]}
-                  placeholder="Search..."
+                  placeholder="IGST"
                   placeholderTextColor="#94a3b8"
                   value={colFilters.igst || ''}
                   onChangeText={(txt) => setColFilters((prev) => ({ ...prev, igst: txt }))}
                 />
               </View>
+
+              {/* Gross Amount */}
               <View style={[styles.thFilterCell, { width: 115 }]}>
                 <TextInput
                   style={[styles.colSearchInput, { textAlign: 'right' }]}
-                  placeholder="Search..."
+                  placeholder="Gross Amt"
                   placeholderTextColor="#94a3b8"
                   value={colFilters.gross_amount || ''}
                   onChangeText={(txt) => setColFilters((prev) => ({ ...prev, gross_amount: txt }))}
@@ -2178,7 +2283,7 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   tableWrapper: {
-    minWidth: 1660,
+    minWidth: 2100,
   },
   tableHeaderRow: {
     flexDirection: 'row',
@@ -2834,25 +2939,55 @@ const styles = StyleSheet.create({
   },
   tableFilterRow: {
     flexDirection: 'row',
-    backgroundColor: '#f8fafc',
+    backgroundColor: '#f1f5f9',
     borderBottomWidth: 1,
     borderBottomColor: '#cbd5e1',
-    paddingVertical: 5,
+    paddingVertical: 6,
+    paddingHorizontal: 12,
     alignItems: 'center',
   },
   thFilterCell: {
-    paddingHorizontal: 3,
+    paddingHorizontal: 4,
     justifyContent: 'center',
   },
   colSearchInput: {
-    height: 28,
+    height: 30,
     backgroundColor: '#ffffff',
     borderWidth: 1,
     borderColor: '#cbd5e1',
     borderRadius: 5,
     paddingHorizontal: 6,
+    paddingVertical: 0,
     fontSize: 11,
     color: '#0f172a',
+    ...Platform.select({
+      web: {
+        outlineStyle: 'none',
+      },
+    }),
+  },
+  mobileSearchRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#ffffff',
+    borderWidth: 1,
+    borderColor: '#cbd5e1',
+    borderRadius: 8,
+    paddingHorizontal: 10,
+    height: 40,
+    marginTop: 8,
+    marginBottom: 4,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.04,
+    shadowRadius: 2,
+    elevation: 1,
+  },
+  mobileSearchField: {
+    flex: 1,
+    fontSize: 13,
+    color: '#0f172a',
+    paddingVertical: 0,
     ...Platform.select({
       web: {
         outlineStyle: 'none',

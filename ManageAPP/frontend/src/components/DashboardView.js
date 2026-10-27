@@ -294,7 +294,7 @@ export const DashboardView = React.memo(({ entries = [], onOpenAddModal, onNavig
     return set;
   }, [entries]);
 
-  // One-time global CSS animation injection (Real app dynamic feel & smooth entrance)
+  // Global CSS rules for hover states & static chart styling (smooth & stable, no jumping/bouncing animations)
   useEffect(() => {
     if (typeof document === 'undefined') return;
     const styleId = 'dashboard-chart-animations-global';
@@ -302,90 +302,44 @@ export const DashboardView = React.memo(({ entries = [], onOpenAddModal, onNavig
       const styleEl = document.createElement('style');
       styleEl.id = styleId;
       styleEl.textContent = `
-        @keyframes donutSpinIn {
-          0% { transform: rotate(-180deg) scale(0.65); opacity: 0; }
-          65% { transform: rotate(14deg) scale(1.05); opacity: 1; }
-          100% { transform: rotate(0deg) scale(1); opacity: 1; }
-        }
         .donut-rotate-group {
           transform-origin: 110px 110px;
-          animation: donutSpinIn 1.1s cubic-bezier(0.34, 1.3, 0.64, 1) forwards;
         }
         .pie-slice-path {
           cursor: pointer;
-          transition: opacity 0.2s ease;
+          transition: opacity 0.15s ease;
         }
         .pie-legend-card-row {
           cursor: pointer;
-          transition: all 0.2s ease;
+          transition: background-color 0.15s ease;
         }
         .pie-legend-card-row:hover {
           background-color: #ffffff;
-          box-shadow: 0 2px 8px rgba(15, 23, 42, 0.05);
         }
         .dashboard-kpi-tile {
           cursor: pointer;
-          transition: transform 0.18s ease, box-shadow 0.18s ease, border-color 0.18s ease;
+          transition: transform 0.15s ease, box-shadow 0.15s ease;
         }
         .dashboard-kpi-tile:hover {
           transform: translateY(-2px);
-          box-shadow: 0 6px 16px rgba(15, 23, 42, 0.08);
+          box-shadow: 0 4px 12px rgba(15, 23, 42, 0.06);
         }
         .dashboard-kpi-tile:active {
-          transform: translateY(0px) scale(0.98);
-        }
-        @keyframes barSlideUp {
-          0% { transform: scaleY(0); opacity: 0; }
-          65% { transform: scaleY(1.04); opacity: 0.95; }
-          100% { transform: scaleY(1); opacity: 1; }
+          transform: translateY(0px) scale(0.99);
         }
         .stacked-bar-rect {
           transform-origin: center bottom;
-          animation: barSlideUp 0.8s cubic-bezier(0.16, 1, 0.3, 1) both;
-          transition: all 0.22s ease;
-        }
-        .bar-col-0 .stacked-bar-rect { animation-delay: 0.04s; }
-        .bar-col-1 .stacked-bar-rect { animation-delay: 0.12s; }
-        .bar-col-2 .stacked-bar-rect { animation-delay: 0.20s; }
-        .bar-col-3 .stacked-bar-rect { animation-delay: 0.28s; }
-        .bar-col-4 .stacked-bar-rect { animation-delay: 0.36s; }
-
-        @keyframes badgeFadeUp {
-          0% { opacity: 0; transform: translateY(6px); }
-          100% { opacity: 1; transform: translateY(0); }
-        }
-        .bar-value-pill {
-          animation: badgeFadeUp 0.55s cubic-bezier(0.16, 1, 0.3, 1) 0.35s both;
-        }
-
-        @keyframes partyBarGrow {
-          0% { transform: scaleY(0); opacity: 0.2; }
-          100% { transform: scaleY(1); opacity: 1; }
         }
         .party-bar-seg, .party-bar-rect {
           transform-origin: center bottom;
-          animation: partyBarGrow 0.85s cubic-bezier(0.16, 1, 0.3, 1) forwards;
-          transition: all 0.25s ease;
         }
-        .party-value-pill {
-          animation: badgeFadeUp 0.55s cubic-bezier(0.16, 1, 0.3, 1) 0.35s both;
-        }
-
         @keyframes pulseDot {
-          0% { transform: scale(0.92); opacity: 0.75; }
-          50% { transform: scale(1.22); opacity: 1; }
-          100% { transform: scale(0.92); opacity: 0.75; }
+          0% { transform: scale(0.95); opacity: 0.8; }
+          50% { transform: scale(1.15); opacity: 1; }
+          100% { transform: scale(0.95); opacity: 0.8; }
         }
         .live-pulse-dot {
           animation: pulseDot 2s infinite ease-in-out;
-        }
-
-        .dashboard-kpi-tile {
-          transition: transform 0.22s ease, box-shadow 0.22s ease;
-        }
-        .dashboard-kpi-tile:hover {
-          transform: translateY(-2px);
-          box-shadow: 0 6px 16px rgba(15, 23, 42, 0.08);
         }
       `;
       document.head.appendChild(styleEl);

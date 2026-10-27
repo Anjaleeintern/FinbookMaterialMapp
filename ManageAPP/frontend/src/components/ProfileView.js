@@ -16,7 +16,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '../context/AuthContext';
 import { api } from '../api/client';
 
-export const ProfileView = () => {
+export const ProfileView = React.memo(() => {
   const { user, logout, updateUser } = useAuth();
   const { width } = useWindowDimensions();
   const isMobile = width < 768;
@@ -513,7 +513,7 @@ export const ProfileView = () => {
       </Modal>
     </ScrollView>
   );
-};
+});
 
 const styles = StyleSheet.create({
   container: {
