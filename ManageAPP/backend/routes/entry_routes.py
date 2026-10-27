@@ -383,11 +383,14 @@ async def create_entry(entry: EntryCreate, current_user: dict = Depends(get_curr
                 calc_data["challan_no"] = await get_next_challan_no(user_id=user_id)
             else:
                 calc_data["challan_no"] = formatted
-                await db.counters.update_one(
-                    {"_id": f"challan_seq_{user_id}"},
-                    {"$max": {"seq": num}},
-                    upsert=True
-                )
+                counter = await db.counters.find_one({"_id": f"challan_seq_{user_id}"})
+                curr_seq = counter.get("seq", 0) if counter else 0
+                if num <= curr_seq + 5:
+                    await db.counters.update_one(
+                        {"_id": f"challan_seq_{user_id}"},
+                        {"$max": {"seq": num}},
+                        upsert=True
+                    )
         else:
             calc_data["challan_no"] = await get_next_challan_no(user_id=user_id)
 

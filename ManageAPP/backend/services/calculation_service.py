@@ -100,8 +100,6 @@ def process_entry_calculations(entry: EntryCreate) -> dict:
             data["igst_rate"] = igst_rate
             data["igst_amount"] = igst_amount
             data["gst_amount"] = total_gst
-
-        data["total_amount"] = round(taxable_amount + total_gst, 2)
     else:
         data["gst_rate"] = 0.0
         data["gst_amount"] = 0.0
@@ -111,7 +109,20 @@ def process_entry_calculations(entry: EntryCreate) -> dict:
         data["sgst_amount"] = 0.0
         data["igst_rate"] = 0.0
         data["igst_amount"] = 0.0
-        data["total_amount"] = taxable_amount
+
+    # 7. Total Amount & Round Off (rounded to nearest rupee)
+    gst_amt = float(data.get("gst_amount") or 0.0)
+    raw_total = round(taxable_amount + gst_amt, 2)
+    if "round_off" in data and data["round_off"] is not None:
+        try:
+            round_off = round(float(data["round_off"]), 2)
+        except (ValueError, TypeError):
+            round_off = round(round(raw_total) - raw_total, 2)
+    else:
+        round_off = round(round(raw_total) - raw_total, 2)
+
+    data["round_off"] = round_off
+    data["total_amount"] = round(raw_total + round_off, 2)
 
     # 5. Payment Mode Applicability & Customer Name:
     is_cash = "cash" in type_mode.lower() or "case" in type_mode.lower() or "qr" in type_mode.lower()

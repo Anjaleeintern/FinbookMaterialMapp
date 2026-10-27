@@ -13,6 +13,7 @@ import {
   Modal,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import * as Updates from 'expo-updates';
 import { useAuth } from '../context/AuthContext';
 import { api } from '../api/client';
 
@@ -41,6 +42,48 @@ export const ProfileView = React.memo(() => {
 
   // Logout Confirmation Modal
   const [showLogoutModal, setShowLogoutModal] = useState(false);
+
+  // App OTA Updates Check State
+  const [checkingUpdate, setCheckingUpdate] = useState(false);
+
+  const handleCheckManualUpdate = async () => {
+    if (Platform.OS === 'web' || __DEV__ || !Updates.isEnabled) {
+      const msg = 'Updates are automatically synced in the installed APK via EAS preview channel.';
+      if (Platform.OS === 'web') {
+        alert(msg);
+      } else {
+        Alert.alert('App Updates', msg);
+      }
+      return;
+    }
+
+    try {
+      setCheckingUpdate(true);
+      const update = await Updates.checkForUpdateAsync();
+      if (update.isAvailable) {
+        const fetchResult = await Updates.fetchUpdateAsync();
+        if (fetchResult.isNew) {
+          Alert.alert(
+            'New Update Downloaded',
+            'Latest changes have been downloaded! The app will reload now to apply them.',
+            [
+              {
+                text: 'Restart Now',
+                onPress: () => Updates.reloadAsync(),
+              },
+            ],
+            { cancelable: false }
+          );
+        }
+      } else {
+        Alert.alert('Up to Date', 'Your app is already running the latest version with all changes.');
+      }
+    } catch (err) {
+      Alert.alert('Update Check', `Could not check updates: ${err?.message || err}`);
+    } finally {
+      setCheckingUpdate(false);
+    }
+  };
 
   // Sync user changes if user prop updates
   useEffect(() => {
@@ -449,7 +492,40 @@ export const ProfileView = React.memo(() => {
           </TouchableOpacity>
         </View>
 
-        {/* 4. LOGOUT SECTION */}
+        {/* 4. APP VERSION & UPDATES SECTION */}
+        <View style={styles.card}>
+          <View style={styles.logoutRow}>
+            <View style={{ flex: 1, paddingRight: 10 }}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                <Text style={styles.logoutTitle}>App Version & Updates</Text>
+                <View style={{ backgroundColor: '#e0f2fe', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4 }}>
+                  <Text style={{ fontSize: 10, fontWeight: '700', color: '#0284c7' }}>v1.0.0</Text>
+                </View>
+              </View>
+              <Text style={styles.logoutDesc}>
+                {Updates.isEnabled ? 'EAS Preview Channel • Instant OTA updates active' : 'Development Build • Direct auto-syncing'}
+              </Text>
+            </View>
+
+            <TouchableOpacity
+              style={[styles.logoutBtn, { backgroundColor: '#0284c7' }]}
+              onPress={handleCheckManualUpdate}
+              activeOpacity={0.85}
+              disabled={checkingUpdate}
+            >
+              {checkingUpdate ? (
+                <ActivityIndicator size="small" color="#ffffff" style={{ marginRight: 6 }} />
+              ) : (
+                <Ionicons name="cloud-download-outline" size={17} color="#ffffff" style={{ marginRight: 6 }} />
+              )}
+              <Text style={styles.logoutBtnText}>
+                {checkingUpdate ? 'Checking...' : 'Check Updates'}
+              </Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+
+        {/* 5. LOGOUT SECTION */}
         <View style={[styles.card, styles.cardDanger]}>
           <View style={styles.logoutRow}>
             <View style={{ flex: 1 }}>

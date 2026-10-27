@@ -44,6 +44,7 @@ class EntryCreate(BaseModel):
     sgst_amount: Optional[float] = 0.0
     igst_rate: Optional[float] = 0.0
     igst_amount: Optional[float] = 0.0
+    round_off: Optional[float] = 0.0
     total_amount: Optional[float] = None
     entry_source: Optional[str] = "manual"
 
@@ -105,6 +106,7 @@ class EntryOut(BaseModel):
     sgst_amount: Optional[float] = 0.0
     igst_rate: Optional[float] = 0.0
     igst_amount: Optional[float] = 0.0
+    round_off: Optional[float] = 0.0
     total_amount: float
     saved_in: str
     entry_source: Optional[str] = "manual"

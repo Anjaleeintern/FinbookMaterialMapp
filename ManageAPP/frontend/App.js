@@ -26,6 +26,7 @@ import { LoginView } from './src/components/LoginView';
 import { PartyWiseSalesModal } from './src/components/PartyWiseSalesModal';
 import { EntryInvoicePdfModal } from './src/components/EntryInvoicePdfModal';
 import { TopDownloadBanner } from './src/components/TopDownloadBanner';
+import * as Updates from 'expo-updates';
 import { api } from './src/api/client';
 import './style.css';
 
@@ -127,6 +128,34 @@ const MainApp = () => {
       return next;
     });
     setActiveTab(tab);
+  }, []);
+
+  // Proactively check and apply EAS OTA preview updates on app startup
+  useEffect(() => {
+    let active = true;
+    const checkAndApplyUpdates = async () => {
+      if (Platform.OS === 'web' || __DEV__ || !Updates.isEnabled) {
+        return;
+      }
+      try {
+        const update = await Updates.checkForUpdateAsync();
+        if (update.isAvailable) {
+          console.log('[Updates] New preview update detected, downloading...');
+          const fetchResult = await Updates.fetchUpdateAsync();
+          if (fetchResult.isNew && active) {
+            console.log('[Updates] Download complete. Reloading app with latest changes...');
+            await Updates.reloadAsync();
+          }
+        }
+      } catch (err) {
+        console.log('[Updates] Auto-update check:', err?.message || err);
+      }
+    };
+
+    checkAndApplyUpdates();
+    return () => {
+      active = false;
+    };
   }, []);
 
   useEffect(() => {

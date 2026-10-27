@@ -39,9 +39,25 @@ export const isCashOrQrSale = (mode) => {
   );
 };
 
+// Restrict weights (G.WT, T.WT, N.WT) to max 3 digits before decimal and max 2 digits after decimal
+export const sanitizeWeightInput = (txt) => {
+  if (txt === undefined || txt === null) return '';
+  const cleaned = String(txt).replace(/[^0-9.]/g, '');
+  const parts = cleaned.split('.');
+  // Max 3 digits before decimal point (0 - 999)
+  const intPart = parts[0].slice(0, 3);
+  if (parts.length > 1) {
+    // Max 2 digits after decimal point (.00 - .99)
+    const decPart = parts.slice(1).join('').slice(0, 2);
+    return `${intPart}.${decPart}`;
+  }
+  return intPart;
+};
+
 // Stepper Component defined outside so it NEVER unmounts on re-render, keeping focus intact
-const StepperInput = ({ label, value, onChange, step = 1, placeholder = '0' }) => {
+const StepperInput = ({ label, value, onChange, step = 1, placeholder = '0', isWeight = false, max = null }) => {
   const currentStr = value === undefined || value === null ? '' : String(value);
+  const effectiveMax = isWeight ? 999.99 : max;
 
   return (
     <View style={styles.formGroup}>
@@ -49,15 +65,19 @@ const StepperInput = ({ label, value, onChange, step = 1, placeholder = '0' }) =
       <View style={styles.stepperContainer}>
         <TextInput
           style={styles.stepperTextInput}
-          keyboardType="numeric"
+          keyboardType="decimal-pad"
           selectTextOnFocus={true}
           value={currentStr}
           onChangeText={(txt) => {
-            // Keep numeric digits and at most one decimal point
-            const cleaned = txt.replace(/[^0-9.]/g, '');
-            const parts = cleaned.split('.');
-            const sanitized = parts.length > 2 ? `${parts[0]}.${parts.slice(1).join('')}` : cleaned;
-            onChange(sanitized);
+            if (isWeight) {
+              onChange(sanitizeWeightInput(txt));
+            } else {
+              // Keep numeric digits and at most one decimal point
+              const cleaned = txt.replace(/[^0-9.]/g, '');
+              const parts = cleaned.split('.');
+              const sanitized = parts.length > 2 ? `${parts[0]}.${parts.slice(1).join('')}` : cleaned;
+              onChange(sanitized);
+            }
           }}
           placeholder={placeholder}
           placeholderTextColor="#94a3b8"
@@ -68,7 +88,7 @@ const StepperInput = ({ label, value, onChange, step = 1, placeholder = '0' }) =
             onPress={() => {
               const currentNum = parseFloat(value) || 0;
               const next = Math.max(0, Number((currentNum - step).toFixed(2)));
-              onChange(String(next));
+              onChange(isWeight ? sanitizeWeightInput(String(next)) : String(next));
             }}
           >
             <Ionicons name="remove" size={20} color="#334155" />
@@ -77,8 +97,11 @@ const StepperInput = ({ label, value, onChange, step = 1, placeholder = '0' }) =
             style={styles.stepperBtn}
             onPress={() => {
               const currentNum = parseFloat(value) || 0;
-              const next = Number((currentNum + step).toFixed(2));
-              onChange(String(next));
+              let next = Number((currentNum + step).toFixed(2));
+              if (effectiveMax !== null && next > effectiveMax) {
+                next = effectiveMax;
+              }
+              onChange(isWeight ? sanitizeWeightInput(String(next)) : String(next));
             }}
           >
             <Ionicons name="add" size={20} color="#334155" />
@@ -173,30 +196,33 @@ export const DeliveryEntriesFormModal = ({ visible, onClose, onSuccess, masters,
   const [gWt, setGWt] = useState('0');
   const [tWt, setTWt] = useState('0');
   const [rate, setRate] = useState('0');
-  const [additionalChargesList, setAdditionalChargesList] = useState([
-    { id: '1', name: '', amount: '0' },
-  ]);
+  const [hasAdditionalCharges, setHasAdditionalCharges] = useState(false);
+  const [savedChargesList, setSavedChargesList] = useState([]);
+  const [curChargeName, setCurChargeName] = useState('');
+  const [curChargeAmount, setCurChargeAmount] = useState('0');
+  const [isAddingCharge, setIsAddingCharge] = useState(false);
 
-  const handleAddChargeRow = () => {
-    setAdditionalChargesList((prev) => [
+  const handleSaveCurrentCharge = () => {
+    const trimmed = (curChargeName || '').trim();
+    const amt = parseFloat(curChargeAmount) || 0;
+    if (!trimmed && amt <= 0) {
+      return;
+    }
+    setSavedChargesList((prev) => [
       ...prev,
-      { id: String(Date.now() + Math.random()), name: '', amount: '0' },
+      {
+        id: String(Date.now() + Math.random()),
+        name: trimmed || 'Additional Charge',
+        amount: String(amt),
+      },
     ]);
+    setCurChargeName('');
+    setCurChargeAmount('0');
+    setIsAddingCharge(false);
   };
 
-  const handleRemoveChargeRow = (id) => {
-    setAdditionalChargesList((prev) => {
-      if (prev.length <= 1) {
-        return [{ id: '1', name: '', amount: '0' }];
-      }
-      return prev.filter((item) => item.id !== id);
-    });
-  };
-
-  const handleUpdateChargeRow = (id, field, value) => {
-    setAdditionalChargesList((prev) =>
-      prev.map((item) => (item.id === id ? { ...item, [field]: value } : item))
-    );
+  const handleRemoveSavedCharge = (id) => {
+    setSavedChargesList((prev) => prev.filter((item) => item.id !== id));
   };
   const [partyState, setPartyState] = useState('Madhya Pradesh');
   const [paymentMode, setPaymentMode] = useState('Cash');
@@ -343,23 +369,29 @@ export const DeliveryEntriesFormModal = ({ visible, onClose, onSuccess, masters,
         setRate(String(initialData.rate !== undefined && initialData.rate !== null ? initialData.rate : '0'));
 
         if (Array.isArray(initialData.additional_charges) && initialData.additional_charges.length > 0) {
-          setAdditionalChargesList(
+          setSavedChargesList(
             initialData.additional_charges.map((c, i) => ({
               id: String(i + 1),
               name: c.name || '',
               amount: String(c.amount || '0'),
             }))
           );
+          setHasAdditionalCharges(true);
+          setIsAddingCharge(false);
         } else if (initialData.additional_charge_amount > 0 || initialData.additional_charge_name) {
-          setAdditionalChargesList([
+          setSavedChargesList([
             {
               id: '1',
               name: initialData.additional_charge_name || '',
               amount: String(initialData.additional_charge_amount || '0'),
             },
           ]);
+          setHasAdditionalCharges(true);
+          setIsAddingCharge(false);
         } else {
-          setAdditionalChargesList([{ id: '1', name: '', amount: '0' }]);
+          setSavedChargesList([]);
+          setHasAdditionalCharges(false);
+          setIsAddingCharge(false);
         }
 
         setPaymentMode(initialData.payment_mode || (initialData.type_mode === 'Cash Sale' ? 'Cash' : ''));
@@ -388,7 +420,11 @@ export const DeliveryEntriesFormModal = ({ visible, onClose, onSuccess, masters,
         setGWt('0');
         setTWt('0');
         setRate('0');
-        setAdditionalChargesList([{ id: '1', name: '', amount: '0' }]);
+        setSavedChargesList([]);
+        setHasAdditionalCharges(false);
+        setCurChargeName('');
+        setCurChargeAmount('0');
+        setIsAddingCharge(false);
         setPaymentMode('Cash');
         setGstRate('0');
         setRateCalcUnit('MT');
@@ -431,14 +467,15 @@ export const DeliveryEntriesFormModal = ({ visible, onClose, onSuccess, masters,
   const numRate = parseFloat(rate) || 0;
   const numGstRate = parseFloat(gstRate) || 0;
   const numAddCharge = useMemo(() => {
-    return additionalChargesList.reduce((sum, item) => {
+    if (!hasAdditionalCharges) return 0;
+    return savedChargesList.reduce((sum, item) => {
       const amt = parseFloat(item.amount) || 0;
       return sum + (isNaN(amt) ? 0 : amt);
     }, 0);
-  }, [additionalChargesList]);
+  }, [hasAdditionalCharges, savedChargesList]);
 
-  // Gross Weight and Tare Weight are in Tons by default (no division by 1000)
-  const netWt = Math.max(0, Number((numGWt - numTWt).toFixed(2)));
+  // Gross Weight and Tare Weight are restricted to max 3 digits before decimal, 2 after decimal
+  const netWt = Math.min(999.99, Math.max(0, Number((numGWt - numTWt).toFixed(2))));
 
   // Amount: CUM * Rate if CUM, or NET WT * Rate if MT (Tons, no / 1000)
   const amount = rateCalcUnit === 'CUM'
@@ -479,7 +516,11 @@ export const DeliveryEntriesFormModal = ({ visible, onClose, onSuccess, masters,
     }
   }
 
-  const totalAmount = Number((taxableAmount + gstAmount).toFixed(2));
+  // Exact Round Off to nearest rupee
+  const rawTotalAmount = Number((taxableAmount + gstAmount).toFixed(2));
+  const roundedTotalAmount = Math.round(rawTotalAmount);
+  const roundOff = Number((roundedTotalAmount - rawTotalAmount).toFixed(2));
+  const totalAmount = roundedTotalAmount;
 
   const handleSave = async () => {
     if (!vehicleNo || !transportType || !typeMode || !materialName) {
@@ -517,19 +558,24 @@ export const DeliveryEntriesFormModal = ({ visible, onClose, onSuccess, masters,
         etp_no: etpNo || '',
         g_wt: parseFloat(gWt) || 0,
         t_wt: parseFloat(tWt) || 0,
+        net_wt: netWt,
         rate: parseFloat(rate) || 0,
         rate_calc_unit: rateCalcUnit,
         amount: amount,
-        additional_charges: additionalChargesList
-          .map((c) => ({
-            name: (c.name || '').trim(),
-            amount: parseFloat(c.amount) || 0,
-          }))
-          .filter((c) => c.name || c.amount > 0),
-        additional_charge_name: additionalChargesList
-          .map((c) => (c.name || '').trim())
-          .filter(Boolean)
-          .join(', ') || null,
+        additional_charges: hasAdditionalCharges
+          ? savedChargesList
+              .map((c) => ({
+                name: (c.name || '').trim(),
+                amount: parseFloat(c.amount) || 0,
+              }))
+              .filter((c) => c.name || c.amount > 0)
+          : [],
+        additional_charge_name: hasAdditionalCharges
+          ? savedChargesList
+              .map((c) => (c.name || '').trim())
+              .filter(Boolean)
+              .join(', ') || null
+          : null,
         additional_charge_amount: numAddCharge,
         taxable_amount: taxableAmount,
         payment_mode: typeMode === 'Cash Sale' ? (paymentMode || 'Cash') : null,
@@ -541,6 +587,7 @@ export const DeliveryEntriesFormModal = ({ visible, onClose, onSuccess, masters,
         sgst_amount: sgstAmount,
         igst_rate: igstRate,
         igst_amount: igstAmount,
+        round_off: roundOff,
         total_amount: totalAmount,
       };
 
@@ -793,16 +840,16 @@ export const DeliveryEntriesFormModal = ({ visible, onClose, onSuccess, masters,
             </View>
 
             {/* 11. G.WT */}
-            <StepperInput label="G.WT (Gross Weight - Tons)" value={gWt} onChange={setGWt} step={1} />
+            <StepperInput label="G.WT (Gross Weight - Tons)" value={gWt} onChange={setGWt} step={1} isWeight={true} />
 
             {/* 12. T.WT */}
-            <StepperInput label="T.WT (Tare Weight - Tons)" value={tWt} onChange={setTWt} step={1} />
+            <StepperInput label="T.WT (Tare Weight - Tons)" value={tWt} onChange={setTWt} step={1} isWeight={true} />
 
             {/* 13. NET WT */}
             <View style={styles.formGroup}>
               <Text style={styles.fieldLabel}>NET WT (Calculated: G.WT - T.WT)</Text>
               <View style={styles.calculatedBox}>
-                <Text style={styles.calculatedValue}>{netWt.toLocaleString()} Tons</Text>
+                <Text style={styles.calculatedValue}>{netWt.toFixed(2)} Tons</Text>
               </View>
             </View>
 
@@ -863,71 +910,147 @@ export const DeliveryEntriesFormModal = ({ visible, onClose, onSuccess, masters,
               </View>
             </View>
 
-            {/* 16. Additional Charges Section (Supports multiple charges with single + Add More button) */}
+            {/* 16. Additional Charges Section with Toggle (No / Yes), Input Card with Save, Mini Table, and + Add Another Charge */}
             <View style={styles.addChargesSection}>
-              <View style={styles.addChargesHeaderRow}>
+              {/* Toggle Header Row */}
+              <View style={styles.addChargesToggleRow}>
                 <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
                   <Ionicons name="receipt-outline" size={17} color="#0284c7" />
-                  <Text style={styles.addChargesSectionTitle}>
-                    Additional Charges {additionalChargesList.length > 1 ? `(${additionalChargesList.length})` : ''}
-                  </Text>
+                  <Text style={styles.addChargesSectionTitle}>Additional Charges</Text>
+                </View>
+                <View style={styles.toggleYesNoGroup}>
+                  <TouchableOpacity
+                    style={[styles.togglePillBtn, !hasAdditionalCharges && styles.togglePillBtnInactive]}
+                    onPress={() => {
+                      setHasAdditionalCharges(false);
+                      setIsAddingCharge(false);
+                    }}
+                    activeOpacity={0.7}
+                  >
+                    <Text style={[styles.togglePillText, !hasAdditionalCharges && styles.togglePillTextInactive]}>
+                      No
+                    </Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={[styles.togglePillBtn, hasAdditionalCharges && styles.togglePillBtnActive]}
+                    onPress={() => {
+                      setHasAdditionalCharges(true);
+                      if (savedChargesList.length === 0) {
+                        setIsAddingCharge(true);
+                      }
+                    }}
+                    activeOpacity={0.7}
+                  >
+                    <Text style={[styles.togglePillText, hasAdditionalCharges && styles.togglePillTextActive]}>
+                      Yes
+                    </Text>
+                  </TouchableOpacity>
                 </View>
               </View>
 
-              {additionalChargesList.map((chargeRow, idx) => (
-                <View key={chargeRow.id} style={styles.chargeItemCard}>
-                  {additionalChargesList.length > 1 && (
-                    <View style={styles.chargeItemCardHeader}>
-                      <View style={styles.chargeBadge}>
-                        <Text style={styles.chargeBadgeText}>Charge #{idx + 1}</Text>
+              {/* If toggled YES */}
+              {hasAdditionalCharges && (
+                <View style={{ marginTop: 10 }}>
+                  {/* Mini-table of Saved Charges */}
+                  {savedChargesList.length > 0 && (
+                    <View style={styles.miniTableCard}>
+                      <View style={styles.miniTableHeader}>
+                        <Text style={[styles.miniTableTh, { flex: 2 }]}>CHARGE NAME</Text>
+                        <Text style={[styles.miniTableTh, { flex: 1.2, textAlign: 'right' }]}>AMOUNT (₹)</Text>
+                        <Text style={[styles.miniTableTh, { width: 50, textAlign: 'center' }]}>ACTION</Text>
                       </View>
+                      {savedChargesList.map((item, idx) => (
+                        <View key={item.id || idx} style={[styles.miniTableRow, idx === savedChargesList.length - 1 && { borderBottomWidth: 0 }]}>
+                          <Text style={[styles.miniTableCellText, { flex: 2, fontWeight: '600', color: '#0f172a' }]} numberOfLines={1}>
+                            {item.name || 'Additional Charge'}
+                          </Text>
+                          <Text style={[styles.miniTableCellText, { flex: 1.2, textAlign: 'right', fontWeight: '700', color: '#0284c7' }]}>
+                            ₹ {Number(item.amount || 0).toLocaleString()}
+                          </Text>
+                          <View style={{ width: 50, alignItems: 'center' }}>
+                            <TouchableOpacity
+                              onPress={() => handleRemoveSavedCharge(item.id)}
+                              style={styles.trashBtn}
+                              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                            >
+                              <Ionicons name="trash-outline" size={15} color="#ef4444" />
+                            </TouchableOpacity>
+                          </View>
+                        </View>
+                      ))}
+                      {/* Mini Table Total Row */}
+                      <View style={styles.miniTableTotalRow}>
+                        <Text style={styles.miniTableTotalLabel}>Total Charges:</Text>
+                        <Text style={styles.miniTableTotalVal}>₹ {numAddCharge.toLocaleString()}</Text>
+                      </View>
+                    </View>
+                  )}
+
+                  {/* Input Card for selecting charge and amount, with Save Charge button */}
+                  {(isAddingCharge || savedChargesList.length === 0) && (
+                    <View style={styles.chargeInputCard}>
+                      <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
+                        <Text style={styles.chargeInputCardTitle}>
+                          {savedChargesList.length === 0 ? 'Select Additional Charge' : 'Add Another Charge'}
+                        </Text>
+                        {savedChargesList.length > 0 && (
+                          <TouchableOpacity onPress={() => setIsAddingCharge(false)}>
+                            <Ionicons name="close-circle" size={18} color="#94a3b8" />
+                          </TouchableOpacity>
+                        )}
+                      </View>
+
+                      <DropdownSelect
+                        label="Additional Charge"
+                        category="AdditionalCharges"
+                        value={curChargeName}
+                        options={additionalChargeOptions}
+                        onSelect={(val) => setCurChargeName(val)}
+                        isMobile={isMobile}
+                        onOpenPicker={(cfg) => {
+                          setPickerSearch('');
+                          setPickerConfig({
+                            ...cfg,
+                            onSelect: (val) => setCurChargeName(val),
+                          });
+                        }}
+                      />
+
+                      <StepperInput
+                        label="Additional Charge Amount (₹)"
+                        value={curChargeAmount}
+                        onChange={setCurChargeAmount}
+                        step={50}
+                        placeholder="0"
+                      />
+
                       <TouchableOpacity
-                        style={styles.removeChargeIconBtn}
-                        onPress={() => handleRemoveChargeRow(chargeRow.id)}
-                        hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                        style={styles.saveChargeBtn}
+                        onPress={handleSaveCurrentCharge}
+                        activeOpacity={0.8}
                       >
-                        <Ionicons name="trash-outline" size={15} color="#ef4444" />
-                        <Text style={styles.removeChargeText}>Remove</Text>
+                        <Ionicons name="checkmark-circle" size={16} color="#ffffff" style={{ marginRight: 6 }} />
+                        <Text style={styles.saveChargeBtnText}>Save Charge</Text>
                       </TouchableOpacity>
                     </View>
                   )}
 
-                  <DropdownSelect
-                    label={additionalChargesList.length > 1 ? `Additional Charge #${idx + 1}` : 'Additional Charge'}
-                    category="AdditionalCharges"
-                    value={chargeRow.name}
-                    options={additionalChargeOptions}
-                    onSelect={(val) => handleUpdateChargeRow(chargeRow.id, 'name', val)}
-                    isMobile={isMobile}
-                    onOpenPicker={(cfg) => {
-                      setPickerSearch('');
-                      setPickerConfig({
-                        ...cfg,
-                        onSelect: (val) => handleUpdateChargeRow(chargeRow.id, 'name', val),
-                      });
-                    }}
-                  />
-
-                  <StepperInput
-                    label={additionalChargesList.length > 1 ? `Charge #${idx + 1} Amount (₹)` : 'Additional Charge Amount (₹)'}
-                    value={chargeRow.amount}
-                    onChange={(val) => handleUpdateChargeRow(chargeRow.id, 'amount', val)}
-                    step={50}
-                    placeholder="0"
-                  />
+                  {/* "+ Add Another Charge" Button */}
+                  {!isAddingCharge && savedChargesList.length > 0 && (
+                    <TouchableOpacity
+                      style={styles.addMoreChargeBtn}
+                      onPress={() => {
+                        setCurChargeName('');
+                        setCurChargeAmount('0');
+                        setIsAddingCharge(true);
+                      }}
+                      activeOpacity={0.75}
+                    >
+                      <Ionicons name="add-circle" size={18} color="#0284c7" />
+                      <Text style={styles.addMoreChargeBtnText}>+ Add Another Charge</Text>
+                    </TouchableOpacity>
+                  )}
                 </View>
-              ))}
-
-              {/* Show single + Add More button ONLY after at least one charge is selected / added */}
-              {additionalChargesList.some((c) => (c.name && c.name.trim()) || (parseFloat(c.amount) || 0) > 0) && (
-                <TouchableOpacity
-                  style={styles.addChargeRowBtn}
-                  onPress={handleAddChargeRow}
-                  activeOpacity={0.75}
-                >
-                  <Ionicons name="add-circle" size={19} color="#0284c7" />
-                  <Text style={styles.addChargeRowBtnText}>+ Add More</Text>
-                </TouchableOpacity>
               )}
             </View>
 
@@ -1041,8 +1164,34 @@ export const DeliveryEntriesFormModal = ({ visible, onClose, onSuccess, masters,
                 </View>
               </View>
 
+              {/* Total Amount without Round Off */}
               <View style={styles.formGroup}>
-                <Text style={styles.fieldLabel}>Total Amount (Taxable Amount + GST Amount)</Text>
+                <Text style={styles.fieldLabel}>Total Amount (Without Round Off)</Text>
+                <View style={styles.calculatedBox}>
+                  <Text style={styles.calculatedValue}>
+                    ₹ {Number(rawTotalAmount.toFixed(2)).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                  </Text>
+                </View>
+              </View>
+
+              {/* Round Off */}
+              <View style={styles.formGroup}>
+                <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <Text style={styles.fieldLabel}>Round Off (₹)</Text>
+                  <Text style={{ fontSize: 11, fontWeight: '700', color: roundOff >= 0 ? '#16a34a' : '#ea580c' }}>
+                    {roundOff === 0 ? 'Exact' : roundOff > 0 ? `+ ₹${roundOff.toFixed(2)}` : `- ₹${Math.abs(roundOff).toFixed(2)}`}
+                  </Text>
+                </View>
+                <View style={styles.calculatedBox}>
+                  <Text style={[styles.calculatedValue, { color: roundOff >= 0 ? '#16a34a' : '#ea580c' }]}>
+                    {roundOff >= 0 ? `+ ₹ ${roundOff.toFixed(2)}` : `- ₹ ${Math.abs(roundOff).toFixed(2)}`}
+                  </Text>
+                </View>
+              </View>
+
+              {/* Final Total Amount with Round Off */}
+              <View style={styles.formGroup}>
+                <Text style={styles.fieldLabel}>Total Amount (With Round Off)</Text>
                 <View style={[styles.calculatedBox, { backgroundColor: '#f0fdf4', borderColor: '#bbf7d0' }]}>
                   <Text style={[styles.calculatedValue, { color: '#16a34a', fontSize: 16 }]}>
                     ₹ {totalAmount.toLocaleString()}
@@ -1981,74 +2130,146 @@ const styles = StyleSheet.create({
     padding: 12,
     marginBottom: 16,
   },
-  addChargesHeaderRow: {
+  addChargesToggleRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    marginBottom: 10,
   },
   addChargesSectionTitle: {
     fontSize: 14,
     fontWeight: '700',
     color: '#0f172a',
   },
-  addChargeHeaderBtn: {
+  toggleYesNoGroup: {
     flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    backgroundColor: '#e0f2fe',
-    paddingHorizontal: 10,
+    backgroundColor: '#e2e8f0',
+    borderRadius: 8,
+    padding: 3,
+    gap: 3,
+  },
+  togglePillBtn: {
+    paddingHorizontal: 14,
     paddingVertical: 5,
     borderRadius: 6,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
-  addChargeHeaderBtnText: {
-    fontSize: 12,
+  togglePillBtnActive: {
+    backgroundColor: '#0284c7',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.1,
+    shadowRadius: 2,
+    elevation: 2,
+  },
+  togglePillBtnInactive: {
+    backgroundColor: '#64748b',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.1,
+    shadowRadius: 2,
+    elevation: 2,
+  },
+  togglePillText: {
+    fontSize: 12.5,
     fontWeight: '700',
-    color: '#0284c7',
+    color: '#64748b',
   },
-  chargeItemCard: {
+  togglePillTextActive: {
+    color: '#ffffff',
+  },
+  togglePillTextInactive: {
+    color: '#ffffff',
+  },
+  miniTableCard: {
     backgroundColor: '#ffffff',
     borderRadius: 8,
     borderWidth: 1,
-    borderColor: '#e2e8f0',
-    padding: 10,
+    borderColor: '#cbd5e1',
+    overflow: 'hidden',
     marginBottom: 10,
   },
-  chargeItemCardHeader: {
+  miniTableHeader: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
-    marginBottom: 8,
-    paddingBottom: 6,
-    borderBottomWidth: 1,
-    borderBottomColor: '#f1f5f9',
-  },
-  chargeBadge: {
     backgroundColor: '#f1f5f9',
-    paddingHorizontal: 8,
-    paddingVertical: 2,
-    borderRadius: 4,
+    paddingHorizontal: 10,
+    paddingVertical: 7,
+    borderBottomWidth: 1,
+    borderBottomColor: '#e2e8f0',
   },
-  chargeBadgeText: {
+  miniTableTh: {
     fontSize: 11,
     fontWeight: '700',
     color: '#475569',
+    letterSpacing: 0.3,
   },
-  removeChargeIconBtn: {
+  miniTableRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 4,
-    paddingHorizontal: 6,
-    paddingVertical: 3,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    borderBottomWidth: 1,
+    borderBottomColor: '#f1f5f9',
+  },
+  miniTableCellText: {
+    fontSize: 12.5,
+  },
+  trashBtn: {
+    padding: 4,
     borderRadius: 4,
     backgroundColor: '#fef2f2',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
-  removeChargeText: {
-    fontSize: 11.5,
-    fontWeight: '600',
-    color: '#ef4444',
+  miniTableTotalRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: 10,
+    paddingVertical: 7,
+    backgroundColor: '#f8fafc',
+    borderTopWidth: 1,
+    borderTopColor: '#e2e8f0',
   },
-  addChargeRowBtn: {
+  miniTableTotalLabel: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#334155',
+  },
+  miniTableTotalVal: {
+    fontSize: 13,
+    fontWeight: '800',
+    color: '#0284c7',
+  },
+  chargeInputCard: {
+    backgroundColor: '#ffffff',
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#bfdbfe',
+    padding: 10,
+    marginBottom: 10,
+  },
+  chargeInputCardTitle: {
+    fontSize: 12.5,
+    fontWeight: '700',
+    color: '#0369a1',
+  },
+  saveChargeBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#0284c7',
+    paddingVertical: 9,
+    borderRadius: 6,
+    marginTop: 4,
+  },
+  saveChargeBtnText: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#ffffff',
+  },
+  addMoreChargeBtn: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
@@ -2057,11 +2278,10 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#bae6fd',
     borderStyle: 'dashed',
-    paddingVertical: 10,
+    paddingVertical: 9,
     borderRadius: 8,
-    marginTop: 2,
   },
-  addChargeRowBtnText: {
+  addMoreChargeBtnText: {
     fontSize: 13,
     fontWeight: '700',
     color: '#0284c7',
