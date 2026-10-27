@@ -1133,10 +1133,9 @@ ${companyName}`;
 
           {/* Full-Screen Scrollable Tally Invoice Matching Image 2 */}
           <ScrollView style={styles.scrollArea} contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={true}>
-            {/* Top Main Heading */}
-            <Text style={styles.invoiceMainTitle}>INVOICE</Text>
-
             <View style={styles.invoiceSheet}>
+              {/* Top Main Heading */}
+              <Text style={styles.invoiceMainTitle}>INVOICE</Text>
               {/* Top Table: Left 50% (Company & Buyer) | Right 50% (5-Row Dispatch Details Grid) */}
               <View style={styles.topTable}>
                 {/* Left Column: Company (top) & Buyer (bottom) */}
@@ -1299,6 +1298,16 @@ ${companyName}`;
                       <Text style={[styles.gTd, { width: '19%', textAlign: 'right', fontWeight: 'bold', borderRightWidth: 0 }]}>{formatINR(entry.igst_amount)}</Text>
                     </View>
                   )}
+
+                  {/* Continuous vertical column lines matching Image 2 */}
+                  <View style={styles.gFillerRow}>
+                    <View style={[styles.gFillerCell, { width: '8%' }]} />
+                    <View style={[styles.gFillerCell, { flex: 1 }]} />
+                    <View style={[styles.gFillerCell, { width: '17%' }]} />
+                    <View style={[styles.gFillerCell, { width: '16%' }]} />
+                    <View style={[styles.gFillerCell, { width: '10%' }]} />
+                    <View style={[styles.gFillerCell, { width: '19%', borderRightWidth: 0 }]} />
+                  </View>
                 </View>
 
                 {/* Total Row */}
@@ -1458,27 +1467,37 @@ const styles = StyleSheet.create({
   scrollArea: {
     flex: 1,
     width: '100%',
-    backgroundColor: '#ffffff',
+    backgroundColor: '#e2e8f0', // Neutral PDF viewer background to make the white paper pop
   },
   scrollContent: {
-    padding: 10,
-    backgroundColor: '#ffffff',
+    padding: 12,
+    backgroundColor: '#e2e8f0',
+    alignItems: 'center',
   },
   invoiceMainTitle: {
     textAlign: 'center',
-    fontSize: 16,
+    fontSize: 15,
     fontWeight: 'bold',
     color: '#000000',
     letterSpacing: 2,
-    marginBottom: 6,
+    paddingVertical: 7,
+    borderBottomWidth: 1.5,
+    borderBottomColor: '#000000',
+    backgroundColor: '#ffffff',
     textTransform: 'uppercase',
   },
   invoiceSheet: {
-    backgroundColor: '#ffffff',
+    backgroundColor: '#ffffff', // Pure white paper
     width: '100%',
+    maxWidth: 740,
     borderWidth: 1.5,
     borderColor: '#000000',
-    marginBottom: 8,
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.16,
+    shadowRadius: 10,
+    elevation: 8,
+    marginBottom: 12,
   },
   topTable: {
     flexDirection: 'row',
@@ -1612,6 +1631,14 @@ const styles = StyleSheet.create({
   gSubItem: {
     fontSize: 9.5,
     color: '#000000',
+  },
+  gFillerRow: {
+    minHeight: 70,
+    flexDirection: 'row',
+  },
+  gFillerCell: {
+    borderRightWidth: 1,
+    borderRightColor: '#000000',
   },
   gTotalRow: {
     flexDirection: 'row',
