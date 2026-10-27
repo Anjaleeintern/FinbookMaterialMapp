@@ -114,6 +114,7 @@ const MainApp = () => {
   const [entries, setEntries] = useState([]);
   const [masters, setMasters] = useState(null);
   const [loading, setLoading] = useState(false);
+  const [entriesFilter, setEntriesFilter] = useState(null);
 
   // Track visited tabs: lazy-mount tabs on their first visit, then keep them alive in memory for 0ms instant smooth switching
   const [visitedTabs, setVisitedTabs] = useState(() => new Set(['dashboard']));
@@ -196,7 +197,12 @@ const MainApp = () => {
   const handleOpenImportModal = useCallback(() => setIsImportModalOpen(true), []);
   const handleCloseImportModal = useCallback(() => setIsImportModalOpen(false), []);
   const handleNavigateMasters = useCallback(() => handleSelectTab('masters'), [handleSelectTab]);
-  const handleNavigateEntries = useCallback(() => handleSelectTab('entries'), [handleSelectTab]);
+  const handleNavigateEntries = useCallback((filterInfo) => {
+    if (filterInfo) {
+      setEntriesFilter(filterInfo);
+    }
+    handleSelectTab('entries');
+  }, [handleSelectTab]);
   const handleNavigateProfile = useCallback(() => handleSelectTab('profile'), [handleSelectTab]);
   const handleToggleSidebar = useCallback(() => setSidebarOpen((prev) => !prev), []);
   const handleCloseSidebar = useCallback(() => setSidebarOpen(false), []);
@@ -317,6 +323,7 @@ const MainApp = () => {
                 onViewInvoice={handleOpenInvoiceModal}
                 onEditEntry={handleOpenEditModal}
                 onRefresh={loadData}
+                initialFilter={entriesFilter}
               />
             </View>
           )}

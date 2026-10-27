@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import {
   View,
   Text,
@@ -21,7 +21,16 @@ const formatSavedInLabel = (val) => {
 
 const formatINR = (val) => Number(val || 0).toLocaleString('en-IN');
 
-export const AllEntriesView = React.memo(({ entries, loading, onOpenAddModal, onOpenImportModal, onRefresh, onViewInvoice, onEditEntry }) => {
+export const AllEntriesView = React.memo(({
+  entries,
+  loading,
+  onOpenAddModal,
+  onOpenImportModal,
+  onRefresh,
+  onViewInvoice,
+  onEditEntry,
+  initialFilter,
+}) => {
   const { width } = useWindowDimensions();
   const isMobile = width < 768;
 
@@ -43,6 +52,23 @@ export const AllEntriesView = React.memo(({ entries, loading, onOpenAddModal, on
   const [colFilters, setColFilters] = useState({});
   const [searchTerm, setSearchTerm] = useState('');
   const [mobilePicker, setMobilePicker] = useState(null);
+
+  // Auto-apply filter when navigated from KPI breakdown modal
+  useEffect(() => {
+    if (!initialFilter) return;
+    if (initialFilter.mode) {
+      const m = String(initialFilter.mode).toLowerCase();
+      if (m === 'cash') setSelectedMode('Cash');
+      else if (m === 'bank') setSelectedMode('Bank');
+      else if (m === 'qr') setSelectedMode('QR');
+      else if (m.includes('credit')) setSelectedMode('Credit Sale');
+    }
+    if (initialFilter.royalty) {
+      const r = String(initialFilter.royalty).toLowerCase();
+      if (r === 'royalty') setSelectedType('Royalty Sale');
+      else if (r === 'without_royalty' || r.includes('without')) setSelectedType('Without Royalty');
+    }
+  }, [initialFilter]);
 
   // Unique options extracted dynamically from current entries
   const uniqueDates = useMemo(() => {

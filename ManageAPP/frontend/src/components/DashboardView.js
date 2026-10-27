@@ -21,6 +21,7 @@ import SvgNative, {
   Text as SvgTextNative,
 } from 'react-native-svg';
 import { PartyWiseSalesModal } from './PartyWiseSalesModal';
+import { KpiSummaryBreakdownModal } from './KpiSummaryBreakdownModal';
 
 const isWeb = Platform.OS === 'web';
 const Svg = isWeb ? 'svg' : SvgNative;
@@ -259,11 +260,12 @@ export const DashboardView = React.memo(({ entries = [], onOpenAddModal, onNavig
   const isDesktop = screenW >= 1024;
   const isUltraSmall = screenW < 340; // Only ultra small phones (<340px) fall back to 1-column KPI grid
 
-  // Navigate to detailed entries list on KPI card tap
+  // KPI card breakdown modal state: 'sales' | 'trips' | 'taxable' | 'gst' | null
+  const [selectedKpiCard, setSelectedKpiCard] = useState(null);
+
+  // Open detailed summary breakdown table modal on KPI card tap
   const handleCardPress = (card) => {
-    if (onNavigateEntries) {
-      onNavigateEntries(card);
-    }
+    setSelectedKpiCard(card?.id || 'sales');
   };
 
   // Dynamic hover states for interactive tooltips
@@ -358,6 +360,7 @@ export const DashboardView = React.memo(({ entries = [], onOpenAddModal, onNavig
   // 100% PURE DYNAMIC COMPUTATION FROM ACTUAL MONGODB ENTRIES
   const {
     metrics,
+    activeEntries,
     dateRangeStr,
     materialData,
     timelineData,
@@ -420,8 +423,8 @@ export const DashboardView = React.memo(({ entries = [], onOpenAddModal, onNavig
         const d = e._parsedDate;
         if (!d) return false;
         return d.getFullYear() === today.getFullYear() &&
-               d.getMonth() === today.getMonth() &&
-               d.getDate() === today.getDate();
+          d.getMonth() === today.getMonth() &&
+          d.getDate() === today.getDate();
       });
       rangeText = `${todayDisplayStr} (Today)`;
     } else if (dateFilter === 'weekly') {
@@ -445,7 +448,7 @@ export const DashboardView = React.memo(({ entries = [], onOpenAddModal, onNavig
         const d = e._parsedDate;
         if (!d) return false;
         return d.getFullYear() === today.getFullYear() &&
-               d.getMonth() === today.getMonth();
+          d.getMonth() === today.getMonth();
       });
       rangeText = `${curMonth} ${curYear} (This Month)`;
     } else {
@@ -687,6 +690,7 @@ export const DashboardView = React.memo(({ entries = [], onOpenAddModal, onNavig
         gstCollected,
         trips: activeEntries.length,
       },
+      activeEntries,
       dateRangeStr: rangeText,
       targetDate,
       materialData: matList,
@@ -756,679 +760,679 @@ export const DashboardView = React.memo(({ entries = [], onOpenAddModal, onNavig
       <ScrollView style={styles.pageScrollView} showsVerticalScrollIndicator={true} contentContainerStyle={[styles.contentWrap, isMobile && styles.contentWrapMobile]}>
         {/* 1. TOP HEADER & STATUS BAR */}
         <View style={[styles.topHeader, isMobile && styles.topHeaderMobile]}>
-        <View style={styles.greetingHeaderRow}>
-          <View style={styles.greetingTitleRow}>
-            <Text style={[styles.greetingTitle, isMobile && styles.greetingTitleMobile]}>{dynamicGreeting} </Text>
-            <Text style={[styles.greetingAdmin, isMobile && styles.greetingAdminMobile]}>{displayName}</Text>
-          </View>
-
-          <View style={[styles.onlineBadge, isMobile && styles.onlineBadgeMobile]}>
-            <View style={styles.onlineDot} className="live-pulse-dot" />
-            <Text style={[styles.onlineText, isMobile && styles.onlineTextMobile]}>Online</Text>
-          </View>
-        </View>
-
-        <View style={[styles.subHeaderControlsRow, isMobile && styles.subHeaderControlsRowMobile]}>
-          <Text style={[styles.greetingDesc, isMobile && styles.greetingDescMobile]}>
-            {dateFilter === 'custom'
-              ? `Filtered Date: ${dateRangeStr}`
-              : dateFilter === 'daily'
-              ? "Showing today's business performance"
-              : dateFilter === 'weekly'
-              ? "Showing this week's business performance"
-              : dateFilter === 'monthly'
-              ? "Showing this month's business performance"
-              : "Here's your business overview for all time"}
-          </Text>
-
-          <View style={[styles.filterControlsGroup, isMobile && styles.filterControlsGroupMobile]}>
-            {/* 1. Date Selector Card (Full width on mobile, rendered above tabs) */}
-            <View style={[styles.datePickerGroup, isMobile && styles.datePickerGroupMobile]}>
-              <TouchableOpacity
-                activeOpacity={0.75}
-                onPress={() => {
-                  const todayISO = toISODateString(new Date());
-                  setTempStartDate(customStartDate || todayISO);
-                  setTempEndDate(customEndDate || todayISO);
-                  const refDate = parseEntryDate(customStartDate) || new Date();
-                  setCalendarMonth(new Date(refDate.getFullYear(), refDate.getMonth(), 1));
-                  setActiveDateTab('start');
-                  setShowDateModal(true);
-                }}
-                style={[
-                  styles.dateSelectorPill,
-                  isMobile && styles.dateSelectorPillMobile,
-                  dateFilter === 'custom' && styles.dateSelectorPillActive,
-                ]}
-              >
-                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-                  <Ionicons
-                    name="calendar"
-                    size={18}
-                    color="#0284c7"
-                  />
-                  <Text
-                    style={[
-                      styles.dateSelectorText,
-                      isMobile && styles.dateSelectorTextMobile,
-                      dateFilter === 'custom' && styles.dateSelectorTextActive,
-                    ]}
-                  >
-                    {dateRangeStr}
-                  </Text>
-                </View>
-                {dateFilter === 'custom' ? (
-                  <TouchableOpacity
-                    activeOpacity={0.7}
-                    onPress={(e) => {
-                      if (e && e.stopPropagation) e.stopPropagation();
-                      setCustomStartDate(null);
-                      setCustomEndDate(null);
-                      setDateFilter('all');
-                    }}
-                    style={styles.dateSelectorClearBtn}
-                    hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-                  >
-                    <Ionicons name="close-circle" size={16} color="#0284c7" />
-                  </TouchableOpacity>
-                ) : (
-                  <Ionicons
-                    name="chevron-down"
-                    size={16}
-                    color="#64748b"
-                  />
-                )}
-              </TouchableOpacity>
+          <View style={styles.greetingHeaderRow}>
+            <View style={styles.greetingTitleRow}>
+              <Text style={[styles.greetingTitle, isMobile && styles.greetingTitleMobile]}>{dynamicGreeting} </Text>
+              <Text style={[styles.greetingAdmin, isMobile && styles.greetingAdminMobile]}>{displayName}</Text>
             </View>
 
-            {/* 2. Quick Segmented Date Tabs: All | Daily | Weekly | Monthly */}
-            <View style={[styles.dateFilterTabs, isMobile && styles.dateFilterTabsMobile]}>
-              {[
-                { id: 'all', label: 'All' },
-                { id: 'daily', label: 'Daily' },
-                { id: 'weekly', label: 'Weekly' },
-                { id: 'monthly', label: 'Monthly' },
-              ].map((tab) => {
-                const isActive = dateFilter === tab.id;
-                return (
-                  <TouchableOpacity
-                    key={tab.id}
-                    activeOpacity={0.75}
-                    onPress={() => {
-                      setCustomStartDate(null);
-                      setCustomEndDate(null);
-                      setDateFilter(tab.id);
-                    }}
-                    style={[
-                      styles.dateFilterTab,
-                      isMobile && styles.dateFilterTabMobile,
-                      isActive && styles.dateFilterTabActive,
-                    ]}
-                  >
+            <View style={[styles.onlineBadge, isMobile && styles.onlineBadgeMobile]}>
+              <View style={styles.onlineDot} className="live-pulse-dot" />
+              <Text style={[styles.onlineText, isMobile && styles.onlineTextMobile]}>Online</Text>
+            </View>
+          </View>
+
+          <View style={[styles.subHeaderControlsRow, isMobile && styles.subHeaderControlsRowMobile]}>
+            <Text style={[styles.greetingDesc, isMobile && styles.greetingDescMobile]}>
+              {dateFilter === 'custom'
+                ? `Filtered Date: ${dateRangeStr}`
+                : dateFilter === 'daily'
+                  ? "Showing today's business performance"
+                  : dateFilter === 'weekly'
+                    ? "Showing this week's business performance"
+                    : dateFilter === 'monthly'
+                      ? "Showing this month's business performance"
+                      : "Here's your business overview for all time"}
+            </Text>
+
+            <View style={[styles.filterControlsGroup, isMobile && styles.filterControlsGroupMobile]}>
+              {/* 1. Date Selector Card (Full width on mobile, rendered above tabs) */}
+              <View style={[styles.datePickerGroup, isMobile && styles.datePickerGroupMobile]}>
+                <TouchableOpacity
+                  activeOpacity={0.75}
+                  onPress={() => {
+                    const todayISO = toISODateString(new Date());
+                    setTempStartDate(customStartDate || todayISO);
+                    setTempEndDate(customEndDate || todayISO);
+                    const refDate = parseEntryDate(customStartDate) || new Date();
+                    setCalendarMonth(new Date(refDate.getFullYear(), refDate.getMonth(), 1));
+                    setActiveDateTab('start');
+                    setShowDateModal(true);
+                  }}
+                  style={[
+                    styles.dateSelectorPill,
+                    isMobile && styles.dateSelectorPillMobile,
+                    dateFilter === 'custom' && styles.dateSelectorPillActive,
+                  ]}
+                >
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                    <Ionicons
+                      name="calendar"
+                      size={18}
+                      color="#0284c7"
+                    />
                     <Text
-                      numberOfLines={1}
                       style={[
-                        styles.dateFilterTabText,
-                        isMobile && styles.dateFilterTabTextMobile,
-                        isActive && styles.dateFilterTabTextActive,
+                        styles.dateSelectorText,
+                        isMobile && styles.dateSelectorTextMobile,
+                        dateFilter === 'custom' && styles.dateSelectorTextActive,
                       ]}
                     >
-                      {tab.label}
+                      {dateRangeStr}
                     </Text>
-                  </TouchableOpacity>
-                );
-              })}
+                  </View>
+                  {dateFilter === 'custom' ? (
+                    <TouchableOpacity
+                      activeOpacity={0.7}
+                      onPress={(e) => {
+                        if (e && e.stopPropagation) e.stopPropagation();
+                        setCustomStartDate(null);
+                        setCustomEndDate(null);
+                        setDateFilter('all');
+                      }}
+                      style={styles.dateSelectorClearBtn}
+                      hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                    >
+                      <Ionicons name="close-circle" size={16} color="#0284c7" />
+                    </TouchableOpacity>
+                  ) : (
+                    <Ionicons
+                      name="chevron-down"
+                      size={16}
+                      color="#64748b"
+                    />
+                  )}
+                </TouchableOpacity>
+              </View>
+
+              {/* 2. Quick Segmented Date Tabs: All | Daily | Weekly | Monthly */}
+              <View style={[styles.dateFilterTabs, isMobile && styles.dateFilterTabsMobile]}>
+                {[
+                  { id: 'all', label: 'All' },
+                  { id: 'daily', label: 'Daily' },
+                  { id: 'weekly', label: 'Weekly' },
+                  { id: 'monthly', label: 'Monthly' },
+                ].map((tab) => {
+                  const isActive = dateFilter === tab.id;
+                  return (
+                    <TouchableOpacity
+                      key={tab.id}
+                      activeOpacity={0.75}
+                      onPress={() => {
+                        setCustomStartDate(null);
+                        setCustomEndDate(null);
+                        setDateFilter(tab.id);
+                      }}
+                      style={[
+                        styles.dateFilterTab,
+                        isMobile && styles.dateFilterTabMobile,
+                        isActive && styles.dateFilterTabActive,
+                      ]}
+                    >
+                      <Text
+                        numberOfLines={1}
+                        style={[
+                          styles.dateFilterTabText,
+                          isMobile && styles.dateFilterTabTextMobile,
+                          isActive && styles.dateFilterTabTextActive,
+                        ]}
+                      >
+                        {tab.label}
+                      </Text>
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
             </View>
           </View>
         </View>
-      </View>
 
-      {/* 2. THE 4 KPI CARDS (Clickable, navigate to detailed entries list, responsive full values) */}
-      <View style={[styles.kpiGrid, isMobile && styles.kpiGridMobile]}>
-        {kpiCards.map((card) => (
-          <TouchableOpacity
-            key={card.id}
-            activeOpacity={0.72}
-            onPress={() => handleCardPress(card)}
-            accessibilityRole="button"
-            accessibilityLabel={`${card.title}: ${card.value}. Tap to view detailed entries list.`}
-            className="dashboard-kpi-tile"
-            style={[
-              styles.kpiCard,
-              isMobile && styles.kpiCardMobile,
-              isUltraSmall && styles.kpiCardUltraSmall,
-              isDesktop && styles.kpiCardDesktop,
-              { backgroundColor: card.cardBg, borderColor: card.borderColor },
-            ]}
-          >
-            {/* Top row: Icon on left, interactive arrow badge on right */}
-            <View style={styles.kpiCardTopRow}>
-              <View style={[styles.kpiIconSquircle, isMobile && styles.kpiIconSquircleMobile, { backgroundColor: card.iconBg }]}>
-                {card.isPercent ? (
-                  <Text style={[styles.kpiPercentText, isMobile && styles.kpiPercentTextMobile, { color: card.iconColor }]}>%</Text>
-                ) : (
-                  <Ionicons name={card.icon} size={isMobile ? 17 : 20} color={card.iconColor} />
-                )}
+        {/* 2. THE 4 KPI CARDS (Clickable, navigate to detailed entries list, responsive full values) */}
+        <View style={[styles.kpiGrid, isMobile && styles.kpiGridMobile]}>
+          {kpiCards.map((card) => (
+            <TouchableOpacity
+              key={card.id}
+              activeOpacity={0.72}
+              onPress={() => handleCardPress(card)}
+              accessibilityRole="button"
+              accessibilityLabel={`${card.title}: ${card.value}. Tap to view detailed entries list.`}
+              className="dashboard-kpi-tile"
+              style={[
+                styles.kpiCard,
+                isMobile && styles.kpiCardMobile,
+                isUltraSmall && styles.kpiCardUltraSmall,
+                isDesktop && styles.kpiCardDesktop,
+                { backgroundColor: card.cardBg, borderColor: card.borderColor },
+              ]}
+            >
+              {/* Top row: Icon on left, interactive arrow badge on right */}
+              <View style={styles.kpiCardTopRow}>
+                <View style={[styles.kpiIconSquircle, isMobile && styles.kpiIconSquircleMobile, { backgroundColor: card.iconBg }]}>
+                  {card.isPercent ? (
+                    <Text style={[styles.kpiPercentText, isMobile && styles.kpiPercentTextMobile, { color: card.iconColor }]}>%</Text>
+                  ) : (
+                    <Ionicons name={card.icon} size={isMobile ? 17 : 20} color={card.iconColor} />
+                  )}
+                </View>
+                <View style={[styles.kpiArrowBadge, { backgroundColor: card.iconBg }]}>
+                  <Ionicons name="chevron-forward" size={isMobile ? 12 : 14} color={card.iconColor} />
+                </View>
               </View>
-              <View style={[styles.kpiArrowBadge, { backgroundColor: card.iconBg }]}>
-                <Ionicons name="chevron-forward" size={isMobile ? 12 : 14} color={card.iconColor} />
+
+              {/* Content area: Full Title, Full Value, Subtitle */}
+              <View style={styles.kpiContentCol}>
+                <Text
+                  style={[styles.kpiCardTitle, isMobile && styles.kpiCardTitleMobile]}
+                  numberOfLines={2}
+                >
+                  {card.title}
+                </Text>
+                <Text
+                  style={[
+                    styles.kpiCardValue,
+                    isMobile && styles.kpiCardValueMobile,
+                    isMobile && card.value.length > 12 && styles.kpiCardValueLong,
+                  ]}
+                  numberOfLines={1}
+                  adjustsFontSizeToFit={true}
+                  minimumFontScale={0.75}
+                >
+                  {card.value}
+                </Text>
+                <Text
+                  style={[styles.kpiCardTrend, isMobile && styles.kpiCardTrendMobile]}
+                  numberOfLines={1}
+                >
+                  {card.trend}
+                </Text>
               </View>
-            </View>
-
-            {/* Content area: Full Title, Full Value, Subtitle */}
-            <View style={styles.kpiContentCol}>
-              <Text
-                style={[styles.kpiCardTitle, isMobile && styles.kpiCardTitleMobile]}
-                numberOfLines={2}
-              >
-                {card.title}
-              </Text>
-              <Text
-                style={[
-                  styles.kpiCardValue,
-                  isMobile && styles.kpiCardValueMobile,
-                  isMobile && card.value.length > 12 && styles.kpiCardValueLong,
-                ]}
-                numberOfLines={1}
-                adjustsFontSizeToFit={true}
-                minimumFontScale={0.75}
-              >
-                {card.value}
-              </Text>
-              <Text
-                style={[styles.kpiCardTrend, isMobile && styles.kpiCardTrendMobile]}
-                numberOfLines={1}
-              >
-                {card.trend}
-              </Text>
-            </View>
-          </TouchableOpacity>
-        ))}
-      </View>
-
-      {/* 3. THE 4 CHARTS (Rearranged: 1. Date-wise Sales by Mode, 2. Sales by Mode, 3. Sales by Material, 4. Top Party-wise Sales) */}
-      <View style={styles.chartsGrid}>
-        {/* Dimension Toggle Tabs: Sale Mode vs Royalty Type */}
-        <View style={[styles.dimensionToggleBar, isMobile && styles.dimensionToggleBarMobile]}>
-          <TouchableOpacity
-            style={[
-              styles.dimensionTabBtn,
-              chartDimension === 'sale_mode' && styles.dimensionTabBtnActive,
-              isMobile && styles.dimensionTabBtnMobile,
-            ]}
-            onPress={() => {
-              setChartDimension('sale_mode');
-              setHoveredModeKey(null);
-            }}
-            activeOpacity={0.8}
-          >
-            <Ionicons
-              name="wallet"
-              size={isMobile ? 14 : 16}
-              color={chartDimension === 'sale_mode' ? '#0284c7' : '#64748b'}
-            />
-            <Text
-              style={[
-                styles.dimensionTabText,
-                chartDimension === 'sale_mode' && styles.dimensionTabTextActive,
-                isMobile && styles.dimensionTabTextMobile,
-              ]}
-              numberOfLines={1}
-            >
-              {isMobile ? 'Sale Mode (4 Types)' : 'Sale Mode (Cash / Bank / QR / Credit)'}
-            </Text>
-            <View
-              style={[
-                styles.dimensionBadge,
-                chartDimension === 'sale_mode' && styles.dimensionBadgeActive,
-              ]}
-            >
-              <Text
-                style={[
-                  styles.dimensionBadgeText,
-                  chartDimension === 'sale_mode' && styles.dimensionBadgeTextActive,
-                ]}
-              >
-                {isMobile ? '4' : '4 Modes'}
-              </Text>
-            </View>
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={[
-              styles.dimensionTabBtn,
-              chartDimension === 'royalty_type' && styles.dimensionTabBtnActive,
-              isMobile && styles.dimensionTabBtnMobile,
-            ]}
-            onPress={() => {
-              setChartDimension('royalty_type');
-              setHoveredModeKey(null);
-            }}
-            activeOpacity={0.8}
-          >
-            <Ionicons
-              name="document-text"
-              size={isMobile ? 14 : 16}
-              color={chartDimension === 'royalty_type' ? '#0284c7' : '#64748b'}
-            />
-            <Text
-              style={[
-                styles.dimensionTabText,
-                chartDimension === 'royalty_type' && styles.dimensionTabTextActive,
-                isMobile && styles.dimensionTabTextMobile,
-              ]}
-              numberOfLines={1}
-            >
-              {isMobile ? 'Royalty Type (2 Types)' : 'Royalty Type (Royalty / Without Royalty)'}
-            </Text>
-            <View
-              style={[
-                styles.dimensionBadge,
-                chartDimension === 'royalty_type' && styles.dimensionBadgeActive,
-              ]}
-            >
-              <Text
-                style={[
-                  styles.dimensionBadgeText,
-                  chartDimension === 'royalty_type' && styles.dimensionBadgeTextActive,
-                ]}
-              >
-                {isMobile ? '2' : '2 Types'}
-              </Text>
-            </View>
-          </TouchableOpacity>
+            </TouchableOpacity>
+          ))}
         </View>
 
-        {/* ROW 1: Date-wise Sales by Sale Mode & Sales by Mode (Monthly Overview) */}
-        <View style={[styles.chartsRow, isMobile && styles.chartsRowMobile]}>
-          {/* Chart 1: Date-wise Sales (₹) */}
-          <View style={[styles.chartCard, styles.stackedChartCard, isMobile && styles.chartCardMobile, !isMobile && styles.chartCardHalf]}>
-            <View style={styles.chartHeaderRow}>
-              <Text style={[styles.chartCardTitle, isMobile && styles.chartCardTitleMobile, { flexShrink: 1 }]} numberOfLines={1}>
-                {chartDimension === 'sale_mode' ? 'Date-wise Sales by Sale Mode (₹)' : 'Date-wise Sales by Royalty Status (₹)'}
+        {/* 3. THE 4 CHARTS (Rearranged: 1. Date-wise Sales by Mode, 2. Sales by Mode, 3. Sales by Material, 4. Top Party-wise Sales) */}
+        <View style={styles.chartsGrid}>
+          {/* Dimension Toggle Tabs: Sale Mode vs Royalty Type */}
+          <View style={[styles.dimensionToggleBar, isMobile && styles.dimensionToggleBarMobile]}>
+            <TouchableOpacity
+              style={[
+                styles.dimensionTabBtn,
+                chartDimension === 'sale_mode' && styles.dimensionTabBtnActive,
+                isMobile && styles.dimensionTabBtnMobile,
+              ]}
+              onPress={() => {
+                setChartDimension('sale_mode');
+                setHoveredModeKey(null);
+              }}
+              activeOpacity={0.8}
+            >
+              <Ionicons
+                name="wallet"
+                size={isMobile ? 14 : 16}
+                color={chartDimension === 'sale_mode' ? '#0284c7' : '#64748b'}
+              />
+              <Text
+                style={[
+                  styles.dimensionTabText,
+                  chartDimension === 'sale_mode' && styles.dimensionTabTextActive,
+                  isMobile && styles.dimensionTabTextMobile,
+                ]}
+                numberOfLines={1}
+              >
+                {isMobile ? 'Sale Mode (4 Types)' : 'Sale Mode (Cash / Bank / QR / Credit)'}
               </Text>
-              <View style={styles.headerBadgeContainer}>
-                {hoveredTrendIdx !== null && timelineData[hoveredTrendIdx] ? (
-                  <View style={styles.hoverBadgePill}>
-                    <Text style={styles.hoverBadgeText} numberOfLines={1}>
-                      {timelineData[hoveredTrendIdx].date}: ₹{formatINR(timelineData[hoveredTrendIdx].total)}
-                    </Text>
-                  </View>
-                ) : (
-                  <Ionicons name="chevron-forward" size={16} color="#94a3b8" />
-                )}
+              <View
+                style={[
+                  styles.dimensionBadge,
+                  chartDimension === 'sale_mode' && styles.dimensionBadgeActive,
+                ]}
+              >
+                <Text
+                  style={[
+                    styles.dimensionBadgeText,
+                    chartDimension === 'sale_mode' && styles.dimensionBadgeTextActive,
+                  ]}
+                >
+                  {isMobile ? '4' : '4 Modes'}
+                </Text>
               </View>
-            </View>
+            </TouchableOpacity>
 
-            {/* Direct-Fit Responsive Container (No Horizontal Scroll on Phone) */}
-            <View style={styles.lineChartWrap}>
-              <Svg width="100%" height={isMobile ? "225" : "240"} viewBox="0 0 460 220" style={{ overflow: 'visible', display: 'block' }}>
-                {/* Y-Axis Values & Gridlines (Compact formatted to fit perfectly) */}
-                {stackedTicks.ticks.map((tickVal) => {
-                  const yPos = 25 + (155 * (1 - (stackedTicks.maxScale > 0 ? tickVal / stackedTicks.maxScale : 0)));
-                  return (
-                    <G key={`y-tick-${tickVal}`}>
-                      <SvgText x="54" y={yPos + 3.5} fill="#64748b" fontSize="9.5" fontWeight="600" textAnchor="end">
-                        {formatCompactINR(tickVal).replace('₹', '')}
-                      </SvgText>
-                      <Line x1="58" y1={yPos} x2="445" y2={yPos} stroke="#f1f5f9" strokeWidth="0.8" strokeDasharray="3 3" />
-                    </G>
-                  );
-                })}
+            <TouchableOpacity
+              style={[
+                styles.dimensionTabBtn,
+                chartDimension === 'royalty_type' && styles.dimensionTabBtnActive,
+                isMobile && styles.dimensionTabBtnMobile,
+              ]}
+              onPress={() => {
+                setChartDimension('royalty_type');
+                setHoveredModeKey(null);
+              }}
+              activeOpacity={0.8}
+            >
+              <Ionicons
+                name="document-text"
+                size={isMobile ? 14 : 16}
+                color={chartDimension === 'royalty_type' ? '#0284c7' : '#64748b'}
+              />
+              <Text
+                style={[
+                  styles.dimensionTabText,
+                  chartDimension === 'royalty_type' && styles.dimensionTabTextActive,
+                  isMobile && styles.dimensionTabTextMobile,
+                ]}
+                numberOfLines={1}
+              >
+                {isMobile ? 'Royalty Type (2 Types)' : 'Royalty Type (Royalty / Without Royalty)'}
+              </Text>
+              <View
+                style={[
+                  styles.dimensionBadge,
+                  chartDimension === 'royalty_type' && styles.dimensionBadgeActive,
+                ]}
+              >
+                <Text
+                  style={[
+                    styles.dimensionBadgeText,
+                    chartDimension === 'royalty_type' && styles.dimensionBadgeTextActive,
+                  ]}
+                >
+                  {isMobile ? '2' : '2 Types'}
+                </Text>
+              </View>
+            </TouchableOpacity>
+          </View>
 
-                {/* Y-Axis Line */}
-                <Line x1="58" y1="22" x2="58" y2="182" stroke="#cbd5e1" strokeWidth="1" />
+          {/* ROW 1: Date-wise Sales by Sale Mode & Sales by Mode (Monthly Overview) */}
+          <View style={[styles.chartsRow, isMobile && styles.chartsRowMobile]}>
+            {/* Chart 1: Date-wise Sales (₹) */}
+            <View style={[styles.chartCard, styles.stackedChartCard, isMobile && styles.chartCardMobile, !isMobile && styles.chartCardHalf]}>
+              <View style={styles.chartHeaderRow}>
+                <Text style={[styles.chartCardTitle, isMobile && styles.chartCardTitleMobile, { flexShrink: 1 }]} numberOfLines={1}>
+                  {chartDimension === 'sale_mode' ? 'Date-wise Sales by Sale Mode (₹)' : 'Date-wise Sales by Royalty Status (₹)'}
+                </Text>
+                <View style={styles.headerBadgeContainer}>
+                  {hoveredTrendIdx !== null && timelineData[hoveredTrendIdx] ? (
+                    <View style={styles.hoverBadgePill}>
+                      <Text style={styles.hoverBadgeText} numberOfLines={1}>
+                        {timelineData[hoveredTrendIdx].date}: ₹{formatINR(timelineData[hoveredTrendIdx].total)}
+                      </Text>
+                    </View>
+                  ) : (
+                    <Ionicons name="chevron-forward" size={16} color="#94a3b8" />
+                  )}
+                </View>
+              </View>
 
-                {/* X-Axis Baseline */}
-                <Line x1="58" y1="182" x2="445" y2="182" stroke="#94a3b8" strokeWidth="1.2" />
+              {/* Direct-Fit Responsive Container (No Horizontal Scroll on Phone) */}
+              <View style={styles.lineChartWrap}>
+                <Svg width="100%" height={isMobile ? "225" : "240"} viewBox="0 0 460 220" style={{ overflow: 'visible', display: 'block' }}>
+                  {/* Y-Axis Values & Gridlines (Compact formatted to fit perfectly) */}
+                  {stackedTicks.ticks.map((tickVal) => {
+                    const yPos = 25 + (155 * (1 - (stackedTicks.maxScale > 0 ? tickVal / stackedTicks.maxScale : 0)));
+                    return (
+                      <G key={`y-tick-${tickVal}`}>
+                        <SvgText x="54" y={yPos + 3.5} fill="#64748b" fontSize="9.5" fontWeight="600" textAnchor="end">
+                          {formatCompactINR(tickVal).replace('₹', '')}
+                        </SvgText>
+                        <Line x1="58" y1={yPos} x2="445" y2={yPos} stroke="#f1f5f9" strokeWidth="0.8" strokeDasharray="3 3" />
+                      </G>
+                    );
+                  })}
 
-                {/* Stacked Columns for Each Date - Sleek Width & Values Directly Visible */}
-                {(() => {
-                  const N = timelineData.length;
-                  const plotWidth = 387; // 445 - 58
-                  const colWidth = plotWidth / Math.max(1, N);
-                  const barWidth = Math.min(60, Math.max(46, Math.round(colWidth * 0.76))); // Bold width, column gap minimized to ~18px
+                  {/* Y-Axis Line */}
+                  <Line x1="58" y1="22" x2="58" y2="182" stroke="#cbd5e1" strokeWidth="1" />
 
-                  return (
-                    <G>
-                      {timelineData.map((d, i) => {
-                        const colCenterX = 58 + (i + 0.5) * colWidth;
-                        const barLeft = colCenterX - barWidth / 2;
-                        const isHovered = hoveredTrendIdx === i;
+                  {/* X-Axis Baseline */}
+                  <Line x1="58" y1="182" x2="445" y2="182" stroke="#94a3b8" strokeWidth="1.2" />
 
-                        // Find topmost active mode for rounded cap
-                        const activeModes = currentStackedModes.filter((m) => (d[m.key] || 0) > 0);
-                        const topModeKey = activeModes.length > 0 ? activeModes[activeModes.length - 1].key : null;
+                  {/* Stacked Columns for Each Date - Sleek Width & Values Directly Visible */}
+                  {(() => {
+                    const N = timelineData.length;
+                    const plotWidth = 387; // 445 - 58
+                    const colWidth = plotWidth / Math.max(1, N);
+                    const barWidth = Math.min(60, Math.max(46, Math.round(colWidth * 0.76))); // Bold width, column gap minimized to ~18px
 
-                        let currentY = 182; // baseline
+                    return (
+                      <G>
+                        {timelineData.map((d, i) => {
+                          const colCenterX = 58 + (i + 0.5) * colWidth;
+                          const barLeft = colCenterX - barWidth / 2;
+                          const isHovered = hoveredTrendIdx === i;
 
-                        // Compute segments
-                        const segments = currentStackedModes.map((mode) => {
-                          const val = d[mode.key] || 0;
-                          if (val <= 0) return null;
-                          const segHeight = stackedTicks.maxScale > 0 ? (val / stackedTicks.maxScale) * 155 : 0;
-                          if (segHeight <= 0) return null;
+                          // Find topmost active mode for rounded cap
+                          const activeModes = currentStackedModes.filter((m) => (d[m.key] || 0) > 0);
+                          const topModeKey = activeModes.length > 0 ? activeModes[activeModes.length - 1].key : null;
 
-                          const segY = currentY - segHeight;
-                          currentY = segY;
+                          let currentY = 182; // baseline
 
-                          return {
-                            mode,
-                            val,
-                            segY,
-                            segHeight,
-                            isTop: mode.key === topModeKey,
-                          };
-                        }).filter(Boolean);
+                          // Compute segments
+                          const segments = currentStackedModes.map((mode) => {
+                            const val = d[mode.key] || 0;
+                            if (val <= 0) return null;
+                            const segHeight = stackedTicks.maxScale > 0 ? (val / stackedTicks.maxScale) * 155 : 0;
+                            if (segHeight <= 0) return null;
 
-                        const barTopY = currentY;
-                        const dateKey = d?.date || `date-${i}`;
+                            const segY = currentY - segHeight;
+                            currentY = segY;
 
-                        const trendGProps = isWeb
-                          ? {
+                            return {
+                              mode,
+                              val,
+                              segY,
+                              segHeight,
+                              isTop: mode.key === topModeKey,
+                            };
+                          }).filter(Boolean);
+
+                          const barTopY = currentY;
+                          const dateKey = d?.date || `date-${i}`;
+
+                          const trendGProps = isWeb
+                            ? {
                               className: `bar-col-${i}`,
                               style: { cursor: 'pointer' },
                               onMouseEnter: () => setHoveredTrendIdx(i),
                               onMouseLeave: () => setHoveredTrendIdx(null),
                               onClick: () => setHoveredTrendIdx((prev) => (prev === i ? null : i)),
                             }
-                          : {
+                            : {
                               onPress: () => setHoveredTrendIdx((prev) => (prev === i ? null : i)),
                             };
 
-                        return (
-                          <G key={`col-${dateKey}-${i}`} {...trendGProps}>
-                            {/* Hover background column indicator */}
-                            {isHovered && (
-                              <Rect
-                                x={colCenterX - colWidth / 2 + 2}
-                                y="18"
-                                width={colWidth - 4}
-                                height="166"
-                                fill="#f1f5f9"
-                                rx="4"
-                                opacity="0.65"
-                              />
-                            )}
-
-                            {/* Stack segments with bold bar width & rounded top */}
-                            {segments.map(({ mode, val, segY, segHeight, isTop }) => (
-                              <G key={`${dateKey}-${mode.key}`}>
+                          return (
+                            <G key={`col-${dateKey}-${i}`} {...trendGProps}>
+                              {/* Hover background column indicator */}
+                              {isHovered && (
                                 <Rect
-                                  className={isWeb ? "stacked-bar-rect" : undefined}
-                                  x={barLeft}
-                                  y={segY}
-                                  width={barWidth}
-                                  height={segHeight}
-                                  rx={isTop ? 4 : 0}
-                                  ry={isTop ? 4 : 0}
-                                  fill={mode.color}
-                                  opacity={isHovered ? 0.95 : 1}
-                                  stroke={isHovered ? '#ffffff' : 'none'}
-                                  strokeWidth="0.5"
+                                  x={colCenterX - colWidth / 2 + 2}
+                                  y="18"
+                                  width={colWidth - 4}
+                                  height="166"
+                                  fill="#f1f5f9"
+                                  rx="4"
+                                  opacity="0.65"
                                 />
-                                {/* Value directly inside segment if height is sufficient */}
-                                {segHeight >= 14 && (
+                              )}
+
+                              {/* Stack segments with bold bar width & rounded top */}
+                              {segments.map(({ mode, val, segY, segHeight, isTop }) => (
+                                <G key={`${dateKey}-${mode.key}`}>
+                                  <Rect
+                                    className={isWeb ? "stacked-bar-rect" : undefined}
+                                    x={barLeft}
+                                    y={segY}
+                                    width={barWidth}
+                                    height={segHeight}
+                                    rx={isTop ? 4 : 0}
+                                    ry={isTop ? 4 : 0}
+                                    fill={mode.color}
+                                    opacity={isHovered ? 0.95 : 1}
+                                    stroke={isHovered ? '#ffffff' : 'none'}
+                                    strokeWidth="0.5"
+                                  />
+                                  {/* Value directly inside segment if height is sufficient */}
+                                  {segHeight >= 14 && (
+                                    <SvgText
+                                      x={colCenterX}
+                                      y={segY + segHeight / 2 + 3}
+                                      fill="#ffffff"
+                                      fontSize="8.5"
+                                      fontWeight="700"
+                                      textAnchor="middle"
+                                      style={isWeb ? { pointerEvents: 'none' } : undefined}
+                                    >
+                                      {String(formatCompactINR(val) || '').replace('₹', '')}
+                                    </SvgText>
+                                  )}
+                                </G>
+                              ))}
+
+                              {/* Direct Sales Value on top of bar - NO CLICK NEEDED ON PHONE! */}
+                              {d.total > 0 ? (
+                                <G className={isWeb ? "bar-value-pill" : undefined}>
+                                  <Rect
+                                    x={colCenterX - 26}
+                                    y={barTopY - 16}
+                                    width="52"
+                                    height="13"
+                                    rx="6.5"
+                                    fill="#f1f5f9"
+                                  />
                                   <SvgText
                                     x={colCenterX}
-                                    y={segY + segHeight / 2 + 3}
-                                    fill="#ffffff"
-                                    fontSize="8.5"
-                                    fontWeight="700"
+                                    y={barTopY - 6}
+                                    fill="#0f172a"
+                                    fontSize="9.5"
+                                    fontWeight="800"
                                     textAnchor="middle"
-                                    style={isWeb ? { pointerEvents: 'none' } : undefined}
                                   >
-                                    {String(formatCompactINR(val) || '').replace('₹', '')}
-                                  </SvgText>
-                                )}
-                              </G>
-                            ))}
-
-                            {/* Direct Sales Value on top of bar - NO CLICK NEEDED ON PHONE! */}
-                            {d.total > 0 ? (
-                              <G className={isWeb ? "bar-value-pill" : undefined}>
-                                <Rect
-                                  x={colCenterX - 26}
-                                  y={barTopY - 16}
-                                  width="52"
-                                  height="13"
-                                  rx="6.5"
-                                  fill="#f1f5f9"
-                                />
-                                <SvgText
-                                  x={colCenterX}
-                                  y={barTopY - 6}
-                                  fill="#0f172a"
-                                  fontSize="9.5"
-                                  fontWeight="800"
-                                  textAnchor="middle"
-                                >
-                                  {formatCompactINR(d.total)}
-                                </SvgText>
-                              </G>
-                            ) : (
-                              <SvgText
-                                x={colCenterX}
-                                y={176}
-                                fill="#94a3b8"
-                                fontSize="9"
-                                fontWeight="600"
-                                textAnchor="middle"
-                              >
-                                ₹0
-                              </SvgText>
-                            )}
-
-                            {/* X-Axis Date Label */}
-                            <SvgText
-                              x={colCenterX}
-                              y="198"
-                              fill={isHovered ? '#0284c7' : '#334155'}
-                              fontSize="10"
-                              fontWeight={isHovered ? '700' : '600'}
-                              textAnchor="middle"
-                            >
-                              {d.date}
-                            </SvgText>
-
-                            {/* Column Tap / Hover Hit Area */}
-                            <Rect
-                              x={colCenterX - colWidth / 2}
-                              y={14}
-                              width={colWidth}
-                              height={172}
-                              fill="#ffffff"
-                              opacity="0.001"
-                            />
-                          </G>
-                        );
-                      })}
-
-                      {/* Tooltip on Tap/Hover for Deep Breakdown */}
-                      {hoveredTrendIdx !== null && timelineData[hoveredTrendIdx] && (() => {
-                        const cur = timelineData[hoveredTrendIdx];
-                        const colCenterX = 58 + (hoveredTrendIdx + 0.5) * colWidth;
-                        const boxW = 150;
-                        const boxH = 90;
-                        const boxX = Math.max(60, Math.min(colCenterX - boxW / 2, 445 - boxW));
-                        const boxY = 20;
-
-                        return (
-                          <G style={isWeb ? { pointerEvents: 'none' } : undefined}>
-                            <Line
-                              x1={colCenterX}
-                              y1="16"
-                              x2={colCenterX}
-                              y2="182"
-                              stroke="#0f172a"
-                              strokeWidth="1"
-                              strokeDasharray="2 2"
-                              opacity="0.35"
-                            />
-                            <Rect x={boxX} y={boxY} width={boxW} height={boxH} rx="6" fill="#ffffff" stroke="#cbd5e1" strokeWidth="1" />
-                            <SvgText x={boxX + 8} y={boxY + 14} fill="#0f172a" fontSize="10.5" fontWeight="700">
-                              {cur.date} {cur.total > 0 ? `(₹${formatINR(cur.total)})` : '₹0'}
-                            </SvgText>
-                            <Line x1={boxX + 8} y1={boxY + 19} x2={boxX + boxW - 8} y2={boxY + 19} stroke="#f1f5f9" strokeWidth="1" />
-                            {(() => {
-                              const activeModes = currentStackedModes.filter((m) => (cur[m.key] || 0) > 0);
-                              if (activeModes.length === 0) {
-                                return (
-                                  <SvgText x={boxX + 8} y={boxY + 36} fill="#64748b" fontSize="9.5">
-                                    No sales recorded
-                                  </SvgText>
-                                );
-                              }
-                              return activeModes.slice(0, 4).map((m, idx) => (
-                                <G key={m.key}>
-                                  <Rect x={boxX + 8} y={boxY + 25 + idx * 14} width="7" height="7" rx="1.5" fill={m.color} />
-                                  <SvgText x={boxX + 19} y={boxY + 32 + idx * 14} fill="#334155" fontSize="9" fontWeight="500">
-                                    {m.label.split(' ')[0]}: ₹{formatINR(cur[m.key])}
+                                    {formatCompactINR(d.total)}
                                   </SvgText>
                                 </G>
-                              ));
-                            })()}
-                          </G>
-                        );
-                      })()}
-                    </G>
-                  );
-                })()}
-              </Svg>
-            </View>
+                              ) : (
+                                <SvgText
+                                  x={colCenterX}
+                                  y={176}
+                                  fill="#94a3b8"
+                                  fontSize="9"
+                                  fontWeight="600"
+                                  textAnchor="middle"
+                                >
+                                  ₹0
+                                </SvgText>
+                              )}
 
-            {/* Horizontal Legend at Bottom */}
-            <View style={styles.stackedBarLegendRow}>
-              {currentStackedModes.map((m) => (
-                <View key={m.key} style={styles.stackedBarLegendItem}>
-                  <View style={[styles.stackedLegendCircle, { backgroundColor: m.color }]} />
-                  <Text style={[styles.stackedLegendText, isMobile && { fontSize: 10.5 }]}>{m.label}</Text>
-                </View>
-              ))}
-            </View>
-            {/* Scroll Indicator Track matching screenshot */}
-            <View style={styles.chartScrollTrack}>
-              <View style={styles.chartScrollThumb} />
-            </View>
-          </View>
+                              {/* X-Axis Date Label */}
+                              <SvgText
+                                x={colCenterX}
+                                y="198"
+                                fill={isHovered ? '#0284c7' : '#334155'}
+                                fontSize="10"
+                                fontWeight={isHovered ? '700' : '600'}
+                                textAnchor="middle"
+                              >
+                                {d.date}
+                              </SvgText>
 
-          {/* Chart 2: Sales by Mode / Royalty (Monthly Overview) */}
-          <View style={[styles.chartCard, isMobile && styles.chartCardMobile, !isMobile && styles.chartCardHalf]}>
-            <View style={styles.chartHeaderRow}>
-              <Text style={[styles.chartCardTitle, isMobile && styles.chartCardTitleMobile, { flexShrink: 1 }]} numberOfLines={1}>
-                {chartDimension === 'sale_mode' ? 'Sales by Mode (Monthly Overview)' : 'Sales by Royalty (Monthly Overview)'}
-              </Text>
-              <View style={styles.headerBadgeContainer}>
-                {hoveredModeKey ? (() => {
-                  const item = modeShares.find((s) => s.key === hoveredModeKey);
-                  return item ? (
-                    <View style={styles.hoverBadgePill}>
-                      <Text style={styles.hoverBadgeText} numberOfLines={1}>
-                        {item.label}: ₹{formatINR(item.amount)} ({item.percent}%)
-                      </Text>
-                    </View>
-                  ) : null;
-                })() : (
-                  <Ionicons name="chevron-forward" size={16} color="#94a3b8" />
-                )}
+                              {/* Column Tap / Hover Hit Area */}
+                              <Rect
+                                x={colCenterX - colWidth / 2}
+                                y={14}
+                                width={colWidth}
+                                height={172}
+                                fill="#ffffff"
+                                opacity="0.001"
+                              />
+                            </G>
+                          );
+                        })}
+
+                        {/* Tooltip on Tap/Hover for Deep Breakdown */}
+                        {hoveredTrendIdx !== null && timelineData[hoveredTrendIdx] && (() => {
+                          const cur = timelineData[hoveredTrendIdx];
+                          const colCenterX = 58 + (hoveredTrendIdx + 0.5) * colWidth;
+                          const boxW = 150;
+                          const boxH = 90;
+                          const boxX = Math.max(60, Math.min(colCenterX - boxW / 2, 445 - boxW));
+                          const boxY = 20;
+
+                          return (
+                            <G style={isWeb ? { pointerEvents: 'none' } : undefined}>
+                              <Line
+                                x1={colCenterX}
+                                y1="16"
+                                x2={colCenterX}
+                                y2="182"
+                                stroke="#0f172a"
+                                strokeWidth="1"
+                                strokeDasharray="2 2"
+                                opacity="0.35"
+                              />
+                              <Rect x={boxX} y={boxY} width={boxW} height={boxH} rx="6" fill="#ffffff" stroke="#cbd5e1" strokeWidth="1" />
+                              <SvgText x={boxX + 8} y={boxY + 14} fill="#0f172a" fontSize="10.5" fontWeight="700">
+                                {cur.date} {cur.total > 0 ? `(₹${formatINR(cur.total)})` : '₹0'}
+                              </SvgText>
+                              <Line x1={boxX + 8} y1={boxY + 19} x2={boxX + boxW - 8} y2={boxY + 19} stroke="#f1f5f9" strokeWidth="1" />
+                              {(() => {
+                                const activeModes = currentStackedModes.filter((m) => (cur[m.key] || 0) > 0);
+                                if (activeModes.length === 0) {
+                                  return (
+                                    <SvgText x={boxX + 8} y={boxY + 36} fill="#64748b" fontSize="9.5">
+                                      No sales recorded
+                                    </SvgText>
+                                  );
+                                }
+                                return activeModes.slice(0, 4).map((m, idx) => (
+                                  <G key={m.key}>
+                                    <Rect x={boxX + 8} y={boxY + 25 + idx * 14} width="7" height="7" rx="1.5" fill={m.color} />
+                                    <SvgText x={boxX + 19} y={boxY + 32 + idx * 14} fill="#334155" fontSize="9" fontWeight="500">
+                                      {m.label.split(' ')[0]}: ₹{formatINR(cur[m.key])}
+                                    </SvgText>
+                                  </G>
+                                ));
+                              })()}
+                            </G>
+                          );
+                        })()}
+                      </G>
+                    );
+                  })()}
+                </Svg>
+              </View>
+
+              {/* Horizontal Legend at Bottom */}
+              <View style={styles.stackedBarLegendRow}>
+                {currentStackedModes.map((m) => (
+                  <View key={m.key} style={styles.stackedBarLegendItem}>
+                    <View style={[styles.stackedLegendCircle, { backgroundColor: m.color }]} />
+                    <Text style={[styles.stackedLegendText, isMobile && { fontSize: 10.5 }]}>{m.label}</Text>
+                  </View>
+                ))}
+              </View>
+              {/* Scroll Indicator Track matching screenshot */}
+              <View style={styles.chartScrollTrack}>
+                <View style={styles.chartScrollThumb} />
               </View>
             </View>
 
-            {(() => {
-              const sortedModes = [...modeShares].sort((a, b) => b.amount - a.amount);
-              const totalModeAmount = sortedModes.reduce((sum, m) => sum + (m.amount || 0), 0);
-              const hoveredModeItem = hoveredModeKey ? sortedModes.find((m) => m.key === hoveredModeKey) : null;
+            {/* Chart 2: Sales by Mode / Royalty (Monthly Overview) */}
+            <View style={[styles.chartCard, isMobile && styles.chartCardMobile, !isMobile && styles.chartCardHalf]}>
+              <View style={styles.chartHeaderRow}>
+                <Text style={[styles.chartCardTitle, isMobile && styles.chartCardTitleMobile, { flexShrink: 1 }]} numberOfLines={1}>
+                  {chartDimension === 'sale_mode' ? 'Sales by Mode (Monthly Overview)' : 'Sales by Royalty (Monthly Overview)'}
+                </Text>
+                <View style={styles.headerBadgeContainer}>
+                  {hoveredModeKey ? (() => {
+                    const item = modeShares.find((s) => s.key === hoveredModeKey);
+                    return item ? (
+                      <View style={styles.hoverBadgePill}>
+                        <Text style={styles.hoverBadgeText} numberOfLines={1}>
+                          {item.label}: ₹{formatINR(item.amount)} ({item.percent}%)
+                        </Text>
+                      </View>
+                    ) : null;
+                  })() : (
+                    <Ionicons name="chevron-forward" size={16} color="#94a3b8" />
+                  )}
+                </View>
+              </View>
 
-              const cx = 135;
-              const cy = 135;
-              const baseR = 118;
-              const base_r = 74;
+              {(() => {
+                const sortedModes = [...modeShares].sort((a, b) => b.amount - a.amount);
+                const totalModeAmount = sortedModes.reduce((sum, m) => sum + (m.amount || 0), 0);
+                const hoveredModeItem = hoveredModeKey ? sortedModes.find((m) => m.key === hoveredModeKey) : null;
 
-              // Compute Donut Slices starting at -90 degrees (12 o'clock)
-              let currentDeg = -90;
-              const slices = sortedModes.map((item) => {
-                const percent = totalModeAmount > 0 ? (item.amount / totalModeAmount) * 100 : 0;
-                const sweepDeg = (percent / 100) * 360;
-                const startDeg = currentDeg;
-                const endDeg = currentDeg + sweepDeg;
-                const midDeg = startDeg + sweepDeg / 2;
+                const cx = 135;
+                const cy = 135;
+                const baseR = 118;
+                const base_r = 74;
 
-                if (sweepDeg > 0) {
-                  currentDeg += sweepDeg;
-                }
+                // Compute Donut Slices starting at -90 degrees (12 o'clock)
+                let currentDeg = -90;
+                const slices = sortedModes.map((item) => {
+                  const percent = totalModeAmount > 0 ? (item.amount / totalModeAmount) * 100 : 0;
+                  const sweepDeg = (percent / 100) * 360;
+                  const startDeg = currentDeg;
+                  const endDeg = currentDeg + sweepDeg;
+                  const midDeg = startDeg + sweepDeg / 2;
 
-                const isHovered = hoveredModeKey === item.key;
-                const isAnyHovered = hoveredModeKey !== null;
+                  if (sweepDeg > 0) {
+                    currentDeg += sweepDeg;
+                  }
 
-                const popOut = isHovered ? 6 : 0;
-                const midRad = (midDeg * Math.PI) / 180;
-                const startRad = (startDeg * Math.PI) / 180;
-                const endRad = (endDeg * Math.PI) / 180;
+                  const isHovered = hoveredModeKey === item.key;
+                  const isAnyHovered = hoveredModeKey !== null;
 
-                const shiftX = popOut * Math.cos(midRad);
-                const shiftY = popOut * Math.sin(midRad);
+                  const popOut = isHovered ? 6 : 0;
+                  const midRad = (midDeg * Math.PI) / 180;
+                  const startRad = (startDeg * Math.PI) / 180;
+                  const endRad = (endDeg * Math.PI) / 180;
 
-                const R = isHovered ? baseR + 5 : (isAnyHovered ? baseR - 2 : baseR);
-                const r = isHovered ? base_r - 3 : base_r;
+                  const shiftX = popOut * Math.cos(midRad);
+                  const shiftY = popOut * Math.sin(midRad);
 
-                const x1 = (cx + shiftX) + R * Math.cos(startRad);
-                const y1 = (cy + shiftY) + R * Math.sin(startRad);
-                const x2 = (cx + shiftX) + R * Math.cos(endRad);
-                const y2 = (cy + shiftY) + R * Math.sin(endRad);
+                  const R = isHovered ? baseR + 5 : (isAnyHovered ? baseR - 2 : baseR);
+                  const r = isHovered ? base_r - 3 : base_r;
 
-                const x3 = (cx + shiftX) + r * Math.cos(endRad);
-                const y3 = (cy + shiftY) + r * Math.sin(endRad);
-                const x4 = (cx + shiftX) + r * Math.cos(startRad);
-                const y4 = (cy + shiftY) + r * Math.sin(startRad);
+                  const x1 = (cx + shiftX) + R * Math.cos(startRad);
+                  const y1 = (cy + shiftY) + R * Math.sin(startRad);
+                  const x2 = (cx + shiftX) + R * Math.cos(endRad);
+                  const y2 = (cy + shiftY) + R * Math.sin(endRad);
 
-                const largeArc = sweepDeg > 180 ? 1 : 0;
-                const isFullCircle = sweepDeg >= 359.9;
-                const pathD = isFullCircle
-                  ? `M ${cx - R} ${cy} A ${R} ${R} 0 1 0 ${cx + R} ${cy} A ${R} ${R} 0 1 0 ${cx - R} ${cy} Z`
-                  : `M ${x1.toFixed(1)} ${y1.toFixed(1)} A ${R} ${R} 0 ${largeArc} 1 ${x2.toFixed(1)} ${y2.toFixed(1)} L ${x3.toFixed(1)} ${y3.toFixed(1)} A ${r} ${r} 0 ${largeArc} 0 ${x4.toFixed(1)} ${y4.toFixed(1)} Z`;
+                  const x3 = (cx + shiftX) + r * Math.cos(endRad);
+                  const y3 = (cy + shiftY) + r * Math.sin(endRad);
+                  const x4 = (cx + shiftX) + r * Math.cos(startRad);
+                  const y4 = (cy + shiftY) + r * Math.sin(startRad);
 
-                const midR = (R + r) / 2;
-                const lx = isFullCircle ? cx : (cx + shiftX) + midR * Math.cos(midRad);
-                const ly = isFullCircle ? cy - midR + 4.5 : (cy + shiftY) + midR * Math.sin(midRad);
+                  const largeArc = sweepDeg > 180 ? 1 : 0;
+                  const isFullCircle = sweepDeg >= 359.9;
+                  const pathD = isFullCircle
+                    ? `M ${cx - R} ${cy} A ${R} ${R} 0 1 0 ${cx + R} ${cy} A ${R} ${R} 0 1 0 ${cx - R} ${cy} Z`
+                    : `M ${x1.toFixed(1)} ${y1.toFixed(1)} A ${R} ${R} 0 ${largeArc} 1 ${x2.toFixed(1)} ${y2.toFixed(1)} L ${x3.toFixed(1)} ${y3.toFixed(1)} A ${r} ${r} 0 ${largeArc} 0 ${x4.toFixed(1)} ${y4.toFixed(1)} Z`;
 
-                return {
-                  ...item,
-                  percent: Math.round(percent),
-                  sweepDeg,
-                  pathD,
-                  lx,
-                  ly,
-                  isHovered,
-                  isFullCircle,
-                  hasSales: item.amount > 0,
-                };
-              });
+                  const midR = (R + r) / 2;
+                  const lx = isFullCircle ? cx : (cx + shiftX) + midR * Math.cos(midRad);
+                  const ly = isFullCircle ? cy - midR + 4.5 : (cy + shiftY) + midR * Math.sin(midRad);
 
-              return (
-                <View style={[styles.pieChartContainerRow, isUltraSmall && styles.pieChartContainerRowUltraSmall]}>
-                  {/* Left: Clean Interactive Donut Graphic */}
-                  <View style={styles.pieSvgWrap}>
-                    <View style={{ width: isMobile ? 180 : 235, height: isMobile ? 180 : 235, position: 'relative', alignItems: 'center', justifyContent: 'center' }}>
-                      <Svg
-                        width={isMobile ? "180" : "235"}
-                        height={isMobile ? "180" : "235"}
-                        viewBox="0 0 270 270"
-                        preserveAspectRatio="xMidYMid meet"
-                        style={{
-                          width: isMobile ? 180 : 235,
-                          height: isMobile ? 180 : 235,
-                          alignSelf: 'center',
-                          display: isWeb ? 'block' : undefined,
-                          overflow: 'visible',
-                        }}
-                      >
-                        <G className="donut-rotate-group">
-                          {/* 1. Donut Slices */}
-                          {slices.map((slice) => {
-                            if (!slice.hasSales) return null;
-                            const isAnyHovered = hoveredModeKey !== null;
-                            const sliceProps = isWeb
-                              ? {
+                  return {
+                    ...item,
+                    percent: Math.round(percent),
+                    sweepDeg,
+                    pathD,
+                    lx,
+                    ly,
+                    isHovered,
+                    isFullCircle,
+                    hasSales: item.amount > 0,
+                  };
+                });
+
+                return (
+                  <View style={[styles.pieChartContainerRow, isUltraSmall && styles.pieChartContainerRowUltraSmall]}>
+                    {/* Left: Clean Interactive Donut Graphic */}
+                    <View style={styles.pieSvgWrap}>
+                      <View style={{ width: isMobile ? 180 : 235, height: isMobile ? 180 : 235, position: 'relative', alignItems: 'center', justifyContent: 'center' }}>
+                        <Svg
+                          width={isMobile ? "180" : "235"}
+                          height={isMobile ? "180" : "235"}
+                          viewBox="0 0 270 270"
+                          preserveAspectRatio="xMidYMid meet"
+                          style={{
+                            width: isMobile ? 180 : 235,
+                            height: isMobile ? 180 : 235,
+                            alignSelf: 'center',
+                            display: isWeb ? 'block' : undefined,
+                            overflow: 'visible',
+                          }}
+                        >
+                          <G className="donut-rotate-group">
+                            {/* 1. Donut Slices */}
+                            {slices.map((slice) => {
+                              if (!slice.hasSales) return null;
+                              const isAnyHovered = hoveredModeKey !== null;
+                              const sliceProps = isWeb
+                                ? {
                                   style: {
                                     cursor: 'pointer',
                                     transition: 'all 0.25s ease',
@@ -1437,829 +1441,846 @@ export const DashboardView = React.memo(({ entries = [], onOpenAddModal, onNavig
                                   onMouseLeave: () => setHoveredModeKey(null),
                                   onClick: () => setHoveredModeKey((prev) => (prev === slice.key ? null : slice.key)),
                                 }
-                              : {
+                                : {
                                   onPress: () => setHoveredModeKey((prev) => (prev === slice.key ? null : slice.key)),
                                 };
 
-                            return (
-                              <Path
-                                key={`slice-${slice.key}`}
-                                d={slice.pathD}
-                                fill={slice.color}
-                                stroke="#ffffff"
-                                strokeWidth={slice.isHovered ? 2.5 : 1.5}
-                                strokeLinejoin="round"
-                                className={isWeb ? "pie-slice-path" : undefined}
-                                opacity={isAnyHovered && !slice.isHovered ? 0.45 : 1}
-                                {...sliceProps}
-                              />
-                            );
-                          })}
+                              return (
+                                <Path
+                                  key={`slice-${slice.key}`}
+                                  d={slice.pathD}
+                                  fill={slice.color}
+                                  stroke="#ffffff"
+                                  strokeWidth={slice.isHovered ? 2.5 : 1.5}
+                                  strokeLinejoin="round"
+                                  className={isWeb ? "pie-slice-path" : undefined}
+                                  opacity={isAnyHovered && !slice.isHovered ? 0.45 : 1}
+                                  {...sliceProps}
+                                />
+                              );
+                            })}
 
-                          {/* 2. White Percentage Text inside slices - Show for all slices (> 0%) */}
-                          {slices.map((slice) => {
-                            if (!slice.hasSales || !slice.percent || slice.percent <= 0) return null;
-                            const fSize = slice.isFullCircle ? "13" : (slice.percent < 5 ? "9" : (slice.percent < 10 ? "10.5" : "12"));
-                            return (
-                              <SvgText
-                                key={`pct-${slice.key}`}
-                                x={slice.lx}
-                                y={slice.ly + 4}
-                                textAnchor="middle"
-                                fill="#ffffff"
-                                fontSize={fSize}
-                                fontWeight="800"
-                                style={isWeb ? { pointerEvents: 'none' } : undefined}
-                              >
-                                {slice.percent}%
-                              </SvgText>
-                            );
-                          })}
+                            {/* 2. White Percentage Text inside slices - Show for all slices (> 0%) */}
+                            {slices.map((slice) => {
+                              if (!slice.hasSales || !slice.percent || slice.percent <= 0) return null;
+                              const fSize = slice.isFullCircle ? "13" : (slice.percent < 5 ? "9" : (slice.percent < 10 ? "10.5" : "12"));
+                              return (
+                                <SvgText
+                                  key={`pct-${slice.key}`}
+                                  x={slice.lx}
+                                  y={slice.ly + 4}
+                                  textAnchor="middle"
+                                  fill="#ffffff"
+                                  fontSize={fSize}
+                                  fontWeight="800"
+                                  style={isWeb ? { pointerEvents: 'none' } : undefined}
+                                >
+                                  {slice.percent}%
+                                </SvgText>
+                              );
+                            })}
 
-                          {/* 3. Center White Hole Circle */}
-                          <Circle
-                            cx={cx}
-                            cy={cy}
-                            r={hoveredModeKey !== null ? 70 : 74}
-                            fill="#ffffff"
-                            stroke="#e2e8f0"
-                            strokeWidth="1.5"
-                            style={isWeb ? { transition: 'all 0.25s ease' } : undefined}
-                          />
-                        </G>
-                      </Svg>
+                            {/* 3. Center White Hole Circle */}
+                            <Circle
+                              cx={cx}
+                              cy={cy}
+                              r={hoveredModeKey !== null ? 70 : 74}
+                              fill="#ffffff"
+                              stroke="#e2e8f0"
+                              strokeWidth="1.5"
+                              style={isWeb ? { transition: 'all 0.25s ease' } : undefined}
+                            />
+                          </G>
+                        </Svg>
 
-                      {/* 4. Center Content Overlay matching reference image */}
-                      <View style={styles.donutCenterOverlay} pointerEvents="none">
-                        {hoveredModeItem ? (
-                          <View style={styles.donutCenterInner}>
-                            <Text style={[styles.donutCenterLabel, isMobile && styles.donutCenterLabelMobile]} numberOfLines={1}>
-                              {hoveredModeItem.label}
-                            </Text>
-                            <Text style={[styles.donutCenterValue, { color: hoveredModeItem.color }, isMobile && styles.donutCenterValueMobile]} numberOfLines={1}>
-                              ₹{formatINR(hoveredModeItem.amount)}
-                            </Text>
-                            <Text style={[styles.donutCenterPercent, isMobile && styles.donutCenterPercentMobile]}>
-                              {hoveredModeItem.percent}% of sales
-                            </Text>
-                          </View>
-                        ) : (
-                          <View style={styles.donutCenterInner}>
-                            <Text style={[styles.donutCenterLabel, isMobile && styles.donutCenterLabelMobile]}>
-                              Total Sales
-                            </Text>
-                            <Text style={[styles.donutCenterValue, isMobile && styles.donutCenterValueMobile]} numberOfLines={1}>
-                              ₹{formatINR(totalModeAmount)}
-                            </Text>
-                            <Text style={[styles.donutCenterPeriod, isMobile && styles.donutCenterPeriodMobile]}>
-                              Past 1 Months
-                            </Text>
-                          </View>
-                        )}
+                        {/* 4. Center Content Overlay matching reference image */}
+                        <View style={styles.donutCenterOverlay} pointerEvents="none">
+                          {hoveredModeItem ? (
+                            <View style={styles.donutCenterInner}>
+                              <Text style={[styles.donutCenterLabel, isMobile && styles.donutCenterLabelMobile]} numberOfLines={1}>
+                                {hoveredModeItem.label}
+                              </Text>
+                              <Text style={[styles.donutCenterValue, { color: hoveredModeItem.color }, isMobile && styles.donutCenterValueMobile]} numberOfLines={1}>
+                                ₹{formatINR(hoveredModeItem.amount)}
+                              </Text>
+                              <Text style={[styles.donutCenterPercent, isMobile && styles.donutCenterPercentMobile]}>
+                                {hoveredModeItem.percent}% of sales
+                              </Text>
+                            </View>
+                          ) : (
+                            <View style={styles.donutCenterInner}>
+                              <Text style={[styles.donutCenterLabel, isMobile && styles.donutCenterLabelMobile]}>
+                                Total Sales
+                              </Text>
+                              <Text style={[styles.donutCenterValue, isMobile && styles.donutCenterValueMobile]} numberOfLines={1}>
+                                ₹{formatINR(totalModeAmount)}
+                              </Text>
+                              <Text style={[styles.donutCenterPeriod, isMobile && styles.donutCenterPeriodMobile]}>
+                                Past 1 Months
+                              </Text>
+                            </View>
+                          )}
+                        </View>
                       </View>
                     </View>
-                  </View>
 
-                  {/* Right: Sleek Mode List matching Reference Image */}
-                  <View style={[styles.pieLegendCard, isMobile && styles.pieLegendCardMobile]}>
-                    {sortedModes.map((item) => {
-                      const isHovered = hoveredModeKey === item.key;
-                      const modeProps = isWeb
-                        ? {
+                    {/* Right: Sleek Mode List matching Reference Image */}
+                    <View style={[styles.pieLegendCard, isMobile && styles.pieLegendCardMobile]}>
+                      {sortedModes.map((item) => {
+                        const isHovered = hoveredModeKey === item.key;
+                        const modeProps = isWeb
+                          ? {
                             onMouseEnter: () => setHoveredModeKey(item.key),
                             onMouseLeave: () => setHoveredModeKey(null),
                             onClick: () => setHoveredModeKey((prev) => (prev === item.key ? null : item.key)),
                           }
-                        : {};
+                          : {};
 
-                      return (
-                        <TouchableOpacity
-                          key={item.key}
-                          className={isWeb ? "pie-legend-card-row" : undefined}
-                          style={[
-                            styles.pieLegendRow,
-                            isHovered && styles.pieLegendRowHovered,
-                          ]}
-                          activeOpacity={0.8}
-                          onPress={() => setHoveredModeKey((prev) => (prev === item.key ? null : item.key))}
-                          {...modeProps}
-                        >
-                          <View style={[styles.pieLegendBullet, { backgroundColor: item.color }]} />
-                          <View style={styles.pieLegendCol}>
-                            <Text style={[styles.pieLegendLabel, isMobile && { fontSize: 10 }]} numberOfLines={2}>{item.label}</Text>
-                            <Text style={[styles.pieLegendAmount, isMobile && { fontSize: 10.5 }]}>₹{formatINR(item.amount)}</Text>
-                          </View>
-                          <Text style={[styles.pieLegendPercent, isMobile && { fontSize: 10.5 }]}>{item.percent}%</Text>
-                        </TouchableOpacity>
-                      );
-                    })}
+                        return (
+                          <TouchableOpacity
+                            key={item.key}
+                            className={isWeb ? "pie-legend-card-row" : undefined}
+                            style={[
+                              styles.pieLegendRow,
+                              isHovered && styles.pieLegendRowHovered,
+                            ]}
+                            activeOpacity={0.8}
+                            onPress={() => setHoveredModeKey((prev) => (prev === item.key ? null : item.key))}
+                            {...modeProps}
+                          >
+                            <View style={[styles.pieLegendBullet, { backgroundColor: item.color }]} />
+                            <View style={styles.pieLegendCol}>
+                              <Text style={[styles.pieLegendLabel, isMobile && { fontSize: 10 }]} numberOfLines={2}>{item.label}</Text>
+                              <Text style={[styles.pieLegendAmount, isMobile && { fontSize: 10.5 }]}>₹{formatINR(item.amount)}</Text>
+                            </View>
+                            <Text style={[styles.pieLegendPercent, isMobile && { fontSize: 10.5 }]}>{item.percent}%</Text>
+                          </TouchableOpacity>
+                        );
+                      })}
+                    </View>
                   </View>
-                </View>
-              );
-            })()}
-          </View>
-        </View>
-
-        {/* ROW 2: Sales by Material & Top Party-wise Sales */}
-        <View style={[styles.chartsRow, isMobile && styles.chartsRowMobile]}>
-          {/* Chart 3: Sales by Material */}
-          <View style={[styles.chartCard, isMobile && styles.chartCardMobile, !isMobile && styles.chartCardHalf]}>
-            <View style={styles.chartHeaderRow}>
-              <Text style={[styles.chartCardTitle, isMobile && styles.chartCardTitleMobile, { flexShrink: 1 }]} numberOfLines={1}>
-                Sales by Material
-              </Text>
-              <View style={styles.headerBadgeContainer}>
-                {hoveredMaterialIdx !== null && materialData[hoveredMaterialIdx] ? (
-                  <View style={styles.hoverBadgePill}>
-                    <Text style={styles.hoverBadgeText} numberOfLines={1}>
-                      {materialData[hoveredMaterialIdx].name}: ₹{formatINR(materialData[hoveredMaterialIdx].amount)} ({materialData[hoveredMaterialIdx].percent}%)
-                    </Text>
-                  </View>
-                ) : (
-                  <Ionicons name="chevron-forward" size={16} color="#94a3b8" />
-                )}
-              </View>
+                );
+              })()}
             </View>
+          </View>
 
-            <View style={[styles.donutSectionRow, isUltraSmall && styles.donutSectionRowUltraSmall]}>
-              {/* Dynamic SVG Donut Graphic */}
-              <View style={styles.donutSvgWrap}>
-                <Svg width={isMobile ? "180" : "240"} height={isMobile ? "180" : "240"} viewBox="0 0 220 220" style={{ overflow: 'visible', display: 'block', maxWidth: '100%' }}>
-                  <G className="donut-rotate-group">
-                    {/* Render dynamic arc slices with smooth increase/decrease on hover */}
-                    {(() => {
-                      const cx = 110;
-                      const cy = 110;
-                      let currentAngle = -90;
+          {/* ROW 2: Sales by Material & Top Party-wise Sales */}
+          <View style={[styles.chartsRow, isMobile && styles.chartsRowMobile]}>
+            {/* Chart 3: Sales by Material */}
+            <View style={[styles.chartCard, isMobile && styles.chartCardMobile, !isMobile && styles.chartCardHalf]}>
+              <View style={styles.chartHeaderRow}>
+                <Text style={[styles.chartCardTitle, isMobile && styles.chartCardTitleMobile, { flexShrink: 1 }]} numberOfLines={1}>
+                  Sales by Material
+                </Text>
+                <View style={styles.headerBadgeContainer}>
+                  {hoveredMaterialIdx !== null && materialData[hoveredMaterialIdx] ? (
+                    <View style={styles.hoverBadgePill}>
+                      <Text style={styles.hoverBadgeText} numberOfLines={1}>
+                        {materialData[hoveredMaterialIdx].name}: ₹{formatINR(materialData[hoveredMaterialIdx].amount)} ({materialData[hoveredMaterialIdx].percent}%)
+                      </Text>
+                    </View>
+                  ) : (
+                    <Ionicons name="chevron-forward" size={16} color="#94a3b8" />
+                  )}
+                </View>
+              </View>
 
-                      return materialData.map((m, idx) => {
-                        const isHovered = hoveredMaterialIdx === idx;
-                        const isAnyHovered = hoveredMaterialIdx !== null;
-                        const sliceAngle = Math.max(2, (m.percent / 100) * 360);
-                        const startA = currentAngle;
-                        const endA = currentAngle + sliceAngle;
-                        currentAngle = endA;
+              <View style={[styles.donutSectionRow, isUltraSmall && styles.donutSectionRowUltraSmall]}>
+                {/* Dynamic SVG Donut Graphic */}
+                <View style={styles.donutSvgWrap}>
+                  <Svg width={isMobile ? "180" : "240"} height={isMobile ? "180" : "240"} viewBox="0 0 220 220" style={{ overflow: 'visible', display: 'block', maxWidth: '100%' }}>
+                    <G className="donut-rotate-group">
+                      {/* Render dynamic arc slices with smooth increase/decrease on hover */}
+                      {(() => {
+                        const cx = 110;
+                        const cy = 110;
+                        let currentAngle = -90;
 
-                        const R = isHovered ? 104 : (isAnyHovered ? 94 : 100);
-                        const r = isHovered ? 56 : (isAnyHovered ? 66 : 62);
+                        return materialData.map((m, idx) => {
+                          const isHovered = hoveredMaterialIdx === idx;
+                          const isAnyHovered = hoveredMaterialIdx !== null;
+                          const sliceAngle = Math.max(2, (m.percent / 100) * 360);
+                          const startA = currentAngle;
+                          const endA = currentAngle + sliceAngle;
+                          currentAngle = endA;
 
-                        const midA = (startA + endA) / 2;
-                        const midRad = (midA * Math.PI) / 180;
-                        const shiftX = isHovered ? Math.cos(midRad) * 5 : 0;
-                        const shiftY = isHovered ? Math.sin(midRad) * 5 : 0;
+                          const R = isHovered ? 104 : (isAnyHovered ? 94 : 100);
+                          const r = isHovered ? 56 : (isAnyHovered ? 66 : 62);
 
-                        const radStart = (startA * Math.PI) / 180;
-                        const radEnd = (endA * Math.PI) / 180;
+                          const midA = (startA + endA) / 2;
+                          const midRad = (midA * Math.PI) / 180;
+                          const shiftX = isHovered ? Math.cos(midRad) * 5 : 0;
+                          const shiftY = isHovered ? Math.sin(midRad) * 5 : 0;
 
-                        const x1 = (cx + shiftX) + R * Math.cos(radStart);
-                        const y1 = (cy + shiftY) + R * Math.sin(radStart);
-                        const x2 = (cx + shiftX) + R * Math.cos(radEnd);
-                        const y2 = (cy + shiftY) + R * Math.sin(radEnd);
+                          const radStart = (startA * Math.PI) / 180;
+                          const radEnd = (endA * Math.PI) / 180;
 
-                        const x3 = (cx + shiftX) + r * Math.cos(radEnd);
-                        const y3 = (cy + shiftY) + r * Math.sin(radEnd);
-                        const x4 = (cx + shiftX) + r * Math.cos(radStart);
-                        const y4 = (cy + shiftY) + r * Math.sin(radStart);
+                          const x1 = (cx + shiftX) + R * Math.cos(radStart);
+                          const y1 = (cy + shiftY) + R * Math.sin(radStart);
+                          const x2 = (cx + shiftX) + R * Math.cos(radEnd);
+                          const y2 = (cy + shiftY) + R * Math.sin(radEnd);
 
-                        const largeArc = sliceAngle > 180 ? 1 : 0;
-                        const isFullCircle = m.percent >= 99.5 || sliceAngle >= 359.9;
-                        const pathD = isFullCircle
-                          ? `M ${cx - R} ${cy} A ${R} ${R} 0 1 0 ${cx + R} ${cy} A ${R} ${R} 0 1 0 ${cx - R} ${cy} Z`
-                          : `M ${x1.toFixed(1)} ${y1.toFixed(1)} A ${R} ${R} 0 ${largeArc} 1 ${x2.toFixed(1)} ${y2.toFixed(1)} L ${x3.toFixed(1)} ${y3.toFixed(1)} A ${r} ${r} 0 ${largeArc} 0 ${x4.toFixed(1)} ${y4.toFixed(1)} Z`;
+                          const x3 = (cx + shiftX) + r * Math.cos(radEnd);
+                          const y3 = (cy + shiftY) + r * Math.sin(radEnd);
+                          const x4 = (cx + shiftX) + r * Math.cos(radStart);
+                          const y4 = (cy + shiftY) + r * Math.sin(radStart);
 
-                        const matGProps = isWeb
-                          ? {
+                          const largeArc = sliceAngle > 180 ? 1 : 0;
+                          const isFullCircle = m.percent >= 99.5 || sliceAngle >= 359.9;
+                          const pathD = isFullCircle
+                            ? `M ${cx - R} ${cy} A ${R} ${R} 0 1 0 ${cx + R} ${cy} A ${R} ${R} 0 1 0 ${cx - R} ${cy} Z`
+                            : `M ${x1.toFixed(1)} ${y1.toFixed(1)} A ${R} ${R} 0 ${largeArc} 1 ${x2.toFixed(1)} ${y2.toFixed(1)} L ${x3.toFixed(1)} ${y3.toFixed(1)} A ${r} ${r} 0 ${largeArc} 0 ${x4.toFixed(1)} ${y4.toFixed(1)} Z`;
+
+                          const matGProps = isWeb
+                            ? {
                               style: { cursor: 'pointer' },
                               onMouseEnter: () => setHoveredMaterialIdx(idx),
                               onMouseLeave: () => setHoveredMaterialIdx(null),
                               onClick: () => setHoveredMaterialIdx((prev) => (prev === idx ? null : idx)),
                             }
-                          : {
+                            : {
                               onPress: () => setHoveredMaterialIdx((prev) => (prev === idx ? null : idx)),
                             };
 
-                        return (
-                          <G
-                            key={`mat-slice-${m.name || idx}-${idx}`}
-                            {...matGProps}
-                          >
-                            <Path
-                              d={pathD}
-                              fill={m.color}
-                              opacity={hoveredMaterialIdx === null || isHovered ? 1 : 0.32}
-                              stroke="#ffffff"
-                              strokeWidth={isHovered ? 2.5 : 1}
-                              style={isWeb ? {
-                                transition: 'd 0.32s cubic-bezier(0.34, 1.56, 0.64, 1), opacity 0.25s ease',
-                              } : undefined}
-                            />
-                            {/* Direct Percentage on Donut Slice - Show for all non-zero percent */}
-                            {m.percent > 0 && (
-                              <SvgText
-                                x={isFullCircle ? cx : (cx + shiftX) + ((R + r) / 2) * Math.cos(midRad)}
-                                y={isFullCircle ? cy - ((R + r) / 2) + 4.5 : (cy + shiftY) + ((R + r) / 2) * Math.sin(midRad) + 3.5}
-                                fill="#ffffff"
-                                fontSize={isFullCircle ? "13" : (m.percent < 5 ? "8.5" : (m.percent < 10 ? "10" : "11"))}
-                                fontWeight="800"
-                                textAnchor="middle"
-                                style={isWeb ? { pointerEvents: 'none' } : undefined}
-                              >
-                                {m.percent}%
-                              </SvgText>
-                            )}
-                          </G>
-                        );
-                      });
-                    })()}
+                          return (
+                            <G
+                              key={`mat-slice-${m.name || idx}-${idx}`}
+                              {...matGProps}
+                            >
+                              <Path
+                                d={pathD}
+                                fill={m.color}
+                                opacity={hoveredMaterialIdx === null || isHovered ? 1 : 0.32}
+                                stroke="#ffffff"
+                                strokeWidth={isHovered ? 2.5 : 1}
+                                style={isWeb ? {
+                                  transition: 'd 0.32s cubic-bezier(0.34, 1.56, 0.64, 1), opacity 0.25s ease',
+                                } : undefined}
+                              />
+                              {/* Direct Percentage on Donut Slice - Show for all non-zero percent */}
+                              {m.percent > 0 && (
+                                <SvgText
+                                  x={isFullCircle ? cx : (cx + shiftX) + ((R + r) / 2) * Math.cos(midRad)}
+                                  y={isFullCircle ? cy - ((R + r) / 2) + 4.5 : (cy + shiftY) + ((R + r) / 2) * Math.sin(midRad) + 3.5}
+                                  fill="#ffffff"
+                                  fontSize={isFullCircle ? "13" : (m.percent < 5 ? "8.5" : (m.percent < 10 ? "10" : "11"))}
+                                  fontWeight="800"
+                                  textAnchor="middle"
+                                  style={isWeb ? { pointerEvents: 'none' } : undefined}
+                                >
+                                  {m.percent}%
+                                </SvgText>
+                              )}
+                            </G>
+                          );
+                        });
+                      })()}
 
-                    {/* Center White Hole Circle */}
-                    <Circle
-                      cx="110"
-                      cy="110"
-                      r={hoveredMaterialIdx !== null ? 56 : 62}
-                      fill="#ffffff"
-                      stroke="#e2e8f0"
-                      strokeWidth="1.5"
-                      style={isWeb ? { transition: 'all 0.3s ease' } : undefined}
-                    />
-                  </G>
-                </Svg>
+                      {/* Center White Hole Circle */}
+                      <Circle
+                        cx="110"
+                        cy="110"
+                        r={hoveredMaterialIdx !== null ? 56 : 62}
+                        fill="#ffffff"
+                        stroke="#e2e8f0"
+                        strokeWidth="1.5"
+                        style={isWeb ? { transition: 'all 0.3s ease' } : undefined}
+                      />
+                    </G>
+                  </Svg>
 
-                {/* Center Content Overlay using Native Text */}
-                <View style={styles.donutCenterOverlay} pointerEvents="none">
-                  {hoveredMaterialIdx !== null && materialData[hoveredMaterialIdx] ? (
-                    <View style={styles.donutCenterInner}>
-                      <Text style={[styles.donutCenterLabel, isMobile && styles.donutCenterLabelMobile]} numberOfLines={1}>
-                        {materialData[hoveredMaterialIdx].name}
-                      </Text>
-                      <Text style={[styles.donutCenterValue, { color: materialData[hoveredMaterialIdx].color }, isMobile && { fontSize: 12.5, lineHeight: 16 }]} numberOfLines={1}>
-                        ₹{formatINR(materialData[hoveredMaterialIdx].amount)}
-                      </Text>
-                      <Text style={[styles.donutCenterPercent, isMobile && styles.donutCenterPercentMobile]}>
-                        {materialData[hoveredMaterialIdx].percent}%
-                      </Text>
-                    </View>
-                  ) : (
-                    <View style={styles.donutCenterInner}>
-                      <Text style={[styles.donutCenterLabel, isMobile && styles.donutCenterLabelMobile]}>Total</Text>
-                      <Text style={[styles.donutCenterValue, isMobile && { fontSize: 12.5, lineHeight: 16 }]} numberOfLines={1}>
-                        ₹{formatINR(metrics.totalSale)}
-                      </Text>
-                    </View>
-                  )}
+                  {/* Center Content Overlay using Native Text */}
+                  <View style={styles.donutCenterOverlay} pointerEvents="none">
+                    {hoveredMaterialIdx !== null && materialData[hoveredMaterialIdx] ? (
+                      <View style={styles.donutCenterInner}>
+                        <Text style={[styles.donutCenterLabel, isMobile && styles.donutCenterLabelMobile]} numberOfLines={1}>
+                          {materialData[hoveredMaterialIdx].name}
+                        </Text>
+                        <Text style={[styles.donutCenterValue, { color: materialData[hoveredMaterialIdx].color }, isMobile && { fontSize: 12.5, lineHeight: 16 }]} numberOfLines={1}>
+                          ₹{formatINR(materialData[hoveredMaterialIdx].amount)}
+                        </Text>
+                        <Text style={[styles.donutCenterPercent, isMobile && styles.donutCenterPercentMobile]}>
+                          {materialData[hoveredMaterialIdx].percent}%
+                        </Text>
+                      </View>
+                    ) : (
+                      <View style={styles.donutCenterInner}>
+                        <Text style={[styles.donutCenterLabel, isMobile && styles.donutCenterLabelMobile]}>Total</Text>
+                        <Text style={[styles.donutCenterValue, isMobile && { fontSize: 12.5, lineHeight: 16 }]} numberOfLines={1}>
+                          ₹{formatINR(metrics.totalSale)}
+                        </Text>
+                      </View>
+                    )}
+                  </View>
                 </View>
-              </View>
 
-              {/* Dynamic Legend List on Right - TIGHT VALUES SPACING */}
-              <View style={[styles.materialLegendList, isMobile && styles.materialLegendListMobile]}>
-                {materialData.map((m, idx) => {
-                  const isHovered = hoveredMaterialIdx === idx;
-                  const legendProps = isWeb
-                    ? {
+                {/* Dynamic Legend List on Right - TIGHT VALUES SPACING */}
+                <View style={[styles.materialLegendList, isMobile && styles.materialLegendListMobile]}>
+                  {materialData.map((m, idx) => {
+                    const isHovered = hoveredMaterialIdx === idx;
+                    const legendProps = isWeb
+                      ? {
                         onMouseEnter: () => setHoveredMaterialIdx(idx),
                         onMouseLeave: () => setHoveredMaterialIdx(null),
                         onClick: () => setHoveredMaterialIdx((prev) => (prev === idx ? null : idx)),
                       }
-                    : {};
-                  return (
-                    <TouchableOpacity
-                      key={m.name || `mat-legend-${idx}`}
-                      style={[styles.materialLegendItem, isHovered && styles.materialLegendItemHovered]}
-                      activeOpacity={0.8}
-                      onPress={() => setHoveredMaterialIdx((prev) => (prev === idx ? null : idx))}
-                      {...legendProps}
-                    >
-                      <View style={[styles.legendColorBox, { backgroundColor: m.color, marginTop: 3 }]} />
-                      <View style={{ flex: 1, minWidth: 0 }}>
-                        <Text style={[styles.materialLegendLabel, isMobile && { fontSize: 11.5, lineHeight: 15 }]} numberOfLines={2}>
-                          {m.name}
-                        </Text>
-                        <Text style={{ fontSize: isMobile ? 11 : 12, fontWeight: '700', color: '#0f172a', marginTop: 1 }}>
-                          ₹{formatINR(m.amount)}{' '}
-                          <Text style={{ fontSize: isMobile ? 10 : 11, fontWeight: '600', color: '#64748b' }}>
-                            ({m.percent}%)
+                      : {};
+                    return (
+                      <TouchableOpacity
+                        key={m.name || `mat-legend-${idx}`}
+                        style={[styles.materialLegendItem, isHovered && styles.materialLegendItemHovered]}
+                        activeOpacity={0.8}
+                        onPress={() => setHoveredMaterialIdx((prev) => (prev === idx ? null : idx))}
+                        {...legendProps}
+                      >
+                        <View style={[styles.legendColorBox, { backgroundColor: m.color, marginTop: 3 }]} />
+                        <View style={{ flex: 1, minWidth: 0 }}>
+                          <Text style={[styles.materialLegendLabel, isMobile && { fontSize: 11.5, lineHeight: 15 }]} numberOfLines={2}>
+                            {m.name}
                           </Text>
-                        </Text>
-                      </View>
+                          <Text style={{ fontSize: isMobile ? 11 : 12, fontWeight: '700', color: '#0f172a', marginTop: 1 }}>
+                            ₹{formatINR(m.amount)}{' '}
+                            <Text style={{ fontSize: isMobile ? 10 : 11, fontWeight: '600', color: '#64748b' }}>
+                              ({m.percent}%)
+                            </Text>
+                          </Text>
+                        </View>
+                      </TouchableOpacity>
+                    );
+                  })}
+                </View>
+              </View>
+            </View>
+
+            {/* Chart 4: Top Party-wise Sales */}
+            <View style={[styles.chartCard, isMobile && styles.chartCardMobile, !isMobile && styles.chartCardHalf]}>
+              <View style={styles.chartHeaderRow}>
+                <TouchableOpacity
+                  style={styles.chartTitleClickable}
+                  onPress={() => setShowPartySalesModal(true)}
+                  activeOpacity={0.7}
+                >
+                  <Text style={[styles.chartCardTitle, isMobile && styles.chartCardTitleMobile, { flexShrink: 1 }]} numberOfLines={1}>
+                    Top Party-wise Sales
+                  </Text>
+                  <Ionicons name="open-outline" size={14} color="#0284c7" style={{ marginLeft: 6 }} />
+                </TouchableOpacity>
+                <View style={styles.headerBadgeContainer}>
+                  {hoveredPartyIdx !== null && partyData[hoveredPartyIdx] ? (
+                    <View style={styles.hoverBadgePill}>
+                      <Text style={styles.hoverBadgeText} numberOfLines={1}>
+                        {partyData[hoveredPartyIdx].name}: ₹{formatINR(partyData[hoveredPartyIdx].total)}
+                      </Text>
+                    </View>
+                  ) : (
+                    <TouchableOpacity
+                      style={styles.allPartyWiseSalesHeaderBtn}
+                      onPress={() => setShowPartySalesModal(true)}
+                      activeOpacity={0.75}
+                    >
+                      <Ionicons name="list" size={12} color="#0284c7" style={{ marginRight: 4 }} />
+                      <Text style={styles.allPartyWiseSalesHeaderBtnText} numberOfLines={1}>
+                        All Party-wise Sales
+                      </Text>
+                      <Ionicons name="arrow-forward" size={11} color="#0284c7" style={{ marginLeft: 3 }} />
                     </TouchableOpacity>
-                  );
-                })}
+                  )}
+                </View>
               </View>
-            </View>
-          </View>
 
-          {/* Chart 4: Top Party-wise Sales */}
-          <View style={[styles.chartCard, isMobile && styles.chartCardMobile, !isMobile && styles.chartCardHalf]}>
-            <View style={styles.chartHeaderRow}>
-              <TouchableOpacity
-                style={styles.chartTitleClickable}
-                onPress={() => setShowPartySalesModal(true)}
-                activeOpacity={0.7}
-              >
-                <Text style={[styles.chartCardTitle, isMobile && styles.chartCardTitleMobile, { flexShrink: 1 }]} numberOfLines={1}>
-                  Top Party-wise Sales
-                </Text>
-                <Ionicons name="open-outline" size={14} color="#0284c7" style={{ marginLeft: 6 }} />
-              </TouchableOpacity>
-              <View style={styles.headerBadgeContainer}>
-                {hoveredPartyIdx !== null && partyData[hoveredPartyIdx] ? (
-                  <View style={styles.hoverBadgePill}>
-                    <Text style={styles.hoverBadgeText} numberOfLines={1}>
-                      {partyData[hoveredPartyIdx].name}: ₹{formatINR(partyData[hoveredPartyIdx].total)}
-                    </Text>
-                  </View>
-                ) : (
-                  <TouchableOpacity
-                    style={styles.allPartyWiseSalesHeaderBtn}
-                    onPress={() => setShowPartySalesModal(true)}
-                    activeOpacity={0.75}
-                  >
-                    <Ionicons name="list" size={12} color="#0284c7" style={{ marginRight: 4 }} />
-                    <Text style={styles.allPartyWiseSalesHeaderBtnText} numberOfLines={1}>
-                      All Party-wise Sales
-                    </Text>
-                    <Ionicons name="arrow-forward" size={11} color="#0284c7" style={{ marginLeft: 3 }} />
-                  </TouchableOpacity>
-                )}
-              </View>
-            </View>
+              {/* Direct Total Bar Chart - NO CLICK NEEDED, VALUES VISIBLE DIRECTLY */}
+              <View style={styles.lineChartWrap}>
+                <Svg width="100%" height={isMobile ? "225" : "240"} viewBox="0 0 500 220" style={{ overflow: 'visible', display: 'block' }}>
+                  {/* Dynamic Y-Axis Gridlines & Numbers */}
+                  {[0, 0.25, 0.5, 0.75, 1].map((pct, idx) => {
+                    const yPos = 28 + 142 * (1 - pct);
+                    const val = Math.round(maxPartyVal * pct);
+                    return (
+                      <G key={`py-${idx}`}>
+                        <Line x1="68" y1={yPos} x2="485" y2={yPos} stroke="#f1f5f9" strokeWidth="0.8" strokeDasharray="3 3" />
+                        <SvgText x="62" y={yPos + 3.5} fill="#94a3b8" fontSize="9.5" fontWeight="600" textAnchor="end">
+                          {formatCompactINR(val).replace('₹', '')}
+                        </SvgText>
+                      </G>
+                    );
+                  })}
 
-            {/* Direct Total Bar Chart - NO CLICK NEEDED, VALUES VISIBLE DIRECTLY */}
-            <View style={styles.lineChartWrap}>
-              <Svg width="100%" height={isMobile ? "225" : "240"} viewBox="0 0 500 220" style={{ overflow: 'visible', display: 'block' }}>
-                {/* Dynamic Y-Axis Gridlines & Numbers */}
-                {[0, 0.25, 0.5, 0.75, 1].map((pct, idx) => {
-                  const yPos = 28 + 142 * (1 - pct);
-                  const val = Math.round(maxPartyVal * pct);
-                  return (
-                    <G key={`py-${idx}`}>
-                      <Line x1="68" y1={yPos} x2="485" y2={yPos} stroke="#f1f5f9" strokeWidth="0.8" strokeDasharray="3 3" />
-                      <SvgText x="62" y={yPos + 3.5} fill="#94a3b8" fontSize="9.5" fontWeight="600" textAnchor="end">
-                        {formatCompactINR(val).replace('₹', '')}
-                      </SvgText>
-                    </G>
-                  );
-                })}
+                  {/* Y-Axis Line */}
+                  <Line x1="68" y1="24" x2="68" y2="170" stroke="#cbd5e1" strokeWidth="1" />
 
-                {/* Y-Axis Line */}
-                <Line x1="68" y1="24" x2="68" y2="170" stroke="#cbd5e1" strokeWidth="1" />
+                  {/* X-Axis Baseline */}
+                  <Line x1="68" y1="170" x2="485" y2="170" stroke="#94a3b8" strokeWidth="1.2" />
 
-                {/* X-Axis Baseline */}
-                <Line x1="68" y1="170" x2="485" y2="170" stroke="#94a3b8" strokeWidth="1.2" />
+                  {/* Dynamic Direct Total Bars for Parties (Highest to Lowest) */}
+                  {partyData.length === 0 ? (
+                    <SvgText x="270" y="105" textAnchor="middle" fill="#94a3b8" fontSize="12">
+                      No party deliveries recorded yet.
+                    </SvgText>
+                  ) : (
+                    (() => {
+                      const topParties = partyData.slice(0, 5);
+                      const N = topParties.length;
+                      const plotWidth = 417; // 485 - 68
+                      const colWidth = plotWidth / Math.max(1, N);
+                      const barW = Math.min(58, Math.max(44, Math.round(colWidth * 0.74))); // Bold bars, minimal gap
+                      const chartH = 142;
+                      const maxVal = maxPartyVal > 0 ? maxPartyVal : 1;
 
-                {/* Dynamic Direct Total Bars for Parties (Highest to Lowest) */}
-                {partyData.length === 0 ? (
-                  <SvgText x="270" y="105" textAnchor="middle" fill="#94a3b8" fontSize="12">
-                    No party deliveries recorded yet.
-                  </SvgText>
-                ) : (
-                  (() => {
-                    const topParties = partyData.slice(0, 5);
-                    const N = topParties.length;
-                    const plotWidth = 417; // 485 - 68
-                    const colWidth = plotWidth / Math.max(1, N);
-                    const barW = Math.min(58, Math.max(44, Math.round(colWidth * 0.74))); // Bold bars, minimal gap
-                    const chartH = 142;
-                    const maxVal = maxPartyVal > 0 ? maxPartyVal : 1;
+                      // Modern ranked color palette: #1 vibrant royal blue, #2 oceanic sky, #3 electric teal, #4 emerald, #5 amber
+                      const PARTY_COLORS = ['#2563eb', '#0284c7', '#0891b2', '#059669', '#d97706'];
 
-                    // Modern ranked color palette: #1 vibrant royal blue, #2 oceanic sky, #3 electric teal, #4 emerald, #5 amber
-                    const PARTY_COLORS = ['#2563eb', '#0284c7', '#0891b2', '#059669', '#d97706'];
+                      return topParties.map((p, i) => {
+                        const colCenterX = 68 + (i + 0.5) * colWidth;
+                        const barLeft = colCenterX - barW / 2;
+                        const isHovered = hoveredPartyIdx === i;
 
-                    return topParties.map((p, i) => {
-                      const colCenterX = 68 + (i + 0.5) * colWidth;
-                      const barLeft = colCenterX - barW / 2;
-                      const isHovered = hoveredPartyIdx === i;
+                        const barH = maxVal > 0 ? (p.total / maxVal) * chartH : 0;
+                        const barY = 170 - barH;
+                        const barColor = PARTY_COLORS[i % PARTY_COLORS.length];
 
-                      const barH = maxVal > 0 ? (p.total / maxVal) * chartH : 0;
-                      const barY = 170 - barH;
-                      const barColor = PARTY_COLORS[i % PARTY_COLORS.length];
-
-                      const partyGProps = isWeb
-                        ? {
+                        const partyGProps = isWeb
+                          ? {
                             style: { cursor: 'pointer' },
                             onMouseEnter: () => setHoveredPartyIdx(i),
                             onMouseLeave: () => setHoveredPartyIdx(null),
                             onClick: () => setHoveredPartyIdx(isHovered ? null : i),
                           }
-                        : {
+                          : {
                             onPress: () => setHoveredPartyIdx(isHovered ? null : i),
                           };
 
-                      return (
-                        <G key={`party-bar-${p.name || i}`} {...partyGProps}>
-                          {/* Hover background column indicator */}
-                          {isHovered && (
-                            <Rect
-                              x={colCenterX - colWidth / 2 + 2}
-                              y="20"
-                              width={colWidth - 4}
-                              height="150"
-                              fill="#f1f5f9"
-                              rx="4"
-                              opacity="0.65"
-                            />
-                          )}
-
-                          {/* Direct Solid Total Bar with rounded top */}
-                          {barH > 0 && (
-                            <Rect
-                              className="party-bar-rect"
-                              x={barLeft}
-                              y={barY}
-                              width={barW}
-                              height={barH}
-                              rx="5"
-                              ry="5"
-                              fill={barColor}
-                              opacity={isHovered ? 1 : 0.9}
-                              stroke={isHovered ? '#ffffff' : 'none'}
-                              strokeWidth="1"
-                            />
-                          )}
-
-                          {/* Direct Sales Value on top of bar - NO CLICK NEEDED ON PHONE! */}
-                          {p.total > 0 && (
-                            <G className="party-value-pill">
+                        return (
+                          <G key={`party-bar-${p.name || i}`} {...partyGProps}>
+                            {/* Hover background column indicator */}
+                            {isHovered && (
                               <Rect
-                                x={colCenterX - 25}
-                                y={barY - 17}
-                                width="50"
-                                height="14"
-                                rx="7"
+                                x={colCenterX - colWidth / 2 + 2}
+                                y="20"
+                                width={colWidth - 4}
+                                height="150"
                                 fill="#f1f5f9"
-                                stroke="#e2e8f0"
-                                strokeWidth="0.8"
+                                rx="4"
+                                opacity="0.65"
                               />
-                              <SvgText
-                                x={colCenterX}
-                                y={barY - 6.5}
-                                fill="#0f172a"
-                                fontSize="9.5"
-                                fontWeight="800"
-                                textAnchor="middle"
-                              >
-                                {formatCompactINR(p.total)}
-                              </SvgText>
-                            </G>
-                          )}
+                            )}
 
-                          {/* Party Label below baseline */}
-                          <SvgText
-                            x={colCenterX}
-                            y="188"
-                            fill={isHovered ? barColor : '#475569'}
-                            fontSize="10"
-                            fontWeight={isHovered ? '800' : '600'}
-                            textAnchor="middle"
-                          >
-                            {p.name.length > 10 ? `${p.name.substring(0, 9)}..` : p.name}
-                          </SvgText>
-                        </G>
-                      );
-                    });
-                  })()
-                )}
-              </Svg>
+                            {/* Direct Solid Total Bar with rounded top */}
+                            {barH > 0 && (
+                              <Rect
+                                className="party-bar-rect"
+                                x={barLeft}
+                                y={barY}
+                                width={barW}
+                                height={barH}
+                                rx="5"
+                                ry="5"
+                                fill={barColor}
+                                opacity={isHovered ? 1 : 0.9}
+                                stroke={isHovered ? '#ffffff' : 'none'}
+                                strokeWidth="1"
+                              />
+                            )}
+
+                            {/* Direct Sales Value on top of bar - NO CLICK NEEDED ON PHONE! */}
+                            {p.total > 0 && (
+                              <G className="party-value-pill">
+                                <Rect
+                                  x={colCenterX - 25}
+                                  y={barY - 17}
+                                  width="50"
+                                  height="14"
+                                  rx="7"
+                                  fill="#f1f5f9"
+                                  stroke="#e2e8f0"
+                                  strokeWidth="0.8"
+                                />
+                                <SvgText
+                                  x={colCenterX}
+                                  y={barY - 6.5}
+                                  fill="#0f172a"
+                                  fontSize="9.5"
+                                  fontWeight="800"
+                                  textAnchor="middle"
+                                >
+                                  {formatCompactINR(p.total)}
+                                </SvgText>
+                              </G>
+                            )}
+
+                            {/* Party Label below baseline */}
+                            <SvgText
+                              x={colCenterX}
+                              y="188"
+                              fill={isHovered ? barColor : '#475569'}
+                              fontSize="10"
+                              fontWeight={isHovered ? '800' : '600'}
+                              textAnchor="middle"
+                            >
+                              {p.name.length > 10 ? `${p.name.substring(0, 9)}..` : p.name}
+                            </SvgText>
+                          </G>
+                        );
+                      });
+                    })()
+                  )}
+                </Svg>
+              </View>
+
+              {/* Clickable footer link to open all party-wise sales */}
+              <TouchableOpacity
+                style={styles.partyChartFooterBtn}
+                onPress={() => setShowPartySalesModal(true)}
+                activeOpacity={0.75}
+              >
+                <Text style={styles.partyChartFooterBtnText}>
+                  Showing Top {Math.min(5, partyData.length)} of {partyData.length} Parties • Click to view All Party-wise Sales
+                </Text>
+                <Ionicons name="chevron-forward" size={14} color="#0284c7" />
+              </TouchableOpacity>
             </View>
-
-            {/* Clickable footer link to open all party-wise sales */}
-            <TouchableOpacity
-              style={styles.partyChartFooterBtn}
-              onPress={() => setShowPartySalesModal(true)}
-              activeOpacity={0.75}
-            >
-              <Text style={styles.partyChartFooterBtnText}>
-                Showing Top {Math.min(5, partyData.length)} of {partyData.length} Parties • Click to view All Party-wise Sales
-              </Text>
-              <Ionicons name="chevron-forward" size={14} color="#0284c7" />
-            </TouchableOpacity>
           </View>
         </View>
-      </View>
 
-      <View style={{ height: 40 }} />
-    </ScrollView>
+        <View style={{ height: 40 }} />
+      </ScrollView>
 
-    {/* App-Based Date Picker Bottom Sheet Modal (100% Contained, Native App Style) */}
-    <Modal
-      visible={showDateModal}
-      transparent={true}
-      animationType="slide"
-      onRequestClose={() => setShowDateModal(false)}
-    >
-      <View style={[styles.appModalBackdrop, isMobile && styles.appModalBackdropMobile]}>
-        {/* Backdrop touch to dismiss */}
-        <TouchableOpacity
-          style={StyleSheet.absoluteFill}
-          activeOpacity={1}
-          onPress={() => setShowDateModal(false)}
-        />
+      {/* App-Based Date Picker Bottom Sheet Modal (100% Contained, Native App Style) */}
+      <Modal
+        visible={showDateModal}
+        transparent={true}
+        animationType="slide"
+        onRequestClose={() => setShowDateModal(false)}
+      >
+        <View style={[styles.appModalBackdrop, isMobile && styles.appModalBackdropMobile]}>
+          {/* Backdrop touch to dismiss */}
+          <TouchableOpacity
+            style={StyleSheet.absoluteFill}
+            activeOpacity={1}
+            onPress={() => setShowDateModal(false)}
+          />
 
-        {/* App Bottom Sheet Card */}
-        <View style={[styles.appSheetCard, isMobile && styles.appSheetCardMobile]}>
-          {/* Top drag handle indicator */}
-          <View style={styles.appSheetHandle} />
+          {/* App Bottom Sheet Card */}
+          <View style={[styles.appSheetCard, isMobile && styles.appSheetCardMobile]}>
+            {/* Top drag handle indicator */}
+            <View style={styles.appSheetHandle} />
 
-          {/* Header */}
-          <View style={styles.appSheetHeader}>
-            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
-              <View style={styles.appSheetIconWrap}>
-                <Ionicons name="calendar" size={17} color="#0284c7" />
+            {/* Header */}
+            <View style={styles.appSheetHeader}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+                <View style={styles.appSheetIconWrap}>
+                  <Ionicons name="calendar" size={17} color="#0284c7" />
+                </View>
+                <View>
+                  <Text style={styles.appSheetTitle}>Filter by Date</Text>
+                  <Text style={styles.appSheetSubtitle}>Tap a date or quick preset</Text>
+                </View>
               </View>
-              <View>
-                <Text style={styles.appSheetTitle}>Filter by Date</Text>
-                <Text style={styles.appSheetSubtitle}>Tap a date or quick preset</Text>
-              </View>
-            </View>
-            <TouchableOpacity
-              onPress={() => setShowDateModal(false)}
-              style={styles.appSheetCloseBtn}
-              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-            >
-              <Ionicons name="close" size={20} color="#64748b" />
-            </TouchableOpacity>
-          </View>
-
-          {/* Fast Quick Presets (Horizontal Scrollable Chips) */}
-          <ScrollView
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            contentContainerStyle={styles.appPresetChipsScroll}
-            style={{ marginBottom: 12, flexGrow: 0 }}
-          >
-            {[
-              {
-                label: 'Today',
-                action: () => {
-                  const todayISO = toISODateString(new Date());
-                  setTempStartDate(todayISO);
-                  setTempEndDate(todayISO);
-                  setCalendarMonth(new Date());
-                },
-              },
-              {
-                label: 'Yesterday',
-                action: () => {
-                  const y = new Date();
-                  y.setDate(y.getDate() - 1);
-                  const yISO = toISODateString(y);
-                  setTempStartDate(yISO);
-                  setTempEndDate(yISO);
-                  setCalendarMonth(new Date(y.getFullYear(), y.getMonth(), 1));
-                },
-              },
-              {
-                label: 'This Week',
-                action: () => {
-                  const now = new Date();
-                  const start = new Date(now);
-                  start.setDate(now.getDate() - 6);
-                  setTempStartDate(toISODateString(start));
-                  setTempEndDate(toISODateString(now));
-                  setCalendarMonth(new Date(now.getFullYear(), now.getMonth(), 1));
-                },
-              },
-              {
-                label: 'This Month',
-                action: () => {
-                  const now = new Date();
-                  const start = new Date(now.getFullYear(), now.getMonth(), 1);
-                  setTempStartDate(toISODateString(start));
-                  setTempEndDate(toISODateString(now));
-                  setCalendarMonth(new Date(now.getFullYear(), now.getMonth(), 1));
-                },
-              },
-              {
-                label: 'Last 30 Days',
-                action: () => {
-                  const now = new Date();
-                  const start = new Date(now);
-                  start.setDate(now.getDate() - 29);
-                  setTempStartDate(toISODateString(start));
-                  setTempEndDate(toISODateString(now));
-                  setCalendarMonth(new Date(now.getFullYear(), now.getMonth(), 1));
-                },
-              },
-            ].map((p, idx) => (
               <TouchableOpacity
-                key={idx}
-                activeOpacity={0.7}
-                onPress={p.action}
-                style={styles.appPresetChip}
+                onPress={() => setShowDateModal(false)}
+                style={styles.appSheetCloseBtn}
+                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
               >
-                <Text style={styles.appPresetChipText}>{p.label}</Text>
-              </TouchableOpacity>
-            ))}
-          </ScrollView>
-
-          {/* From Date / To Date Tab Cards */}
-          <View style={styles.appDateCardsRow}>
-            <TouchableOpacity
-              activeOpacity={0.8}
-              onPress={() => setActiveDateTab('start')}
-              style={[
-                styles.appDateCard,
-                activeDateTab === 'start' && styles.appDateCardActive,
-              ]}
-            >
-              <Text style={[styles.appDateCardLabel, activeDateTab === 'start' && styles.appDateCardLabelActive]}>
-                FROM DATE
-              </Text>
-              <Text style={styles.appDateCardValue}>
-                {tempStartDate ? toDisplayDateString(parseEntryDate(tempStartDate)) : 'Select'}
-              </Text>
-            </TouchableOpacity>
-
-            <View style={{ paddingHorizontal: 6, justifyContent: 'center' }}>
-              <Ionicons name="arrow-forward" size={15} color="#94a3b8" />
-            </View>
-
-            <TouchableOpacity
-              activeOpacity={0.8}
-              onPress={() => setActiveDateTab('end')}
-              style={[
-                styles.appDateCard,
-                activeDateTab === 'end' && styles.appDateCardActive,
-              ]}
-            >
-              <Text style={[styles.appDateCardLabel, activeDateTab === 'end' && styles.appDateCardLabelActive]}>
-                TO DATE
-              </Text>
-              <Text style={styles.appDateCardValue}>
-                {tempEndDate ? toDisplayDateString(parseEntryDate(tempEndDate)) : 'Select'}
-              </Text>
-            </TouchableOpacity>
-          </View>
-
-          {/* Compact In-App Calendar (Fully contained, beautiful app design, ZERO browser popups) */}
-          <View style={styles.appCalendarWrap}>
-            {/* Month Nav */}
-            <View style={styles.appMonthNavRow}>
-              <TouchableOpacity
-                onPress={() => setCalendarMonth((prev) => new Date(prev.getFullYear(), prev.getMonth() - 1, 1))}
-                style={styles.appMonthNavBtn}
-                activeOpacity={0.7}
-              >
-                <Ionicons name="chevron-back" size={16} color="#0f172a" />
-              </TouchableOpacity>
-
-              <Text style={styles.appMonthNavTitle}>
-                {(() => {
-                  const monthNames = [
-                    'January', 'February', 'March', 'April', 'May', 'June',
-                    'July', 'August', 'September', 'October', 'November', 'December',
-                  ];
-                  return `${monthNames[calendarMonth.getMonth()]} ${calendarMonth.getFullYear()}`;
-                })()}
-              </Text>
-
-              <TouchableOpacity
-                onPress={() => setCalendarMonth((prev) => new Date(prev.getFullYear(), prev.getMonth() + 1, 1))}
-                style={styles.appMonthNavBtn}
-                activeOpacity={0.7}
-              >
-                <Ionicons name="chevron-forward" size={16} color="#0f172a" />
+                <Ionicons name="close" size={20} color="#64748b" />
               </TouchableOpacity>
             </View>
 
-            {/* Weekday Row */}
-            <View style={styles.appWeekdaysRow}>
-              {['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa'].map((w, i) => (
-                <Text key={i} style={styles.appWeekdayText}>
-                  {w}
-                </Text>
+            {/* Fast Quick Presets (Horizontal Scrollable Chips) */}
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={styles.appPresetChipsScroll}
+              style={{ marginBottom: 12, flexGrow: 0 }}
+            >
+              {[
+                {
+                  label: 'Today',
+                  action: () => {
+                    const todayISO = toISODateString(new Date());
+                    setTempStartDate(todayISO);
+                    setTempEndDate(todayISO);
+                    setCalendarMonth(new Date());
+                  },
+                },
+                {
+                  label: 'Yesterday',
+                  action: () => {
+                    const y = new Date();
+                    y.setDate(y.getDate() - 1);
+                    const yISO = toISODateString(y);
+                    setTempStartDate(yISO);
+                    setTempEndDate(yISO);
+                    setCalendarMonth(new Date(y.getFullYear(), y.getMonth(), 1));
+                  },
+                },
+                {
+                  label: 'This Week',
+                  action: () => {
+                    const now = new Date();
+                    const start = new Date(now);
+                    start.setDate(now.getDate() - 6);
+                    setTempStartDate(toISODateString(start));
+                    setTempEndDate(toISODateString(now));
+                    setCalendarMonth(new Date(now.getFullYear(), now.getMonth(), 1));
+                  },
+                },
+                {
+                  label: 'This Month',
+                  action: () => {
+                    const now = new Date();
+                    const start = new Date(now.getFullYear(), now.getMonth(), 1);
+                    setTempStartDate(toISODateString(start));
+                    setTempEndDate(toISODateString(now));
+                    setCalendarMonth(new Date(now.getFullYear(), now.getMonth(), 1));
+                  },
+                },
+                {
+                  label: 'Last 30 Days',
+                  action: () => {
+                    const now = new Date();
+                    const start = new Date(now);
+                    start.setDate(now.getDate() - 29);
+                    setTempStartDate(toISODateString(start));
+                    setTempEndDate(toISODateString(now));
+                    setCalendarMonth(new Date(now.getFullYear(), now.getMonth(), 1));
+                  },
+                },
+              ].map((p, idx) => (
+                <TouchableOpacity
+                  key={idx}
+                  activeOpacity={0.7}
+                  onPress={p.action}
+                  style={styles.appPresetChip}
+                >
+                  <Text style={styles.appPresetChipText}>{p.label}</Text>
+                </TouchableOpacity>
               ))}
+            </ScrollView>
+
+            {/* From Date / To Date Tab Cards */}
+            <View style={styles.appDateCardsRow}>
+              <TouchableOpacity
+                activeOpacity={0.8}
+                onPress={() => setActiveDateTab('start')}
+                style={[
+                  styles.appDateCard,
+                  activeDateTab === 'start' && styles.appDateCardActive,
+                ]}
+              >
+                <Text style={[styles.appDateCardLabel, activeDateTab === 'start' && styles.appDateCardLabelActive]}>
+                  FROM DATE
+                </Text>
+                <Text style={styles.appDateCardValue}>
+                  {tempStartDate ? toDisplayDateString(parseEntryDate(tempStartDate)) : 'Select'}
+                </Text>
+              </TouchableOpacity>
+
+              <View style={{ paddingHorizontal: 6, justifyContent: 'center' }}>
+                <Ionicons name="arrow-forward" size={15} color="#94a3b8" />
+              </View>
+
+              <TouchableOpacity
+                activeOpacity={0.8}
+                onPress={() => setActiveDateTab('end')}
+                style={[
+                  styles.appDateCard,
+                  activeDateTab === 'end' && styles.appDateCardActive,
+                ]}
+              >
+                <Text style={[styles.appDateCardLabel, activeDateTab === 'end' && styles.appDateCardLabelActive]}>
+                  TO DATE
+                </Text>
+                <Text style={styles.appDateCardValue}>
+                  {tempEndDate ? toDisplayDateString(parseEntryDate(tempEndDate)) : 'Select'}
+                </Text>
+              </TouchableOpacity>
             </View>
 
-            {/* Days Grid */}
-            <View style={styles.appDaysGrid}>
-              {(() => {
-                const year = calendarMonth.getFullYear();
-                const month = calendarMonth.getMonth();
-                const firstDayIdx = new Date(year, month, 1).getDay();
-                const totalDays = new Date(year, month + 1, 0).getDate();
-                const cells = [];
+            {/* Compact In-App Calendar (Fully contained, beautiful app design, ZERO browser popups) */}
+            <View style={styles.appCalendarWrap}>
+              {/* Month Nav */}
+              <View style={styles.appMonthNavRow}>
+                <TouchableOpacity
+                  onPress={() => setCalendarMonth((prev) => new Date(prev.getFullYear(), prev.getMonth() - 1, 1))}
+                  style={styles.appMonthNavBtn}
+                  activeOpacity={0.7}
+                >
+                  <Ionicons name="chevron-back" size={16} color="#0f172a" />
+                </TouchableOpacity>
 
-                for (let i = 0; i < firstDayIdx; i++) {
-                  cells.push(<View key={`empty-${i}`} style={styles.appDayCellEmpty} />);
-                }
+                <Text style={styles.appMonthNavTitle}>
+                  {(() => {
+                    const monthNames = [
+                      'January', 'February', 'March', 'April', 'May', 'June',
+                      'July', 'August', 'September', 'October', 'November', 'December',
+                    ];
+                    return `${monthNames[calendarMonth.getMonth()]} ${calendarMonth.getFullYear()}`;
+                  })()}
+                </Text>
 
-                const todayISO = toISODateString(new Date());
+                <TouchableOpacity
+                  onPress={() => setCalendarMonth((prev) => new Date(prev.getFullYear(), prev.getMonth() + 1, 1))}
+                  style={styles.appMonthNavBtn}
+                  activeOpacity={0.7}
+                >
+                  <Ionicons name="chevron-forward" size={16} color="#0f172a" />
+                </TouchableOpacity>
+              </View>
 
-                for (let day = 1; day <= totalDays; day++) {
-                  const cellDate = new Date(year, month, day);
-                  const iso = toISODateString(cellDate);
-                  const isStart = iso === tempStartDate;
-                  const isEnd = iso === tempEndDate;
-                  const isSelected = isStart || isEnd;
-                  const inRange = tempStartDate && tempEndDate && iso > tempStartDate && iso < tempEndDate;
-                  const hasEntries = entryDateSet.has(iso);
-                  const isToday = iso === todayISO;
+              {/* Weekday Row */}
+              <View style={styles.appWeekdaysRow}>
+                {['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa'].map((w, i) => (
+                  <Text key={i} style={styles.appWeekdayText}>
+                    {w}
+                  </Text>
+                ))}
+              </View>
 
-                  cells.push(
-                    <TouchableOpacity
-                      key={`d-${day}`}
-                      activeOpacity={0.7}
-                      onPress={() => {
-                        if (activeDateTab === 'start') {
-                          setTempStartDate(iso);
-                          if (iso > tempEndDate) {
-                            setTempEndDate(iso);
-                          }
-                          setActiveDateTab('end');
-                        } else {
-                          if (iso < tempStartDate) {
+              {/* Days Grid */}
+              <View style={styles.appDaysGrid}>
+                {(() => {
+                  const year = calendarMonth.getFullYear();
+                  const month = calendarMonth.getMonth();
+                  const firstDayIdx = new Date(year, month, 1).getDay();
+                  const totalDays = new Date(year, month + 1, 0).getDate();
+                  const cells = [];
+
+                  for (let i = 0; i < firstDayIdx; i++) {
+                    cells.push(<View key={`empty-${i}`} style={styles.appDayCellEmpty} />);
+                  }
+
+                  const todayISO = toISODateString(new Date());
+
+                  for (let day = 1; day <= totalDays; day++) {
+                    const cellDate = new Date(year, month, day);
+                    const iso = toISODateString(cellDate);
+                    const isStart = iso === tempStartDate;
+                    const isEnd = iso === tempEndDate;
+                    const isSelected = isStart || isEnd;
+                    const inRange = tempStartDate && tempEndDate && iso > tempStartDate && iso < tempEndDate;
+                    const hasEntries = entryDateSet.has(iso);
+                    const isToday = iso === todayISO;
+
+                    cells.push(
+                      <TouchableOpacity
+                        key={`d-${day}`}
+                        activeOpacity={0.7}
+                        onPress={() => {
+                          if (activeDateTab === 'start') {
                             setTempStartDate(iso);
+                            if (iso > tempEndDate) {
+                              setTempEndDate(iso);
+                            }
+                            setActiveDateTab('end');
                           } else {
-                            setTempEndDate(iso);
+                            if (iso < tempStartDate) {
+                              setTempStartDate(iso);
+                            } else {
+                              setTempEndDate(iso);
+                            }
                           }
-                        }
-                      }}
-                      style={[
-                        styles.appDayCell,
-                        inRange && styles.appDayCellInRange,
-                        isSelected && styles.appDayCellSelected,
-                        isToday && !isSelected && styles.appDayCellToday,
-                      ]}
-                    >
-                      <Text
+                        }}
                         style={[
-                          styles.appDayCellText,
-                          inRange && styles.appDayCellTextInRange,
-                          isSelected && styles.appDayCellTextSelected,
-                          isToday && !isSelected && styles.appDayCellTextToday,
+                          styles.appDayCell,
+                          inRange && styles.appDayCellInRange,
+                          isSelected && styles.appDayCellSelected,
+                          isToday && !isSelected && styles.appDayCellToday,
                         ]}
                       >
-                        {day}
-                      </Text>
-                      {hasEntries && !isSelected && (
-                        <View style={styles.appDayDot} />
-                      )}
-                    </TouchableOpacity>
-                  );
-                }
-                return cells;
-              })()}
+                        <Text
+                          style={[
+                            styles.appDayCellText,
+                            inRange && styles.appDayCellTextInRange,
+                            isSelected && styles.appDayCellTextSelected,
+                            isToday && !isSelected && styles.appDayCellTextToday,
+                          ]}
+                        >
+                          {day}
+                        </Text>
+                        {hasEntries && !isSelected && (
+                          <View style={styles.appDayDot} />
+                        )}
+                      </TouchableOpacity>
+                    );
+                  }
+                  return cells;
+                })()}
+              </View>
             </View>
-          </View>
 
-          {/* Bottom Action Footer */}
-          <View style={styles.appSheetActionsRow}>
-            <TouchableOpacity
-              activeOpacity={0.7}
-              onPress={() => {
-                setCustomStartDate(null);
-                setCustomEndDate(null);
-                setDateFilter('all');
-                setShowDateModal(false);
-              }}
-              style={styles.appSheetResetBtn}
-            >
-              <Ionicons name="refresh-outline" size={15} color="#475569" />
-              <Text style={styles.appSheetResetBtnText}>All Time</Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              activeOpacity={0.8}
-              onPress={() => {
-                let s = tempStartDate;
-                let e = tempEndDate || tempStartDate;
-                if (!s && !e) {
+            {/* Bottom Action Footer */}
+            <View style={styles.appSheetActionsRow}>
+              <TouchableOpacity
+                activeOpacity={0.7}
+                onPress={() => {
                   setCustomStartDate(null);
                   setCustomEndDate(null);
                   setDateFilter('all');
-                } else {
-                  if (!s) s = e;
-                  if (!e) e = s;
-                  if (s > e) {
-                    const tmp = s;
-                    s = e;
-                    e = tmp;
+                  setShowDateModal(false);
+                }}
+                style={styles.appSheetResetBtn}
+              >
+                <Ionicons name="refresh-outline" size={15} color="#475569" />
+                <Text style={styles.appSheetResetBtnText}>All Time</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                activeOpacity={0.8}
+                onPress={() => {
+                  let s = tempStartDate;
+                  let e = tempEndDate || tempStartDate;
+                  if (!s && !e) {
+                    setCustomStartDate(null);
+                    setCustomEndDate(null);
+                    setDateFilter('all');
+                  } else {
+                    if (!s) s = e;
+                    if (!e) e = s;
+                    if (s > e) {
+                      const tmp = s;
+                      s = e;
+                      e = tmp;
+                    }
+                    setCustomStartDate(s);
+                    setCustomEndDate(e);
+                    setDateFilter('custom');
                   }
-                  setCustomStartDate(s);
-                  setCustomEndDate(e);
-                  setDateFilter('custom');
-                }
-                setShowDateModal(false);
-              }}
-              style={styles.appSheetApplyBtn}
-            >
-              <Ionicons name="checkmark" size={16} color="#ffffff" />
-              <Text style={styles.appSheetApplyBtnText}>Apply Filter</Text>
-            </TouchableOpacity>
+                  setShowDateModal(false);
+                }}
+                style={styles.appSheetApplyBtn}
+              >
+                <Ionicons name="checkmark" size={16} color="#ffffff" />
+                <Text style={styles.appSheetApplyBtnText}>Apply Filter</Text>
+              </TouchableOpacity>
+            </View>
           </View>
         </View>
-      </View>
-    </Modal>
+      </Modal>
 
-    {/* All Party-wise Sales Modal / New Window Page */}
-    <PartyWiseSalesModal
-      visible={showPartySalesModal}
-      onClose={() => setShowPartySalesModal(false)}
-      entries={entries}
-      initialMonth={dateFilter === 'custom' && customStartDate ? customStartDate.substring(0, 7) : null}
-    />
-  </View>
+      {/* All Party-wise Sales Modal / New Window Page */}
+      <PartyWiseSalesModal
+        visible={showPartySalesModal}
+        onClose={() => setShowPartySalesModal(false)}
+        entries={entries}
+        initialMonth={dateFilter === 'custom' && customStartDate ? customStartDate.substring(0, 7) : null}
+      />
+
+      {/* KPI Card Summary Breakdown Table Modal */}
+      <KpiSummaryBreakdownModal
+        visible={Boolean(selectedKpiCard)}
+        activeMetric={selectedKpiCard || 'sales'}
+        initialMetric={selectedKpiCard || 'sales'}
+        onClose={() => setSelectedKpiCard(null)}
+        entries={activeEntries || entries}
+        allEntries={entries}
+        dateRangeStr={dateRangeStr}
+        onNavigateEntries={(filterInfo) => {
+          setSelectedKpiCard(null);
+          if (onNavigateEntries) {
+            onNavigateEntries(filterInfo);
+          }
+        }}
+      />
+    </View>
   );
 });
 
