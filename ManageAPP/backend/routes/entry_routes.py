@@ -713,17 +713,20 @@ async def delete_single_entry(
 class DownloadPdfPayload(BaseModel):
     entry: dict
     company_name: Optional[str] = None
+    template_type: Optional[str] = "tally"
 
 
 @router.post("/download-pdf")
 async def download_entry_pdf_direct(payload: DownloadPdfPayload):
     """
-    Renders and directly downloads the delivery entry as a Tally invoice PDF.
+    Renders and directly downloads the delivery entry as a Delivery Challan or Tally invoice PDF.
     """
     entry_dict = payload.entry
     challan_no = entry_dict.get("challan_no") or entry_dict.get("serial_no") or entry_dict.get("id") or "slip"
+    template_type = (payload.template_type or "tally").lower()
+    prefix = "Challan" if template_type == "challan" else "Invoice"
     try:
-        pdf_bytes = generate_tally_invoice_pdf(entry_dict, payload.company_name or "")
+        pdf_bytes = generate_tally_invoice_pdf(entry_dict, payload.company_name or "", template_type=template_type)
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to generate invoice PDF: {str(e)}")
 
@@ -731,7 +734,7 @@ async def download_entry_pdf_direct(payload: DownloadPdfPayload):
         content=pdf_bytes,
         media_type="application/pdf",
         headers={
-            "Content-Disposition": f'attachment; filename="Invoice_{challan_no}.pdf"'
+            "Content-Disposition": f'attachment; filename="{prefix}_{challan_no}.pdf"'
         }
     )
 

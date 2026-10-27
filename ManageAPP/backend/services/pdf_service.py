@@ -61,9 +61,247 @@ def number_to_indian_words(num):
     return f"INR {words} Only"
 
 
+def generate_delivery_challan_html(entry: dict, company_name: str = "") -> str:
+    """
+    Generates exact Delivery Challan HTML matching the user's uploaded reference image.
+    Contains clean 4-column quarry dispatch details, Goods / Material table,
+    non-tax purpose declaration, receiver and authorised signatory sections.
+    """
+    challan_no = entry.get("challan_no") or entry.get("serial_no") or entry.get("id") or "-"
+    date_str = str(entry.get("date") or "")
+
+    comp_name = company_name or entry.get("company_name") or "Organization"
+    comp_address = entry.get("company_address") or entry.get("user_address") or entry.get("user_state") or entry.get("address") or entry.get("state") or ""
+    comp_phone = entry.get("company_phone") or entry.get("user_phone") or entry.get("phone") or ""
+    comp_email = entry.get("company_email") or entry.get("email") or ""
+
+    party_name = entry.get("party_name") or entry.get("customer_name") or "-"
+    party_address = entry.get("party_address") or entry.get("party_state") or entry.get("destination") or "-"
+
+    payment_mode = entry.get("payment_mode") or (
+        "Cash" if entry.get("type_mode") == "Cash Sale"
+        else ("Credit" if entry.get("type_mode") == "Credit Sale" else (entry.get("type_mode") or "Credit"))
+    )
+
+    vehicle_no = entry.get("vehicle_no") or "-"
+    transport_name = entry.get("transport_name") or entry.get("transport_type") or "-"
+    destination = entry.get("destination") or entry.get("party_state") or party_address or "-"
+    delivery_loc = entry.get("delivery_location") or "Quarry / Crusher"
+    dispatch_from = entry.get("dispatch_from") or "Crusher Site"
+
+    material_name = entry.get("material_name") or "-"
+    net_wt = entry.get("net_wt") if entry.get("net_wt") is not None else (entry.get("quantity") or 0)
+    unit = entry.get("rate_calc_unit") or ("Nos" if entry.get("quantity") else "MT")
+    remarks = entry.get("remarks") or "As dispatched"
+
+    comp_meta_parts = []
+    if comp_address:
+        comp_meta_parts.append(comp_address)
+    if comp_phone:
+        comp_meta_parts.append(f"Phone: {comp_phone}")
+    if comp_email:
+        comp_meta_parts.append(f"Email: {comp_email}")
+    comp_meta_line = " &nbsp;|&nbsp; ".join(comp_meta_parts)
+    comp_sub_html = f'<div style="text-align: center; font-size: 8pt; color: #444; margin-top: 3px;">{comp_meta_line}</div>' if comp_meta_line else ''
+
+    html = f"""<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>Delivery Challan - {challan_no}</title>
+<style>
+@page {{
+    size: a4 portrait;
+    margin: 12mm 15mm 12mm 15mm;
+}}
+* {{
+    box-sizing: border-box;
+}}
+body {{
+    font-family: Arial, Helvetica, sans-serif;
+    font-size: 9pt;
+    color: #000;
+    margin: 0;
+    padding: 0;
+}}
+.title {{
+    text-align: center;
+    font-size: 16pt;
+    font-weight: bold;
+    letter-spacing: 0.5px;
+    margin-bottom: 2px;
+}}
+.comp-name {{
+    text-align: center;
+    font-size: 10.5pt;
+    font-weight: bold;
+    color: #222;
+}}
+table.grid-box {{
+    width: 100%;
+    border-collapse: collapse;
+    border: 1px solid #000;
+    margin-top: 15px;
+    margin-bottom: 18px;
+}}
+table.grid-box td {{
+    border: 1px solid #000;
+    padding: 6px 8px;
+    font-size: 9pt;
+    vertical-align: middle;
+}}
+.sec-title {{
+    font-size: 10pt;
+    font-weight: bold;
+    letter-spacing: 0.5px;
+    margin-bottom: 6px;
+}}
+table.items-table {{
+    width: 100%;
+    border-collapse: collapse;
+    border: 1px solid #000;
+}}
+table.items-table th {{
+    border: 1px solid #000;
+    background-color: #f1f5f9;
+    padding: 6px 8px;
+    font-size: 9pt;
+    font-weight: bold;
+    text-align: left;
+}}
+table.items-table td {{
+    border: 1px solid #000;
+    padding: 10px 8px;
+    font-size: 9pt;
+    vertical-align: top;
+}}
+.purpose-box {{
+    border: 1px solid #000;
+    padding: 8px 10px;
+    font-size: 8.5pt;
+    margin-top: 20px;
+    margin-bottom: 25px;
+}}
+table.sig-table {{
+    width: 100%;
+    border-collapse: collapse;
+    border: none;
+    margin-top: 15px;
+}}
+table.sig-table td {{
+    border: none;
+    padding: 0;
+    vertical-align: top;
+}}
+.sig-line {{
+    border-top: 1px solid #777;
+    margin-top: 4px;
+    margin-bottom: 22px;
+    width: 90%;
+}}
+.footer-note {{
+    margin-top: 20px;
+    font-size: 8pt;
+    color: #333;
+}}
+</style>
+</head>
+<body>
+
+<div class="title">DELIVERY CHALLAN</div>
+<div class="comp-name">{comp_name}</div>
+{comp_sub_html}
+
+<table class="grid-box">
+  <tr>
+    <td width="20%"><b>Challan No.</b></td>
+    <td width="30%">{challan_no}</td>
+    <td width="22%"><b>Date</b></td>
+    <td width="28%">{date_str}</td>
+  </tr>
+  <tr>
+    <td><b>Buyer / Consignee</b></td>
+    <td>{party_name}</td>
+    <td><b>Payment Terms</b></td>
+    <td>{payment_mode}</td>
+  </tr>
+  <tr>
+    <td><b>State</b></td>
+    <td>{party_address}</td>
+    <td><b>Vehicle No.</b></td>
+    <td>{vehicle_no}</td>
+  </tr>
+  <tr>
+    <td><b>Transporter</b></td>
+    <td>{transport_name}</td>
+    <td><b>Delivery Location</b></td>
+    <td>{delivery_loc}</td>
+  </tr>
+  <tr>
+    <td><b>Dispatch From</b></td>
+    <td>{dispatch_from}</td>
+    <td><b>Destination</b></td>
+    <td>{destination}</td>
+  </tr>
+</table>
+
+<div class="sec-title">GOODS / MATERIAL DETAILS</div>
+
+<table class="items-table">
+  <thead>
+    <tr>
+      <th width="7%">Sr.</th>
+      <th width="45%">Description of Material</th>
+      <th width="14%">Quantity</th>
+      <th width="14%">Unit</th>
+      <th width="20%">Remarks</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>1</td>
+      <td><b>{material_name}</b></td>
+      <td>{net_wt}</td>
+      <td>{unit}</td>
+      <td>{remarks}</td>
+    </tr>
+  </tbody>
+</table>
+
+<div class="purpose-box">
+  <b>Purpose:</b> Record of goods dispatched / delivered. This challan is not a tax invoice.
+</div>
+
+<table class="sig-table">
+  <tr>
+    <td width="50%">
+      <b>Receiver's Signature</b>
+      <div class="sig-line"></div>
+      <div>Name: ______________________</div>
+      <div style="margin-top: 8px;">Date: &nbsp;______________________</div>
+    </td>
+    <td width="50%">
+      <b>Authorised Signatory</b>
+      <div class="sig-line"></div>
+      <div>For {comp_name}</div>
+      <div style="margin-top: 8px;">Signature: ______________________</div>
+    </td>
+  </tr>
+</table>
+
+<div class="footer-note">
+  Material received in apparent good condition, subject to verification.
+</div>
+
+</body>
+</html>"""
+    return html
+
+
 def generate_tally_invoice_html(entry: dict, company_name: str = "") -> str:
     """
-    Generates exact Tally Invoice HTML matching the user's reference invoice format.
+    Generates Tally Invoice HTML with real quarry/materials project headings
+    (Vehicle No, Transporter, Crusher Site, etc.) instead of shipping cargo fields.
     """
     challan_no = entry.get("challan_no") or entry.get("serial_no") or entry.get("id") or "-"
     date_str = str(entry.get("date") or "")
@@ -83,7 +321,9 @@ def generate_tally_invoice_html(entry: dict, company_name: str = "") -> str:
     
     vehicle_no = entry.get("vehicle_no") or "-"
     transport_name = entry.get("transport_name") or entry.get("transport_type") or "-"
-    destination = entry.get("party_state") or entry.get("destination") or "-"
+    destination = entry.get("destination") or entry.get("party_state") or "-"
+    delivery_loc = entry.get("delivery_location") or "Quarry / Crusher"
+    dispatch_from = entry.get("dispatch_from") or "Crusher Site"
     
     material_name = entry.get("material_name") or "-"
     net_wt = entry.get("net_wt") if entry.get("net_wt") is not None else (entry.get("quantity") or 0)
@@ -215,7 +455,7 @@ table.tally-outer {{
 }}
 .sub-table td {{
     border: 1px solid #000;
-    padding: 2px 4px;
+    padding: 3px 5px;
 }}
 .text-right {{
     text-align: right;
@@ -282,18 +522,18 @@ table.tally-outer {{
         {comp_email_html}
       </div>
       <div style="border-top: 1px solid #000; padding: 5px 6px; min-height: 120px;">
-        <div class="lbl">Buyer (Bill to)</div>
+        <div class="lbl">Buyer / Consignee (Bill to)</div>
         <div class="bold" style="font-size: 9.5pt; margin-top: 2px;">{party_name}</div>
         {party_address_html}
       </div>
     </td>
 
-    <!-- Right 50%: Boxed Grid -->
+    <!-- Right 50%: Boxed Grid matching Stone Quarry Project -->
     <td width="50%" style="padding: 0; vertical-align: top;">
       <table class="sub-table" style="margin: -1px;">
         <tr>
           <td width="50%" style="border-top: none; border-left: none;">
-            <div class="lbl">Invoice No.</div>
+            <div class="lbl">Challan / Invoice No.</div>
             <div class="bold val">{challan_no}</div>
           </td>
           <td width="50%" style="border-top: none; border-left: none; border-right: none;">
@@ -303,48 +543,28 @@ table.tally-outer {{
         </tr>
         <tr>
           <td style="border-left: none;">
-            <div class="lbl">Delivery Note</div>
-            <div class="val">&nbsp;</div>
+            <div class="lbl">Vehicle No.</div>
+            <div class="bold val">{vehicle_no}</div>
           </td>
           <td style="border-left: none; border-right: none;">
-            <div class="lbl">Mode/Terms of Payment</div>
+            <div class="lbl">Payment Terms</div>
             <div class="val">{payment_mode}</div>
           </td>
         </tr>
         <tr>
           <td style="border-left: none;">
-            <div class="lbl">Reference No. &amp; Date.</div>
-            <div class="val">&nbsp;</div>
-          </td>
-          <td style="border-left: none; border-right: none;">
-            <div class="lbl">Other References</div>
-            <div class="val">&nbsp;</div>
-          </td>
-        </tr>
-        <tr>
-          <td style="border-left: none;">
-            <div class="lbl">Buyer's Order No.</div>
-            <div class="val">&nbsp;</div>
-          </td>
-          <td style="border-left: none; border-right: none;">
-            <div class="lbl">Dated</div>
-            <div class="val">&nbsp;</div>
-          </td>
-        </tr>
-        <tr>
-          <td style="border-left: none;">
-            <div class="lbl">Dispatch Doc No.</div>
-            <div class="bold val">{vehicle_no}</div>
-          </td>
-          <td style="border-left: none; border-right: none;">
-            <div class="lbl">Delivery Note Date</div>
-            <div class="val">{date_str}</div>
-          </td>
-        </tr>
-        <tr>
-          <td style="border-left: none;">
-            <div class="lbl">Dispatched through</div>
+            <div class="lbl">Transporter</div>
             <div class="bold val">{transport_name}</div>
+          </td>
+          <td style="border-left: none; border-right: none;">
+            <div class="lbl">Delivery Location</div>
+            <div class="bold val">{delivery_loc}</div>
+          </td>
+        </tr>
+        <tr>
+          <td style="border-left: none;">
+            <div class="lbl">Dispatch From</div>
+            <div class="bold val">{dispatch_from}</div>
           </td>
           <td style="border-left: none; border-right: none;">
             <div class="lbl">Destination</div>
@@ -352,29 +572,13 @@ table.tally-outer {{
           </td>
         </tr>
         <tr>
-          <td style="border-left: none;">
-            <div class="lbl">Vessel/Flight No.</div>
-            <div class="bold val">{vehicle_no}</div>
+          <td style="border-left: none; border-bottom: none;">
+            <div class="lbl">Material Name</div>
+            <div class="bold val">{material_name}</div>
           </td>
-          <td style="border-left: none; border-right: none;">
-            <div class="lbl">Place of receipt by shipper:</div>
-            <div class="bold val">Quarry / Crusher</div>
-          </td>
-        </tr>
-        <tr>
-          <td style="border-left: none;">
-            <div class="lbl">City/Port of Loading</div>
-            <div class="bold val">Crusher Site</div>
-          </td>
-          <td style="border-left: none; border-right: none;">
-            <div class="lbl">City/Port of Discharge</div>
-            <div class="bold val">{destination}</div>
-          </td>
-        </tr>
-        <tr>
-          <td colspan="2" style="border-left: none; border-right: none; border-bottom: none;">
-            <div class="lbl">Terms of Delivery</div>
-            <div class="val">&nbsp;</div>
+          <td style="border-left: none; border-right: none; border-bottom: none;">
+            <div class="lbl">Dispatched Quantity</div>
+            <div class="bold val">{net_wt} {unit}</div>
           </td>
         </tr>
       </table>
@@ -388,7 +592,7 @@ table.tally-outer {{
         <thead>
           <tr>
             <th width="4%" class="text-center">Sl<br/>No.</th>
-            <th width="50%" style="text-align: left;">Description of Goods</th>
+            <th width="50%" style="text-align: left;">Description of Material / Goods</th>
             <th width="13%" class="text-right">Quantity</th>
             <th width="13%" class="text-right">Rate</th>
             <th width="6%" class="text-center">per</th>
@@ -397,7 +601,7 @@ table.tally-outer {{
         </thead>
         <tbody>
           <tr>
-            <td class="text-center bold" style="height: 250px; vertical-align: top;">1</td>
+            <td class="text-center bold" style="height: 220px; vertical-align: top;">1</td>
             <td style="vertical-align: top;">
               <div class="bold" style="font-size: 9pt;">{material_name}</div>
             </td>
@@ -458,9 +662,9 @@ table.tally-outer {{
     return html
 
 
-def generate_tally_invoice_pdf(entry: dict, company_name: str = "") -> bytes:
+def generate_entry_pdf(entry: dict, company_name: str = "", template_type: str = "challan") -> bytes:
     """
-    Renders the Tally invoice HTML and compiles it to raw PDF bytes.
+    Renders either Delivery Challan or Tally Invoice HTML and compiles to PDF bytes.
     """
     global pisa
     if pisa is None:
@@ -470,10 +674,21 @@ def generate_tally_invoice_pdf(entry: dict, company_name: str = "") -> bytes:
         except Exception as e:
             raise RuntimeError(f"xhtml2pdf library is not available on this server: {e}")
 
-    html_code = generate_tally_invoice_html(entry, company_name)
+    if template_type == "tally":
+        html_code = generate_tally_invoice_html(entry, company_name)
+    else:
+        html_code = generate_delivery_challan_html(entry, company_name)
+
     out = io.BytesIO()
     pstatus = pisa.CreatePDF(html_code, dest=out)
     if hasattr(pstatus, 'err') and pstatus.err:
         raise RuntimeError(f"PDF compilation error: {pstatus.err}")
     return out.getvalue()
+
+
+def generate_tally_invoice_pdf(entry: dict, company_name: str = "", template_type: str = "tally") -> bytes:
+    """
+    Backward-compatible wrapper that compiles PDF for entries.
+    """
+    return generate_entry_pdf(entry, company_name, template_type)
 

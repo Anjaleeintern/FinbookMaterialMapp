@@ -23,8 +23,6 @@ const ENV_BACKEND_PORT =
     ? process.env.EXPO_PUBLIC_BACKEND_PORT
     : LOCAL_DEV_PORT;
 
-const ENV_PROXY_PORT = process.env.EXPO_PUBLIC_PROXY_PORT || PROXY_DEV_PORT;
-
 const getBaseUrl = () => {
   const isDev = typeof __DEV__ !== 'undefined' ? Boolean(__DEV__) : process.env.NODE_ENV !== 'production';
 
@@ -90,9 +88,9 @@ const getBaseUrl = () => {
     return `http://10.0.2.2:${ENV_BACKEND_PORT}`;
   }
 
-  // For physical phones on Wi-Fi, connect through Bridge Proxy (8005) or Backend Port (8001)
-  // Proxy 8005 runs on Node.js and reliably bypasses Windows Firewall
-  return `http://${hostIp}:${ENV_PROXY_PORT}`;
+  // For physical phones on Wi-Fi, connect DIRECTLY to backend port (8001)
+  // No proxy needed — backend is running on port 8001 directly
+  return `http://${hostIp}:${ENV_BACKEND_PORT}`;
 };
 
 let activeBaseUrl = getBaseUrl();
@@ -134,33 +132,16 @@ const request = async (endpoint, options = {}) => {
       headers,
     }, 6000);
   } catch (err) {
-    // If on mobile and connection to primary port timed out or failed, try the alternate port
-    if (Platform.OS !== 'web' && activeBaseUrl.includes('192.168.')) {
-      const fallbackUrl = activeBaseUrl.includes(`:${ENV_PROXY_PORT}`)
-        ? activeBaseUrl.replace(`:${ENV_PROXY_PORT}`, `:${ENV_BACKEND_PORT}`)
-        : activeBaseUrl.replace(`:${ENV_BACKEND_PORT}`, `:${ENV_PROXY_PORT}`);
-      console.warn(`[API] Connection to ${activeBaseUrl} failed (${err.message}), trying fallback: ${fallbackUrl}`);
-      try {
-        response = await fetchWithTimeout(`${fallbackUrl}${endpoint}`, {
-          ...options,
-          headers,
-        }, 5000);
-        // Switch to working URL for future calls
-        activeBaseUrl = fallbackUrl;
-      } catch (fallbackErr) {
-        console.warn(`[API] Local connection to ${fallbackUrl} also failed, trying deployed Render fallback: ${DEPLOYED_PROD_URL}`);
-        try {
-          response = await fetchWithTimeout(`${DEPLOYED_PROD_URL}${endpoint}`, {
-            ...options,
-            headers,
-          }, 8000);
-          activeBaseUrl = DEPLOYED_PROD_URL;
-        } catch (prodErr) {
-          throw new Error(`Mobile connection failed. Please ensure your phone is connected to the same Wi-Fi as your laptop (${LOCAL_PC_IP}) or internet is active.`);
-        }
-      }
-    } else {
-      throw err;
+    // Primary local connection failed — try deployed Render fallback
+    console.warn(`[API] Local connection to ${activeBaseUrl} failed (${err.message}), trying deployed Render fallback: ${DEPLOYED_PROD_URL}`);
+    try {
+      response = await fetchWithTimeout(`${DEPLOYED_PROD_URL}${endpoint}`, {
+        ...options,
+        headers,
+      }, 8000);
+      activeBaseUrl = DEPLOYED_PROD_URL;
+    } catch (prodErr) {
+      throw new Error(`Connection failed. Check Wi-Fi or internet. Local: ${LOCAL_PC_IP}:${ENV_BACKEND_PORT}`);
     }
   }
 
@@ -383,10 +364,11 @@ export const api = {
       method: 'POST',
       body: JSON.stringify(Array.isArray(items) && typeof items[0] === 'string' ? { ids: items } : { items }),
     }),
-  downloadEntryPdf: async (entry, companyName = '') => {
+  downloadEntryPdf: async (entry, companyName = '', templateType = 'challan') => {
     const token = getAuthToken();
     const challanNo = entry.challan_no || entry.serial_no || entry.id || 'slip';
-    const filename = `Invoice_${challanNo}.pdf`;
+    const prefix = templateType === 'challan' ? 'Challan' : 'Invoice';
+    const filename = `${prefix}_${challanNo}.pdf`;
     const url = `${activeBaseUrl}/api/entries/download-pdf`;
 
     const res = await fetch(url, {
@@ -398,6 +380,7 @@ export const api = {
       body: JSON.stringify({
         entry,
         company_name: companyName,
+        template_type: templateType,
       }),
     });
 
