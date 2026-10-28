@@ -39,16 +39,16 @@ export const isCashOrQrSale = (mode) => {
   );
 };
 
-// Restrict weights (G.WT, T.WT, N.WT) to max 3 digits before decimal and max 2 digits after decimal
+// Restrict weights (G.WT, T.WT, N.WT) to any number of digits before decimal and max 3 digits after decimal
 export const sanitizeWeightInput = (txt) => {
   if (txt === undefined || txt === null) return '';
   const cleaned = String(txt).replace(/[^0-9.]/g, '');
   const parts = cleaned.split('.');
-  // Max 3 digits before decimal point (0 - 999)
-  const intPart = parts[0].slice(0, 3);
+  // Any number of digits before decimal point
+  const intPart = parts[0];
   if (parts.length > 1) {
-    // Max 2 digits after decimal point (.00 - .99)
-    const decPart = parts.slice(1).join('').slice(0, 2);
+    // Max 3 digits after decimal point (.000 - .999)
+    const decPart = parts.slice(1).join('').slice(0, 3);
     return `${intPart}.${decPart}`;
   }
   return intPart;
@@ -57,7 +57,7 @@ export const sanitizeWeightInput = (txt) => {
 // Stepper Component defined outside so it NEVER unmounts on re-render, keeping focus intact
 const StepperInput = ({ label, value, onChange, step = 1, placeholder = '0', isWeight = false, max = null }) => {
   const currentStr = value === undefined || value === null ? '' : String(value);
-  const effectiveMax = isWeight ? 999.99 : max;
+  const effectiveMax = max;
 
   return (
     <View style={styles.formGroup}>
@@ -87,7 +87,7 @@ const StepperInput = ({ label, value, onChange, step = 1, placeholder = '0', isW
             style={styles.stepperBtn}
             onPress={() => {
               const currentNum = parseFloat(value) || 0;
-              const next = Math.max(0, Number((currentNum - step).toFixed(2)));
+              const next = Math.max(0, Number((currentNum - step).toFixed(isWeight ? 3 : 2)));
               onChange(isWeight ? sanitizeWeightInput(String(next)) : String(next));
             }}
           >
@@ -97,7 +97,7 @@ const StepperInput = ({ label, value, onChange, step = 1, placeholder = '0', isW
             style={styles.stepperBtn}
             onPress={() => {
               const currentNum = parseFloat(value) || 0;
-              let next = Number((currentNum + step).toFixed(2));
+              let next = Number((currentNum + step).toFixed(isWeight ? 3 : 2));
               if (effectiveMax !== null && next > effectiveMax) {
                 next = effectiveMax;
               }
@@ -474,8 +474,8 @@ export const DeliveryEntriesFormModal = ({ visible, onClose, onSuccess, masters,
     }, 0);
   }, [hasAdditionalCharges, savedChargesList]);
 
-  // Gross Weight and Tare Weight are restricted to max 3 digits before decimal, 2 after decimal
-  const netWt = Math.min(999.99, Math.max(0, Number((numGWt - numTWt).toFixed(2))));
+  // Gross Weight and Tare Weight: any digits before decimal, max 3 after decimal
+  const netWt = Math.max(0, Number((numGWt - numTWt).toFixed(3)));
 
   // Amount: CUM * Rate if CUM, or NET WT * Rate if MT (Tons, no / 1000)
   const amount = rateCalcUnit === 'CUM'
@@ -849,7 +849,7 @@ export const DeliveryEntriesFormModal = ({ visible, onClose, onSuccess, masters,
             <View style={styles.formGroup}>
               <Text style={styles.fieldLabel}>NET WT (Calculated: G.WT - T.WT)</Text>
               <View style={styles.calculatedBox}>
-                <Text style={styles.calculatedValue}>{netWt.toFixed(2)} Tons</Text>
+                <Text style={styles.calculatedValue}>{netWt.toFixed(3)} Tons</Text>
               </View>
             </View>
 

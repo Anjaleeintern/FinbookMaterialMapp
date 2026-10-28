@@ -6,7 +6,7 @@ def process_entry_calculations(entry: EntryCreate) -> dict:
     # 1. Net Weight calculation: G.WT - T.WT (Weights are in Tons by default)
     g_wt = float(data.get("g_wt") or 0.0)
     t_wt = float(data.get("t_wt") or 0.0)
-    net_wt = max(0.0, round(g_wt - t_wt, 2))
+    net_wt = max(0.0, round(g_wt - t_wt, 3))
     data["net_wt"] = net_wt
 
     # 2. Rate Calculation Unit: CUM vs MT
